@@ -4,6 +4,8 @@ import dotenv from 'dotenv';
 import { setupWebSocketServer } from './websocket/yjs-server';
 import http from 'http';
 import adminRoutes from './api/admin.routes';
+import authRoutes from './api/auth.routes';
+import { errorHandler } from './middleware/error.middleware';
 
 dotenv.config();
 
@@ -15,8 +17,10 @@ const YJS_PORT = process.env.YJS_PORT || 1234;
 app.use(cors());
 app.use(express.json());
 
-// Admin routes (for development - view database)
+// API Routes
+app.use('/api/auth', authRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/test', require('./api/test.routes').default);
 
 // Basic health check
 app.get('/health', (req, res) => {
@@ -33,3 +37,6 @@ server.listen(PORT, () => {
 
 // Setup Yjs WebSocket
 setupWebSocketServer(Number(YJS_PORT));
+
+// Error handling middleware (must be last)
+app.use(errorHandler);
