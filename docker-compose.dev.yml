@@ -1,0 +1,54 @@
+version: '3.8'
+
+services:
+  # Backend API + WebSocket Server (Development)
+  server:
+    build:
+      context: ./server
+      dockerfile: Dockerfile.dev
+    container_name: aula-server-dev
+    ports:
+      - "3002:3002"  # API REST
+      - "1234:1234"  # Yjs WebSocket
+    environment:
+      - NODE_ENV=development
+      - PORT=3002
+      - YJS_PORT=1234
+      - DATABASE_PATH=/app/database/aula.db
+      - UPLOADS_DIR=/app/uploads
+      - JWT_SECRET=dev_secret_key
+      - ALLOWED_ORIGINS=http://localhost:5173
+    volumes:
+      - ./server:/app
+      - ./database:/app/database
+      - ./uploads:/app/uploads
+      - /app/node_modules
+    command: npm run dev
+    restart: unless-stopped
+    networks:
+      - aula-network
+
+  # Frontend Client (Development)
+  client:
+    build:
+      context: ./client
+      dockerfile: Dockerfile.dev
+    container_name: aula-client-dev
+    ports:
+      - "5173:5173"
+    environment:
+      - VITE_API_URL=http://localhost:3002
+      - VITE_WS_URL=ws://localhost:1234
+    volumes:
+      - ./client:/app
+      - /app/node_modules
+    command: npm run dev -- --host
+    depends_on:
+      - server
+    restart: unless-stopped
+    networks:
+      - aula-network
+
+networks:
+  aula-network:
+    driver: bridge

@@ -1,0 +1,60 @@
+version: '3.8'
+
+services:
+  # Backend API + WebSocket Server
+  server:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    container_name: aula-server
+    ports:
+      - "3002:3002"  # API REST
+      - "1234:1234"  # Yjs WebSocket
+    environment:
+      - NODE_ENV=production
+      - PORT=3002
+      - YJS_PORT=1234
+      - DATABASE_PATH=/app/database/aula.db
+      - UPLOADS_DIR=/app/uploads
+      - JWT_SECRET=${JWT_SECRET:-change_me_in_production}
+      - ALLOWED_ORIGINS=http://localhost
+    volumes:
+      - ./database:/app/database
+      - ./uploads:/app/uploads
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3002/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+    networks:
+      - aula-network
+
+  # Frontend Client
+  client:
+    build:
+      context: ./client
+      dockerfile: Dockerfile
+    container_name: aula-client
+    ports:
+      - "80:80"
+    depends_on:
+      - server
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+    networks:
+      - aula-network
+
+networks:
+  aula-network:
+    driver: bridge
+
+volumes:
+  database-data:
+  uploads-data:

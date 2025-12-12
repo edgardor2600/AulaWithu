@@ -1,0 +1,8 @@
+// Export all repositories
+export { UsersRepository } from './users-repository';
+export { ClassesRepository } from './classes-repository';
+export { SlidesRepository } from './slides-repository';
+export { SessionsRepository } from './sessions-repository';
+export { StudentCopiesRepository } from './student-copies-repository';
+export { UploadsRepository } from './uploads-repository';
+export { EventsRepository } from './events-repository';
