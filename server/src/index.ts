@@ -5,6 +5,8 @@ import { setupWebSocketServer } from './websocket/yjs-server';
 import http from 'http';
 import adminRoutes from './api/admin.routes';
 import authRoutes from './api/auth.routes';
+import classesRoutes from './api/classes.routes';
+import slidesRoutes from './api/slides.routes';
 import { errorHandler } from './middleware/error.middleware';
 
 dotenv.config();
@@ -19,6 +21,8 @@ app.use(express.json());
 
 // API Routes
 app.use('/api/auth', authRoutes);
+app.use('/api/classes', classesRoutes);
+app.use('/api/slides', slidesRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/test', require('./api/test.routes').default);
 

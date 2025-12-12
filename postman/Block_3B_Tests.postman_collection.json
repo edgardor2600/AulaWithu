@@ -1,0 +1,200 @@
+{
+  "info": {
+    "name": "Aula Colaborativa - Block 3B",
+    "description": "Classes and Slides API Testing",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Classes API",
+      "item": [
+        {
+          "name": "1. Create Class",
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "auth": {"type": "bearer", "bearer": [{"key": "token", "value": "{{teacher_token}}", "type": "string"}]},
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"English Level A1 - Unit 2\",\n  \"description\": \"Greetings and introductions\"\n}"
+            },
+            "url": {"raw": "{{base_url}}/api/classes", "host": ["{{base_url}}"], "path": ["api", "classes"]}
+          }
+        },
+        {
+          "name": "2. List All Classes",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "auth": {"type": "bearer", "bearer": [{"key": "token", "value": "{{teacher_token}}", "type": "string"}]},
+            "url": {"raw": "{{base_url}}/api/classes", "host": ["{{base_url}}"], "path": ["api", "classes"]}
+          }
+        },
+        {
+          "name": "3. Get Class with Slides",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "auth": {"type": "bearer", "bearer": [{"key": "token", "value": "{{teacher_token}}", "type": "string"}]},
+            "url": {"raw": "{{base_url}}/api/classes/{{class_id}}", "host": ["{{base_url}}"], "path": ["api", "classes", "{{class_id}}"]}
+          }
+        },
+        {
+          "name": "4. Update Class",
+          "request": {
+            "method": "PUT",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "auth": {"type": "bearer", "bearer": [{"key": "token", "value": "{{teacher_token}}", "type": "string"}]},
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"English Level A1 - Unit 2 (Updated)\",\n  \"description\": \"Greetings, introductions, and basic conversations\"\n}"
+            },
+            "url": {"raw": "{{base_url}}/api/classes/{{class_id}}", "host": ["{{base_url}}"], "path": ["api", "classes", "{{class_id}}"]}
+          }
+        },
+        {
+          "name": "5. Update Other's Class - SHOULD FAIL",
+          "request": {
+            "method": "PUT",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "auth": {"type": "bearer", "bearer": [{"key": "token", "value": "{{teacher_token}}", "type": "string"}]},
+            "body": {"mode": "raw", "raw": "{\n  \"title\": \"Trying to hack\"\n}"},
+            "url": {"raw": "{{base_url}}/api/classes/class-001", "host": ["{{base_url}}"], "path": ["api", "classes", "class-001"]}
+          }
+        },
+        {
+          "name": "13. Delete Class",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "auth": {"type": "bearer", "bearer": [{"key": "token", "value": "{{teacher_token}}", "type": "string"}]},
+            "url": {"raw": "{{base_url}}/api/classes/{{class_id}}", "host": ["{{base_url}}"], "path": ["api", "classes", "{{class_id}}"]}
+          }
+        }
+      ]
+    },
+    {
+      "name": "Slides API",
+      "item": [
+        {
+          "name": "6. Create Slide 1",
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "auth": {"type": "bearer", "bearer": [{"key": "token", "value": "{{teacher_token}}", "type": "string"}]},
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Introduction Slide\",\n  \"slide_number\": 1\n}"
+            },
+            "url": {"raw": "{{base_url}}/api/classes/{{class_id}}/slides", "host": ["{{base_url}}"], "path": ["api", "classes", "{{class_id}}", "slides"]}
+          }
+        },
+        {
+          "name": "7a. Create Slide 2",
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "auth": {"type": "bearer", "bearer": [{"key": "token", "value": "{{teacher_token}}", "type": "string"}]},
+            "body": {"mode": "raw", "raw": "{\n  \"title\": \"Vocabulary\",\n  \"slide_number\": 2\n}"},
+            "url": {"raw": "{{base_url}}/api/classes/{{class_id}}/slides", "host": ["{{base_url}}"], "path": ["api", "classes", "{{class_id}}", "slides"]}
+          }
+        },
+        {
+          "name": "7b. Create Slide 3 (auto-number)",
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "auth": {"type": "bearer", "bearer": [{"key": "token", "value": "{{teacher_token}}", "type": "string"}]},
+            "body": {"mode": "raw", "raw": "{\n  \"title\": \"Practice Exercises\"\n}"},
+            "url": {"raw": "{{base_url}}/api/classes/{{class_id}}/slides", "host": ["{{base_url}}"], "path": ["api", "classes", "{{class_id}}", "slides"]}
+          }
+        },
+        {
+          "name": "8. Get Slide",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "auth": {"type": "bearer", "bearer": [{"key": "token", "value": "{{teacher_token}}", "type": "string"}]},
+            "url": {"raw": "{{base_url}}/api/slides/{{slide_id}}", "host": ["{{base_url}}"], "path": ["api", "slides", "{{slide_id}}"]}
+          }
+        },
+        {
+          "name": "9. Update Slide",
+          "request": {
+            "method": "PUT",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "auth": {"type": "bearer", "bearer": [{"key": "token", "value": "{{teacher_token}}", "type": "string"}]},
+            "body": {"mode": "raw", "raw": "{\n  \"title\": \"Welcome & Introduction\"\n}"},
+            "url": {"raw": "{{base_url}}/api/slides/{{slide_id}}", "host": ["{{base_url}}"], "path": ["api", "slides", "{{slide_id}}"]}
+          }
+        },
+        {
+          "name": "10. Update Canvas Data",
+          "request": {
+            "method": "PUT",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "auth": {"type": "bearer", "bearer": [{"key": "token", "value": "{{teacher_token}}", "type": "string"}]},
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"canvas_data\": \"{\\\"version\\\":\\\"5.3.0\\\",\\\"objects\\\":[{\\\"type\\\":\\\"rect\\\",\\\"left\\\":100,\\\"top\\\":100,\\\"width\\\":200,\\\"height\\\":100,\\\"fill\\\":\\\"red\\\"}]}\"\n}"
+            },
+            "url": {"raw": "{{base_url}}/api/slides/{{slide_id}}/canvas", "host": ["{{base_url}}"], "path": ["api", "slides", "{{slide_id}}", "canvas"]}
+          }
+        },
+        {
+          "name": "11. Get Class with Slides (Verify)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "auth": {"type": "bearer", "bearer": [{"key": "token", "value": "{{teacher_token}}", "type": "string"}]},
+            "url": {"raw": "{{base_url}}/api/classes/{{class_id}}", "host": ["{{base_url}}"], "path": ["api", "classes", "{{class_id}}"]}
+          }
+        },
+        {
+          "name": "12. Delete Slide",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "auth": {"type": "bearer", "bearer": [{"key": "token", "value": "{{teacher_token}}", "type": "string"}]},
+            "url": {"raw": "{{base_url}}/api/slides/{{slide_id}}", "host": ["{{base_url}}"], "path": ["api", "slides", "{{slide_id}}"]}
+          }
+        }
+      ]
+    },
+    {
+      "name": "Validations & Errors",
+      "item": [
+        {
+          "name": "14. Create Class without Title - SHOULD FAIL",
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "auth": {"type": "bearer", "bearer": [{"key": "token", "value": "{{teacher_token}}", "type": "string"}]},
+            "body": {"mode": "raw", "raw": "{\n  \"description\": \"No title provided\"\n}"},
+            "url": {"raw": "{{base_url}}/api/classes", "host": ["{{base_url}}"], "path": ["api", "classes"]}
+          }
+        },
+        {
+          "name": "15. Student Creates Class - SHOULD FAIL",
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "auth": {"type": "bearer", "bearer": [{"key": "token", "value": "{{student_token}}", "type": "string"}]},
+            "body": {"mode": "raw", "raw": "{\n  \"title\": \"Student's Class\",\n  \"description\": \"This should fail\"\n}"},
+            "url": {"raw": "{{base_url}}/api/classes", "host": ["{{base_url}}"], "path": ["api", "classes"]}
+          }
+        },
+        {
+          "name": "16. Invalid Canvas Data - SHOULD FAIL",
+          "request": {
+            "method": "PUT",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "auth": {"type": "bearer", "bearer": [{"key": "token", "value": "{{teacher_token}}", "type": "string"}]},
+            "body": {"mode": "raw", "raw": "{\n  \"canvas_data\": \"invalid json here\"\n}"},
+            "url": {"raw": "{{base_url}}/api/slides/slide-001/canvas", "host": ["{{base_url}}"], "path": ["api", "slides", "slide-001", "canvas"]}
+          }
+        }
+      ]
+    }
+  ]
+}
