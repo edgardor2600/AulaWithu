@@ -63,6 +63,7 @@ export class SlideService {
     data: {
       title?: string;
       canvas_data?: string;
+      slide_number?: number;
     }
   ): Promise<Slide> {
     // Get slide
@@ -90,6 +91,7 @@ export class SlideService {
     const updated = SlidesRepository.update(slideId, {
       title: data.title?.trim(),
       canvas_data: data.canvas_data,
+      slide_number: data.slide_number,
     });
 
     if (!updated) {
@@ -105,36 +107,57 @@ export class SlideService {
     userId: string,
     canvasData: string
   ): Promise<Slide> {
+    console.log('=== UPDATE CANVAS START ===');
+    console.log('Slide ID:', slideId);
+    console.log('User ID:', userId);
+    console.log('Canvas data length:', canvasData?.length);
+    
     // Get slide
     const slide = SlidesRepository.getById(slideId);
     if (!slide) {
+      console.error('Slide not found:', slideId);
       throw new NotFoundError('Slide');
     }
+    console.log('Slide found:', slide.id);
 
     // Check class ownership
     const classData = ClassesRepository.getById(slide.class_id);
     if (!classData) {
+      console.error('Class not found:', slide.class_id);
       throw new NotFoundError('Class');
     }
+    console.log('Class found:', classData.id);
 
     if (classData.teacher_id !== userId) {
+      console.error('Permission denied. Teacher:', classData.teacher_id, 'User:', userId);
       throw new ForbiddenError('You can only update slides in your own classes');
     }
+    console.log('Permission granted');
 
     // Validate canvas data (basic JSON check)
     try {
-      JSON.parse(canvasData);
-    } catch {
+      const parsed = JSON.parse(canvasData);
+      console.log('JSON valid, objects count:', parsed.objects?.length);
+    } catch (err) {
+      console.error('Invalid JSON:', err);
+      console.error('Data preview:', canvasData.substring(0, 200));
       throw new ValidationError('Invalid canvas data format');
     }
 
     // Update canvas
-    const updated = SlidesRepository.updateCanvas(slideId, canvasData);
-    if (!updated) {
-      throw new NotFoundError('Slide');
+    try {
+      console.log('Updating repository...');
+      const updated = SlidesRepository.updateCanvas(slideId, canvasData);
+      if (!updated) {
+        console.error('Repository returned no slide');
+        throw new NotFoundError('Slide');
+      }
+      console.log('=== UPDATE CANVAS SUCCESS ===');
+      return updated;
+    } catch (err) {
+      console.error('Repository error:', err);
+      throw err;
     }
-
-    return updated;
   }
 
   // Delete slide (only class owner)

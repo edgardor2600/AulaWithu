@@ -8,9 +8,9 @@ import { asyncHandler } from '../middleware/error.middleware';
 
 const router = Router();
 
-// POST /api/classes/:classId/slides - Create new slide (teacher only)
+// POST /api/slides/class/:classId - Create new slide (teacher only)
 router.post(
-  '/:classId/slides',
+  '/class/:classId',
   authMiddleware,
   teacherOnly,
   [
@@ -80,16 +80,20 @@ router.put(
     body('canvas_data')
       .optional()
       .isString().withMessage('Canvas data must be a string'),
+    body('slide_number')
+      .optional()
+      .isInt({ min: 1 }).withMessage('Slide number must be a positive integer'),
   ],
   validate,
   asyncHandler(async (req: any, res: any) => {
     const { id } = req.params;
-    const { title, canvas_data } = req.body;
+    const { title, canvas_data, slide_number } = req.body;
     const userId = req.user.userId;
 
     const updated = await SlideService.update(id, userId, {
       title,
       canvas_data,
+      slide_number,
     });
 
     res.status(200).json({

@@ -49,6 +49,7 @@ export class SlidesRepository {
   static update(id: string, data: { 
     title?: string;
     canvas_data?: string;
+    slide_number?: number;
   }): Slide | undefined {
     const updates: string[] = ['updated_at = CURRENT_TIMESTAMP'];
     const params: any[] = [];
@@ -60,6 +61,10 @@ export class SlidesRepository {
     if (data.canvas_data !== undefined) {
       updates.push('canvas_data = ?');
       params.push(data.canvas_data);
+    }
+    if (data.slide_number !== undefined) {
+      updates.push('slide_number = ?');
+      params.push(data.slide_number);
     }
 
     if (updates.length === 1) { // Only updated_at

@@ -1,15 +1,21 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { classService, type ClassWithDetails } from '../services/classService';
+import { useAuthStore } from '../store/authStore';
 import { Layout } from '../components/Layout';
-import { ArrowLeft, BookOpen } from 'lucide-react';
+import { SlideThumbnail } from '../components/SlideThumbnail';
+import { ArrowLeft, BookOpen, Edit2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 export const ClassDetailPage = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { user } = useAuthStore();
   const [classData, setClassData] = useState<ClassWithDetails | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+
+  const isTeacher = user?.role === 'teacher';
+  const isOwner = classData?.teacher_id === user?.id;
 
   useEffect(() => {
     if (id) {
@@ -62,33 +68,46 @@ export const ClassDetailPage = () => {
 
         {/* Class Header */}
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8 mb-6">
-          <div className="flex items-start space-x-4">
-            <div className="w-16 h-16 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg flex items-center justify-center flex-shrink-0">
-              <BookOpen className="w-8 h-8 text-white" />
-            </div>
-            <div className="flex-1">
-              <h1 className="text-3xl font-bold text-gray-900 mb-2">
-                {classData.title}
-              </h1>
-              {classData.description && (
-                <p className="text-gray-600 mb-4">{classData.description}</p>
-              )}
-              <div className="flex items-center space-x-4 text-sm text-gray-500">
-                {classData.teacher_name && (
-                  <div className="flex items-center space-x-2">
-                    <div
-                      className="w-6 h-6 rounded-full flex items-center justify-center text-white text-xs font-semibold"
-                      style={{ backgroundColor: classData.teacher_color }}
-                    >
-                      {classData.teacher_name.charAt(0).toUpperCase()}
-                    </div>
-                    <span>{classData.teacher_name}</span>
-                  </div>
+          <div className="flex items-start justify-between">
+            <div className="flex items-start space-x-4 flex-1">
+              <div className="w-16 h-16 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg flex items-center justify-center flex-shrink-0">
+                <BookOpen className="w-8 h-8 text-white" />
+              </div>
+              <div className="flex-1">
+                <h1 className="text-3xl font-bold text-gray-900 mb-2">
+                  {classData.title}
+                </h1>
+                {classData.description && (
+                  <p className="text-gray-600 mb-4">{classData.description}</p>
                 )}
-                <span>•</span>
-                <span>{classData.slides_count || 0} slides</span>
+                <div className="flex items-center space-x-4 text-sm text-gray-500">
+                  {classData.teacher_name && (
+                    <div className="flex items-center space-x-2">
+                      <div
+                        className="w-6 h-6 rounded-full flex items-center justify-center text-white text-xs font-semibold"
+                        style={{ backgroundColor: classData.teacher_color }}
+                      >
+                        {classData.teacher_name.charAt(0).toUpperCase()}
+                      </div>
+                      <span>{classData.teacher_name}</span>
+                    </div>
+                  )}
+                  <span>•</span>
+                  <span>{classData.slides_count || 0} slides</span>
+                </div>
               </div>
             </div>
+            
+            {/* Edit Button (Teacher Only) */}
+            {isTeacher && isOwner && (
+              <button
+                onClick={() => navigate(`/classes/${id}/edit`)}
+                className="flex items-center space-x-2 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition font-medium"
+              >
+                <Edit2 className="w-5 h-5" />
+                <span>Edit Slides</span>
+              </button>
+            )}
           </div>
         </div>
 
@@ -101,16 +120,17 @@ export const ClassDetailPage = () => {
               {classData.slides.map((slide: any, index: number) => (
                 <div
                   key={slide.id}
-                  className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition cursor-pointer"
+                  className="border-2 border-gray-200 rounded-lg overflow-hidden hover:shadow-lg hover:border-blue-300 transition cursor-pointer"
                 >
-                  <div className="aspect-video bg-gray-100 rounded mb-3 flex items-center justify-center">
-                    <span className="text-4xl font-bold text-gray-300">
-                      {slide.slide_number || index + 1}
-                    </span>
+                  <SlideThumbnail 
+                    canvasData={slide.canvas_data || ''}
+                    slideNumber={slide.slide_number || index + 1}
+                  />
+                  <div className="p-4 bg-white border-t border-gray-200">
+                    <h3 className="font-medium text-gray-900">
+                      {slide.title || `Slide ${slide.slide_number || index + 1}`}
+                    </h3>
                   </div>
-                  <h3 className="font-medium text-gray-900">
-                    {slide.title || `Slide ${slide.slide_number || index + 1}`}
-                  </h3>
                 </div>
               ))}
             </div>
@@ -123,13 +143,6 @@ export const ClassDetailPage = () => {
               </p>
             </div>
           )}
-        </div>
-
-        {/* Coming Soon Notice */}
-        <div className="mt-6 bg-blue-50 border border-blue-200 rounded-lg p-4 text-center">
-          <p className="text-blue-800 font-medium">
-            📝 Slide editor coming in Block 4C!
-          </p>
         </div>
       </div>
     </Layout>

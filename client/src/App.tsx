@@ -3,6 +3,7 @@ import { Toaster } from 'react-hot-toast';
 import { LoginPage } from './pages/LoginPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { ClassDetailPage } from './pages/ClassDetailPage';
+import { EditorPage } from './pages/EditorPage';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { useAuthStore } from './store/authStore';
 
@@ -60,6 +61,15 @@ function App() {
           element={
             <ProtectedRoute>
               <ClassDetailPage />
+            </ProtectedRoute>
+          }
+        />
+        
+        <Route
+          path="/classes/:id/edit"
+          element={
+            <ProtectedRoute requiredRole="teacher">
+              <EditorPage />
             </ProtectedRoute>
           }
         />

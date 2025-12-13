@@ -12,6 +12,7 @@ import sessionsRoutes from './api/sessions.routes';
 import uploadsRoutes from './api/uploads.routes';
 import snapshotsRoutes from './api/snapshots.routes';
 import { errorHandler } from './middleware/error.middleware';
+import { logDatabaseSize } from './db/monitoring';
 
 dotenv.config();
 
@@ -21,7 +22,8 @@ const PORT = process.env.PORT || 3002;
 const YJS_PORT = process.env.YJS_PORT || 1234;
 
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '10mb' })); // Increased limit for canvas data
+app.use(express.urlencoded({ limit: '10mb', extended: true }));
 
 // Serve static files from uploads directory
 const uploadsDir = process.env.UPLOADS_DIR || path.join(__dirname, '../../uploads');
@@ -48,6 +50,10 @@ const server = http.createServer(app);
 // Start HTTP server
 server.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
+  
+  // Log database size for monitoring
+  const dbPath = path.join(__dirname, '../../database/aula.db');
+  logDatabaseSize(dbPath);
 });
 
 // Setup Yjs WebSocket
