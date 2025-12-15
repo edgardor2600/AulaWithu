@@ -135,6 +135,41 @@ router.put(
 );
 
 /**
+ * PUT /api/sessions/:id/slide
+ * Update current slide (teacher only)
+ */
+router.put(
+  '/:id/slide',
+  authMiddleware,
+  teacherOnly,
+  [
+    param('id')
+      .notEmpty().withMessage('Session ID is required'),
+    body('slide_id')
+      .notEmpty().withMessage('slide_id is required')
+      .isString().withMessage('slide_id must be a string'),
+  ],
+  validate,
+  asyncHandler(async (req: any, res: any) => {
+    const { id } = req.params;
+    const { slide_id } = req.body;
+    const teacherId = req.user.userId;
+
+    const session = await SessionService.updateSlide(
+      id,
+      teacherId,
+      slide_id
+    );
+
+    res.status(200).json({
+      success: true,
+      session,
+      message: 'Slide updated successfully',
+    });
+  })
+);
+
+/**
  * PUT /api/sessions/:id/end
  * End a session (teacher only)
  */

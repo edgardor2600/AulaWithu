@@ -87,36 +87,7 @@ export const CanvasEditor = ({
     onPermissionsChange  // ✅ NUEVO: Pasar callback de cambio de permisos
   );
 
-  // Helper to apply lock based on ownership
-  const applyLock = useCallback((obj: fabric.Object, shouldLock: boolean) => {
-    if (shouldLock) {
-        obj.selectable = false;
-        obj.evented = false;
-        obj.hasControls = false;
-        obj.hasBorders = false;
-        obj.lockMovementX = true;
-        obj.lockScalingX = true;
-        obj.lockScalingY = true;
-        // @ts-ignore
-        obj.editable = false; // For IText objects
-        // @ts-ignore
-        if (obj instanceof fabric.IText) { (obj as any).editable = false; (obj as any).selectable = false; }
-    } else {
-        obj.selectable = true;
-        obj.evented = true;
-        obj.hasControls = true;
-        obj.hasBorders = true;
-        obj.lockMovementX = false;
-        obj.lockMovementY = false;
-        obj.lockRotation = false;
-        obj.lockScalingX = false;
-        obj.lockScalingY = false;
-        // @ts-ignore
-        obj.editable = true;
-        // @ts-ignore
-        if (obj instanceof fabric.IText) { (obj as any).editable = true; (obj as any).selectable = true; }
-    }
-  }, []);
+  // ✅ ELIMINADO: applyLock - Toda la lógica de permisos está en useYjs
 
   // Notify parent when participants change
   useEffect(() => {
@@ -387,52 +358,8 @@ export const CanvasEditor = ({
 
 
 
-  // Update canvas permissions whenever isReadOnly, clientId, or enforceOwnership changes
-  useEffect(() => {
-    const canvas = fabricCanvasRef.current;
-    if (!canvas) return;
-
-    console.log('🔒 Updating permissions:', { isReadOnly, enforceOwnership, clientId });
-
-    if (isReadOnly) {
-      // READ-ONLY MODE: Lock everything
-      canvas.selection = false;
-      canvas.isDrawingMode = false;
-      canvas.forEachObject((obj) => applyLock(obj, true));
-      canvas.defaultCursor = 'default';
-      canvas.hoverCursor = 'default';
-      console.log('✅ Canvas set to READ-ONLY');
-    } else {
-      // EDIT MODE: Check ownership if enforced
-      canvas.selection = true;
-      // Drawing mode handled by tool state, but ensure it's allowed
-      if (currentTool === 'pencil') canvas.isDrawingMode = true;
-
-      canvas.forEachObject((obj) => {
-         // If enforcing ownership, check if I created it
-         // If obj has no createdBy, assume it's public/professor's -> lock if I am student
-         // But wait, if enforceOwnership is false (Teacher), I can edit everything.
-         
-         const createdBy = (obj as any).createdBy;
-         const isMine = createdBy === clientId;
-         
-         // If enforcing ownership (Student):
-         // - Lock if it's not mine
-         // - Unlock if it is mine
-         
-         // If NOT enforcing (Teacher):
-         // - Unlock everything
-         
-         const shouldLock = enforceOwnership && !isMine;
-         applyLock(obj, shouldLock);
-      });
-      
-      canvas.defaultCursor = 'default';
-      canvas.hoverCursor = 'move';
-      console.log('✅ Canvas set to EDIT mode (Ownership enforced:', enforceOwnership, ')');
-    }
-    canvas.renderAll();
-  }, [isReadOnly, enforceOwnership, clientId, applyLock, currentTool]);
+  // ✅ ELIMINADO: Lógica de permisos movida completamente a useYjs
+  // useYjs maneja todos los permisos basados en isReadOnly, enforceOwnership, e isTeacher
 
   // Notify parent of canvas changes
   const notifyChange = useCallback(() => {

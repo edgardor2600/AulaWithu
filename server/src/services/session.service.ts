@@ -170,6 +170,59 @@ export class SessionService {
     return updated;
   }
 
+/**
+ * Update current slide
+ * 
+ * Business rules:
+ * - Only the teacher who created the session can update the slide
+ * - Session must be active
+ * - Slide must exist and belong to the same class
+ * 
+ * @param sessionId Session ID
+ * @param teacherId Teacher attempting to update
+ * @param slideId New slide ID
+ * @returns Updated session
+ */
+static async updateSlide(
+  sessionId: string,
+  teacherId: string,
+  slideId: string
+): Promise<Session> {
+  // Get session
+  const session = SessionsRepository.getById(sessionId);
+  if (!session) {
+    throw new NotFoundError('Session');
+  }
+
+  // Verify ownership
+  if (session.teacher_id !== teacherId) {
+    throw new ForbiddenError('You can only update your own sessions');
+  }
+
+  // Verify session is active
+  if (!session.is_active) {
+    throw new ValidationError('Cannot update slide of an ended session');
+  }
+
+  // Validate slide exists and belongs to same class
+  const slide = SlidesRepository.getById(slideId);
+  if (!slide) {
+    throw new NotFoundError('Slide');
+  }
+
+  if (slide.class_id !== session.class_id) {
+    throw new ValidationError('Slide must belong to the same class');
+  }
+
+  // Update slide
+  const updated = SessionsRepository.updateSlide(sessionId, slideId);
+  if (!updated) {
+    throw new NotFoundError('Session');
+  }
+
+  return updated;
+}
+
   /**
    * End a session
    * 

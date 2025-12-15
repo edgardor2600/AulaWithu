@@ -67,6 +67,63 @@ export const SessionViewPage = () => {
     loadSession();
   }, [sessionId, navigate]);
 
+  // ✅ NUEVO: Validar estado de sesión en tiempo real (solo para estudiantes)
+  useEffect(() => {
+    if (!sessionId || isTeacher) return; // Solo para estudiantes
+    
+    const checkSessionStatus = async () => {
+      try {
+        console.log('🔍 Checking session status...');
+        const sessionData = await sessionService.getById(sessionId);
+        console.log('📊 Current session slide_id:', session?.slide_id);
+        console.log('📊 Server session slide_id:', sessionData.slide_id);
+        
+        if (!sessionData.is_active) {
+          console.log('⚠️ Session ended by teacher');
+          toast.error('The teacher has ended this session');
+          navigate('/join');
+          return;
+        }
+        
+        // ✅ NUEVO: Detectar cambio de slide
+        if (session && sessionData.slide_id !== session.slide_id) {
+          console.log('📍 Teacher changed slide:', sessionData.slide_id);
+          toast.success('Teacher moved to a different slide');
+          
+          // Recargar slide nuevo
+          try {
+            const slideData = await slideService.getById(sessionData.slide_id);
+            setSlide(slideData);
+            setSession(sessionData);
+          } catch (error) {
+            console.error('Failed to load new slide:', error);
+            toast.error('Failed to load new slide');
+          }
+        }
+      } catch (error) {
+        console.error('Failed to check session status:', error);
+        // No mostrar error al usuario, puede ser temporal
+      }
+    };
+    
+    // Verificar cada 3 segundos (rápido para clases en vivo)
+    const interval = setInterval(checkSessionStatus, 3000);
+    
+    // También verificar cuando la pestaña vuelve a estar activa
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        checkSessionStatus();
+      }
+    };
+    
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [sessionId, isTeacher, navigate, session]);  // ✅ CRÍTICO: Agregar session para detectar cambios
+
   const handleSave = async (canvasData: string) => {
     // Students can't save to the main slide
     // This would be for saving personal snapshots
@@ -161,7 +218,7 @@ export const SessionViewPage = () => {
               initialData={slide.canvas_data || undefined}
               onSave={handleSave}
               isReadOnly={isReadOnly}
-              sessionId={session.session_code}
+              sessionId={`${session.session_code}_slide_${session.slide_id}`}  // ✅ CRÍTICO: Sala única por slide
               onParticipantsChange={(count, list, myId) => {
                 setParticipantsCount(count);
                 setParticipantsList(list || []);

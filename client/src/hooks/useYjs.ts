@@ -112,6 +112,11 @@ export function useYjs(
         .filter((p) => p.name); // Remove invalid entries
       
       setParticipantsList(participantsData);
+      
+      // ✅ NUEVO: Reintentar cargar objetos si clientID ahora está disponible
+      if (ydocRef.current?.clientID && yCanvasRef.current) {
+        loadFromYjs();
+      }
     });
 
     // Set local awareness state with user info
@@ -182,6 +187,12 @@ export function useYjs(
      */
     function loadFromYjs() {
       if (!canvas || !yCanvas) return;
+
+      // ✅ NUEVO: Esperar a que clientId esté disponible
+      if (!ydocRef.current?.clientID) {
+        console.log('⏳ Waiting for clientID before loading objects...');
+        return;
+      }
 
       console.log('📥 Loading objects from Yjs...');
       isRemoteChangeRef.current = true;
@@ -344,36 +355,36 @@ export function useYjs(
 
 
 
-    // ✅ NUEVO: Asignar ownership a paths (dibujos con pencil)
-    canvas.on('path:created', (e: any) => {
+
+    // ✅ MEJORADO: Guardar referencias a funciones para cleanup específico
+    const handlePathCreated = (e: any) => {
       if (e.path && ydocRef.current) {
         (e.path as any).createdBy = ydocRef.current.clientID;
         console.log('✨ Path created with owner:', ydocRef.current.clientID);
       }
-    });
+    };
 
-    // Listen to Fabric.js events
-    canvas.on('object:added', (e) => {
+    const handleObjectAdded = (e: any) => {
       if (e.target && !isRemoteChangeRef.current) {
-        // ✅ MEJORADO: Asegurar createdBy antes de sincronizar
+        // Asegurar createdBy antes de sincronizar
         if (!(e.target as any).createdBy && ydocRef.current) {
           (e.target as any).createdBy = ydocRef.current.clientID;
           console.log('✨ Object ownership assigned on add:', ydocRef.current.clientID);
         }
         syncFabricToYjs(e.target);
       }
-    });
+    };
 
-    canvas.on('object:modified', (e) => {
+    const handleObjectModified = (e: any) => {
       // Don't sync if read-only or remote change
       if (isReadOnly || isRemoteChangeRef.current) return;
 
       if (e.target) {
         syncFabricToYjs(e.target);
       }
-    });
+    };
 
-    canvas.on('object:removed', (e) => {
+    const handleObjectRemoved = (e: any) => {
       // Don't sync if read-only or remote change
       if (isReadOnly || isRemoteChangeRef.current) return;
 
@@ -384,7 +395,13 @@ export function useYjs(
           syncedObjectsRef.current.delete(objectId);
         }
       }
-    });
+    };
+
+    // Register listeners
+    canvas.on('path:created', handlePathCreated);
+    canvas.on('object:added', handleObjectAdded);
+    canvas.on('object:modified', handleObjectModified);
+    canvas.on('object:removed', handleObjectRemoved);
 
     // Listen to Yjs changes
     yCanvas.observe(syncYjsToFabric);
@@ -393,11 +410,11 @@ export function useYjs(
     return () => {
       console.log('🔌 Disconnecting Yjs for room:', roomName);
       
-      // Remove Fabric listeners
-      canvas.off('path:created');    // ✅ NUEVO: Limpiar listener de paths
-      canvas.off('object:added');
-      canvas.off('object:modified');
-      canvas.off('object:removed');
+      // ✅ MEJORADO: Remove Fabric listeners específicos (no todos)
+      canvas.off('path:created', handlePathCreated);
+      canvas.off('object:added', handleObjectAdded);
+      canvas.off('object:modified', handleObjectModified);
+      canvas.off('object:removed', handleObjectRemoved);
       
       // Unobserve Yjs
       yCanvas.unobserve(syncYjsToFabric);

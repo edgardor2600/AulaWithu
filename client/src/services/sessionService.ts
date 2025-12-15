@@ -63,6 +63,17 @@ export const sessionService = {
   },
 
   /**
+   * Update current slide
+   */
+  async updateSlide(sessionId: string, slideId: string): Promise<Session> {
+    const response = await api.put<{ success: boolean; session: Session }>(
+      `/sessions/${sessionId}/slide`,
+      { slide_id: slideId }
+    );
+    return response.data.session;
+  },
+
+  /**
    * End a session
    */
   async end(sessionId: string): Promise<Session> {

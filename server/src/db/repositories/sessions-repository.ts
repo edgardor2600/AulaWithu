@@ -145,6 +145,21 @@ export class SessionsRepository {
   }
 
   /**
+   * Update current slide
+   * Allows teacher to change the active slide during session
+   */
+  static updateSlide(id: string, slideId: string): Session | undefined {
+    runQuery(
+      `UPDATE sessions 
+       SET slide_id = ? 
+       WHERE id = ?`,
+      [slideId, id]
+    );
+    
+    return this.getById(id);
+  }
+
+  /**
    * End a session
    * Sets is_active to 0 and records ended_at timestamp
    */

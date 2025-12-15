@@ -53,6 +53,27 @@ export const EditorPage = () => {
     }
   }, [classId]);
 
+  // ✅ NUEVO: Actualizar slide actual en sesión cuando profesor cambia de slide
+  useEffect(() => {
+    const updateSessionSlide = async () => {
+      const currentSlide = slides[currentSlideIndex];
+      if (!activeSession || !currentSlide) return;
+      
+      // Solo actualizar si el slide cambió
+      if (activeSession.slide_id === currentSlide.id) return;
+      
+      try {
+        await sessionService.updateSlide(activeSession.id, currentSlide.id);
+        console.log('📍 Session slide updated to:', currentSlide.id);
+      } catch (error) {
+        console.error('Failed to update session slide:', error);
+        // No mostrar error al usuario, no es crítico
+      }
+    };
+    
+    updateSessionSlide();
+  }, [slides, currentSlideIndex, activeSession]);
+
   const loadClassAndSlides = async (id: string) => {
     try {
       setIsLoading(true);
@@ -517,7 +538,7 @@ export const EditorPage = () => {
                 initialData={currentSlideData}
                 onSave={handleManualSave}
                 onChange={handleCanvasChange}
-                sessionId={activeSession?.session_code || null}  // ✅ FIX: Usar session_code en vez de id
+                sessionId={activeSession ? `${activeSession.session_code}_slide_${currentSlide.id}` : null}  // ✅ CRÍTICO: Sala única por slide
                 onParticipantsChange={(count, list, clientId) => {
                   setParticipantsCount(count);
                   if (list) setParticipantsList(list);
