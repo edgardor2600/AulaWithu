@@ -1,135 +1,200 @@
-import { SessionsRepository, ClassesRepository, UsersRepository } from '../db/repositories';
+import { SessionsRepository, ClassesRepository, SlidesRepository } from '../db/repositories';
 import { Session } from '../types/database';
 import { NotFoundError, ForbiddenError, ValidationError, ConflictError } from '../utils/AppError';
 
+/**
+ * SessionService
+ * 
+ * Business logic layer for live collaboration sessions.
+ * Implements use cases and enforces business rules.
+ * 
+ * Responsibilities:
+ * - Session lifecycle management (create, join, end)
+ * - Permission validation
+ * - Business rule enforcement
+ * - Coordination between repositories
+ */
 export class SessionService {
-  // Start a new session (teacher only)
-  static async start(data: {
+  
+  /**
+   * Create a new live session
+   * 
+   * Business rules:
+   * - Only teachers can create sessions
+   * - Class must exist and belong to teacher
+   * - Slide must exist and belong to class
+   * - Only one active session per slide at a time
+   * 
+   * @param data Session creation data
+   * @returns Created session with unique code
+   */
+  static async create(data: {
     class_id: string;
+    slide_id: string;
     teacher_id: string;
+    allow_student_draw?: boolean;
   }): Promise<Session> {
-    // Check if class exists
+    // Validate class exists and belongs to teacher
     const classData = ClassesRepository.getById(data.class_id);
     if (!classData) {
       throw new NotFoundError('Class');
     }
-
-    // Check ownership
+    
     if (classData.teacher_id !== data.teacher_id) {
-      throw new ForbiddenError('You can only start sessions for your own classes');
+      throw new ForbiddenError('You can only create sessions for your own classes');
     }
 
-    // Check if there's already an active session
-    const activeSession = SessionsRepository.getActiveByClass(data.class_id);
-    if (activeSession) {
-      throw new ConflictError('There is already an active session for this class');
+    // Validate slide exists and belongs to class
+    const slide = SlidesRepository.getById(data.slide_id);
+    if (!slide) {
+      throw new NotFoundError('Slide');
+    }
+    
+    if (slide.class_id !== data.class_id) {
+      throw new ValidationError('Slide does not belong to this class');
     }
 
-    // Create session
-    const session = SessionsRepository.create({
-      class_id: data.class_id,
-      teacher_id: data.teacher_id,
-    });
+    // Check if there's already an active session for this slide
+    const existingSession = SessionsRepository.getActiveBySlide(data.slide_id);
+    if (existingSession) {
+      throw new ConflictError('There is already an active session for this slide');
+    }
+
+    // Create session with retry logic for code collision
+    let attempts = 0;
+    const maxAttempts = 5;
+    
+    while (attempts < maxAttempts) {
+      try {
+        const session = SessionsRepository.create({
+          class_id: data.class_id,
+          slide_id: data.slide_id,
+          teacher_id: data.teacher_id,
+          allow_student_draw: data.allow_student_draw || false,
+        });
+        
+        return session;
+      } catch (error: any) {
+        // If unique constraint on session_code, retry
+        if (error.code === 'SQLITE_CONSTRAINT_UNIQUE' && attempts < maxAttempts - 1) {
+          attempts++;
+          continue;
+        }
+        throw error;
+      }
+    }
+    
+    throw new Error('Failed to generate unique session code after multiple attempts');
+  }
+
+  /**
+   * Get session by ID
+   * 
+   * @param sessionId Session ID
+   * @returns Session data
+   */
+  static async getById(sessionId: string): Promise<Session> {
+    const session = SessionsRepository.getById(sessionId);
+    if (!session) {
+      throw new NotFoundError('Session');
+    }
+    
+    return session;
+  }
+
+  /**
+   * Join a session using session code
+   * 
+   * Business rules:
+   * - Session must exist and be active
+   * - User must be a student (teachers use create)
+   * 
+   * @param sessionCode 6-character session code
+   * @param userId User attempting to join
+   * @returns Session data
+   */
+  static async joinByCode(sessionCode: string, userId: string): Promise<Session> {
+    // Find session by code
+    const session = SessionsRepository.getByCode(sessionCode.toUpperCase());
+    if (!session) {
+      throw new NotFoundError('Session with this code');
+    }
+
+    // Check if session is active
+    if (!session.is_active) {
+      throw new ValidationError('This session has ended');
+    }
 
     return session;
   }
 
-  // Get session by ID with details
-  static async getById(sessionId: string): Promise<any> {
+  /**
+   * Update session permissions
+   * 
+   * Business rules:
+   * - Only the teacher who created the session can update permissions
+   * - Session must be active
+   * 
+   * @param sessionId Session ID
+   * @param teacherId Teacher attempting to update
+   * @param allowStudentDraw New permission value
+   * @returns Updated session
+   */
+  static async updatePermissions(
+    sessionId: string,
+    teacherId: string,
+    allowStudentDraw: boolean
+  ): Promise<Session> {
+    // Get session
     const session = SessionsRepository.getById(sessionId);
     if (!session) {
       throw new NotFoundError('Session');
     }
 
-    // Get session with details (class, teacher)
-    const sessionWithDetails = SessionsRepository.getWithDetails(sessionId);
-
-    // Get active participants
-    const participants = SessionsRepository.getActiveParticipants(sessionId);
-
-    return {
-      ...sessionWithDetails,
-      participants,
-      participants_count: participants.length,
-    };
-  }
-
-  // Get active session for a class
-  static async getActiveByClass(classId: string): Promise<Session | null> {
-    // Check if class exists
-    const classData = ClassesRepository.getById(classId);
-    if (!classData) {
-      throw new NotFoundError('Class');
+    // Verify ownership
+    if (session.teacher_id !== teacherId) {
+      throw new ForbiddenError('You can only update your own sessions');
     }
 
-    const session = SessionsRepository.getActiveByClass(classId);
-    return session || null;
+    // Verify session is active
+    if (!session.is_active) {
+      throw new ValidationError('Cannot update permissions of an ended session');
+    }
+
+    // Update permissions
+    const updated = SessionsRepository.updatePermissions(sessionId, allowStudentDraw);
+    if (!updated) {
+      throw new NotFoundError('Session');
+    }
+
+    return updated;
   }
 
-  // Join session (student or teacher)
-  static async join(sessionId: string, userId: string): Promise<any> {
-    // Check if session exists
+  /**
+   * End a session
+   * 
+   * Business rules:
+   * - Only the teacher who created the session can end it
+   * - Session must be active
+   * 
+   * @param sessionId Session ID
+   * @param teacherId Teacher attempting to end session
+   * @returns Ended session
+   */
+  static async end(sessionId: string, teacherId: string): Promise<Session> {
+    // Get session
     const session = SessionsRepository.getById(sessionId);
     if (!session) {
       throw new NotFoundError('Session');
     }
 
-    // Check if session is active
-    if (session.status !== 'active') {
-      throw new ValidationError('Session is not active');
+    // Verify ownership
+    if (session.teacher_id !== teacherId) {
+      throw new ForbiddenError('You can only end your own sessions');
     }
 
-    // Check if user exists
-    const user = UsersRepository.getById(userId);
-    if (!user) {
-      throw new NotFoundError('User');
-    }
-
-    // Add participant
-    const participant = SessionsRepository.addParticipant(sessionId, userId);
-
-    return {
-      success: true,
-      session: {
-        id: session.id,
-        class_id: session.class_id,
-        yjs_room_name: session.yjs_room_name,
-        yjs_url: `ws://localhost:${process.env.YJS_PORT || 1234}`,
-      },
-      participant,
-    };
-  }
-
-  // Leave session
-  static async leave(sessionId: string, userId: string): Promise<void> {
-    // Check if session exists
-    const session = SessionsRepository.getById(sessionId);
-    if (!session) {
-      throw new NotFoundError('Session');
-    }
-
-    // Remove participant
-    const removed = SessionsRepository.removeParticipant(sessionId, userId);
-    if (!removed) {
-      throw new ValidationError('You are not in this session');
-    }
-  }
-
-  // End session (teacher only)
-  static async end(sessionId: string, userId: string): Promise<Session> {
-    // Check if session exists
-    const session = SessionsRepository.getById(sessionId);
-    if (!session) {
-      throw new NotFoundError('Session');
-    }
-
-    // Check ownership
-    if (session.teacher_id !== userId) {
-      throw new ForbiddenError('Only the teacher can end the session');
-    }
-
-    // Check if already ended
-    if (session.status === 'ended') {
+    // Verify session is active
+    if (!session.is_active) {
       throw new ValidationError('Session is already ended');
     }
 
@@ -142,14 +207,48 @@ export class SessionService {
     return ended;
   }
 
-  // Get all sessions for a class
-  static async getByClass(classId: string): Promise<Session[]> {
-    // Check if class exists
+  /**
+   * Get all active sessions for a teacher
+   * 
+   * @param teacherId Teacher ID
+   * @returns List of active sessions
+   */
+  static async getActiveByTeacher(teacherId: string): Promise<Session[]> {
+    return SessionsRepository.getActiveByTeacher(teacherId);
+  }
+
+  /**
+   * Get session history for a class
+   * 
+   * @param classId Class ID
+   * @param teacherId Teacher requesting history
+   * @returns List of all sessions for the class
+   */
+  static async getByClass(classId: string, teacherId: string): Promise<Session[]> {
+    // Verify class ownership
     const classData = ClassesRepository.getById(classId);
     if (!classData) {
       throw new NotFoundError('Class');
     }
 
+    if (classData.teacher_id !== teacherId) {
+      throw new ForbiddenError('You can only view sessions for your own classes');
+    }
+
     return SessionsRepository.getByClass(classId);
+  }
+
+  /**
+   * Get session statistics for a teacher
+   * 
+   * @param teacherId Teacher ID
+   * @returns Session statistics
+   */
+  static async getStats(teacherId: string): Promise<{
+    total: number;
+    active: number;
+    ended: number;
+  }> {
+    return SessionsRepository.getStats(teacherId);
   }
 }

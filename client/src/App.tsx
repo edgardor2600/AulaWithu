@@ -4,6 +4,8 @@ import { LoginPage } from './pages/LoginPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { ClassDetailPage } from './pages/ClassDetailPage';
 import { EditorPage } from './pages/EditorPage';
+import { JoinSessionPage } from './pages/JoinSessionPage';
+import { SessionViewPage } from './pages/SessionViewPage';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { useAuthStore } from './store/authStore';
 
@@ -70,6 +72,25 @@ function App() {
           element={
             <ProtectedRoute requiredRole="teacher">
               <EditorPage />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* Live Session Routes */}
+        <Route
+          path="/join"
+          element={
+            <ProtectedRoute>
+              <JoinSessionPage />
+            </ProtectedRoute>
+          }
+        />
+        
+        <Route
+          path="/session/:id"
+          element={
+            <ProtectedRoute>
+              <SessionViewPage />
             </ProtectedRoute>
           }
         />

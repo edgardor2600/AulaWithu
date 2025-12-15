@@ -12,9 +12,11 @@ import {
   Save,
   Download,
   Undo2,
-  Redo2
+  Redo2,
+  Users
 } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { useYjs } from '../hooks/useYjs';
 
 interface CanvasEditorProps {
   slideId: string;
@@ -22,14 +24,41 @@ interface CanvasEditorProps {
   onSave: (canvasData: string) => Promise<void>;
   onChange?: (canvasData: string) => void;
   isReadOnly?: boolean;
+  sessionId?: string | null; // For live collaboration
+  onParticipantsChange?: (
+    count: number,
+    list?: Array<{ clientId: number; name: string; color: string }>,
+    clientId?: number
+  ) => void;
+  enforceOwnership?: boolean; // If true, restricts editing to own objects
+  isTeacher?: boolean;  // ✅ NUEVO: Si es profesor, puede editar todo
+  onPermissionsReady?: (updateFn: (allow: boolean) => void) => void;  // ✅ NUEVO: Callback para pasar updateSessionPermissions
+  onPermissionsChange?: (allowDraw: boolean) => void;  // ✅ NUEVO: Callback cuando cambien permisos
 }
 
 type Tool = 'select' | 'pencil' | 'rectangle' | 'circle' | 'line' | 'text' | 'eraser';
 
-export const CanvasEditor = ({ slideId, initialData, onSave, onChange, isReadOnly = false }: CanvasEditorProps) => {
+export const CanvasEditor = ({ 
+  slideId, 
+  initialData, 
+  onSave, 
+  onChange, 
+  isReadOnly = false,
+  sessionId = null,
+  onParticipantsChange,
+  enforceOwnership = false,
+  isTeacher = false,  // ✅ NUEVO: Por defecto es estudiante
+  onPermissionsReady,  // ✅ NUEVO: Callback para permisos
+  onPermissionsChange  // ✅ NUEVO: Callback cuando cambien permisos
+}: CanvasEditorProps) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const fabricCanvasRef = useRef<fabric.Canvas | null>(null);
   const isLoadingRef = useRef(false);
+  const isReadOnlyRef = useRef(isReadOnly);
+
+  useEffect(() => {
+    isReadOnlyRef.current = isReadOnly;
+  }, [isReadOnly]);
   
   // Undo/Redo state
   const historyRef = useRef<string[]>([]);
@@ -47,12 +76,82 @@ export const CanvasEditor = ({ slideId, initialData, onSave, onChange, isReadOnl
   const [canUndo, setCanUndo] = useState(false);
   const [canRedo, setCanRedo] = useState(false);
 
+  // Yjs real-time collaboration
+  const { isConnected, participants, participantsList, clientId, updateSessionPermissions } = useYjs(
+    sessionId, // Room name (null if not in live session)
+    fabricCanvasRef.current,
+    !!sessionId, // Only enable if sessionId exists
+    isReadOnly, // Pass read-only state
+    enforceOwnership, // Pass ownership enforcement
+    isTeacher,  // ✅ NUEVO: Pasar rol de profesor
+    onPermissionsChange  // ✅ NUEVO: Pasar callback de cambio de permisos
+  );
+
+  // Helper to apply lock based on ownership
+  const applyLock = useCallback((obj: fabric.Object, shouldLock: boolean) => {
+    if (shouldLock) {
+        obj.selectable = false;
+        obj.evented = false;
+        obj.hasControls = false;
+        obj.hasBorders = false;
+        obj.lockMovementX = true;
+        obj.lockScalingX = true;
+        obj.lockScalingY = true;
+        // @ts-ignore
+        obj.editable = false; // For IText objects
+        // @ts-ignore
+        if (obj instanceof fabric.IText) { (obj as any).editable = false; (obj as any).selectable = false; }
+    } else {
+        obj.selectable = true;
+        obj.evented = true;
+        obj.hasControls = true;
+        obj.hasBorders = true;
+        obj.lockMovementX = false;
+        obj.lockMovementY = false;
+        obj.lockRotation = false;
+        obj.lockScalingX = false;
+        obj.lockScalingY = false;
+        // @ts-ignore
+        obj.editable = true;
+        // @ts-ignore
+        if (obj instanceof fabric.IText) { (obj as any).editable = true; (obj as any).selectable = true; }
+    }
+  }, []);
+
+  // Notify parent when participants change
+  useEffect(() => {
+    if (onParticipantsChange) {
+      onParticipantsChange(participants, participantsList, clientId);
+    }
+  }, [participants, participantsList, clientId, onParticipantsChange]);
+
+  // ✅ NUEVO: Notificar cuando updateSessionPermissions esté disponible
+  useEffect(() => {
+    if (onPermissionsReady && updateSessionPermissions) {
+      onPermissionsReady(updateSessionPermissions);
+    }
+  }, [onPermissionsReady, updateSessionPermissions]);
+
   // Save state to history (debounced to avoid too many saves)
+  // ✅ NUEVO: Helper para serializar canvas con propiedades personalizadas
+  const serializeCanvas = useCallback((canvas: fabric.Canvas) => {
+    const json = canvas.toJSON();
+    // Agregar propiedades personalizadas manualmente a cada objeto
+    json.objects = canvas.getObjects().map((obj: any) => {
+      const objJson = obj.toObject();
+      objJson.id = obj.id;
+      objJson.createdBy = obj.createdBy;
+      return objJson;
+    });
+    return JSON.stringify(json);
+  }, []);
+
   const saveHistory = useCallback(() => {
     const canvas = fabricCanvasRef.current;
     if (!canvas || isUndoRedoRef.current || isLoadingRef.current) return;
 
-    const currentState = JSON.stringify(canvas.toJSON());
+    // ✅ MODIFICADO: Usar serializeCanvas para incluir propiedades personalizadas
+    const currentState = serializeCanvas(canvas);
     
     // Check if state actually changed
     if (historyRef.current[historyIndexRef.current] === currentState) {
@@ -77,7 +176,7 @@ export const CanvasEditor = ({ slideId, initialData, onSave, onChange, isReadOnl
     
     setCanUndo(historyIndexRef.current > 0);
     setCanRedo(false);
-  }, []);
+  }, [serializeCanvas]);
 
   // Undo
   const undo = useCallback(async () => {
@@ -286,14 +385,64 @@ export const CanvasEditor = ({ slideId, initialData, onSave, onChange, isReadOnl
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isReady, isReadOnly, undo, redo, copySelected, paste, deleteSelected]);
 
+
+
+  // Update canvas permissions whenever isReadOnly, clientId, or enforceOwnership changes
+  useEffect(() => {
+    const canvas = fabricCanvasRef.current;
+    if (!canvas) return;
+
+    console.log('🔒 Updating permissions:', { isReadOnly, enforceOwnership, clientId });
+
+    if (isReadOnly) {
+      // READ-ONLY MODE: Lock everything
+      canvas.selection = false;
+      canvas.isDrawingMode = false;
+      canvas.forEachObject((obj) => applyLock(obj, true));
+      canvas.defaultCursor = 'default';
+      canvas.hoverCursor = 'default';
+      console.log('✅ Canvas set to READ-ONLY');
+    } else {
+      // EDIT MODE: Check ownership if enforced
+      canvas.selection = true;
+      // Drawing mode handled by tool state, but ensure it's allowed
+      if (currentTool === 'pencil') canvas.isDrawingMode = true;
+
+      canvas.forEachObject((obj) => {
+         // If enforcing ownership, check if I created it
+         // If obj has no createdBy, assume it's public/professor's -> lock if I am student
+         // But wait, if enforceOwnership is false (Teacher), I can edit everything.
+         
+         const createdBy = (obj as any).createdBy;
+         const isMine = createdBy === clientId;
+         
+         // If enforcing ownership (Student):
+         // - Lock if it's not mine
+         // - Unlock if it is mine
+         
+         // If NOT enforcing (Teacher):
+         // - Unlock everything
+         
+         const shouldLock = enforceOwnership && !isMine;
+         applyLock(obj, shouldLock);
+      });
+      
+      canvas.defaultCursor = 'default';
+      canvas.hoverCursor = 'move';
+      console.log('✅ Canvas set to EDIT mode (Ownership enforced:', enforceOwnership, ')');
+    }
+    canvas.renderAll();
+  }, [isReadOnly, enforceOwnership, clientId, applyLock, currentTool]);
+
   // Notify parent of canvas changes
   const notifyChange = useCallback(() => {
     const canvas = fabricCanvasRef.current;
     if (!canvas || !onChange || isLoadingRef.current || isUndoRedoRef.current) return;
     
-    const canvasData = JSON.stringify(canvas.toJSON());
+    // ✅ MODIFICADO: Usar serializeCanvas para persistir ownership
+    const canvasData = serializeCanvas(canvas);
     onChange(canvasData);
-  }, [onChange]);
+  }, [onChange, serializeCanvas]);
 
   // Initialize canvas and load data
   useEffect(() => {
@@ -368,27 +517,49 @@ export const CanvasEditor = ({ slideId, initialData, onSave, onChange, isReadOnl
 
     // Listen to canvas changes AFTER loading
     const setupListeners = () => {
-      // Save history after each action completes
-      canvas.on('object:added', () => {
-        if (!isUndoRedoRef.current) {
+      // Enforce read-only on added objects
+      canvas.on('object:added', (e) => {
+        const obj = e.target;
+        if (obj && isReadOnlyRef.current) {
+           // Apply restrictions immediately
+           obj.selectable = false;
+           obj.evented = false;
+           obj.hasControls = false;
+           obj.hasBorders = false;
+           obj.lockMovementX = true;
+           obj.lockMovementY = true;
+           obj.lockRotation = true;
+           obj.lockScalingX = true;
+           obj.lockScalingY = true;
+           
+           if (obj instanceof fabric.IText) {
+             (obj as any).editable = false;
+             (obj as any).selectable = false;
+           }
+           
+           canvas.requestRenderAll();
+        }
+
+        if (!isUndoRedoRef.current && !isReadOnlyRef.current) {
           setTimeout(() => saveHistory(), 100);
           notifyChange();
         }
       });
+
       canvas.on('object:modified', () => {
-        if (!isUndoRedoRef.current) {
+        if (!isUndoRedoRef.current && !isReadOnlyRef.current) {
           setTimeout(() => saveHistory(), 100);
           notifyChange();
         }
       });
       canvas.on('object:removed', () => {
-        if (!isUndoRedoRef.current) {
+        if (!isUndoRedoRef.current && !isReadOnlyRef.current) {
           setTimeout(() => saveHistory(), 100);
           notifyChange();
         }
       });
       canvas.on('path:created', () => {
-        if (!isUndoRedoRef.current) {
+        if (!isUndoRedoRef.current && !isReadOnlyRef.current) {
           setTimeout(() => saveHistory(), 100);
           notifyChange();
         }
@@ -610,7 +781,8 @@ export const CanvasEditor = ({ slideId, initialData, onSave, onChange, isReadOnl
 
     setIsSaving(true);
     try {
-      const canvasData = JSON.stringify(canvas.toJSON());
+      // ✅ MODIFICADO: Usar serializeCanvas para persistir ownership
+      const canvasData = serializeCanvas(canvas);
       await onSave(canvasData);
       toast.success('Slide saved!');
     } catch (error) {
@@ -660,17 +832,10 @@ export const CanvasEditor = ({ slideId, initialData, onSave, onChange, isReadOnl
     { value: '#8800ff', name: 'Purple' },
   ];
 
-  if (isReadOnly) {
-    return (
-      <div className="bg-gray-100 rounded-lg p-4">
-        <canvas ref={canvasRef} className="border border-gray-300 rounded shadow-sm" />
-      </div>
-    );
-  }
-
   return (
     <div className="flex flex-col space-y-4">
-      {/* Toolbar */}
+      {/* Toolbar - Solo mostrar si NO es read-only */}
+      {!isReadOnly && (
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
         <div className="flex items-center justify-between flex-wrap gap-4">
           {/* Tools */}
@@ -777,9 +942,27 @@ export const CanvasEditor = ({ slideId, initialData, onSave, onChange, isReadOnl
               <Save className="w-4 h-4" />
               <span className="text-sm font-medium">{isSaving ? 'Saving...' : 'Save'}</span>
             </button>
+            
+            {/* Live Session Indicator */}
+            {sessionId && (
+              <div className={`flex items-center space-x-2 px-3 py-2 rounded-lg border ${
+                isConnected 
+                  ? 'bg-green-50 border-green-200 text-green-700' 
+                  : 'bg-yellow-50 border-yellow-200 text-yellow-700'
+              }`}>
+                <div className={`w-2 h-2 rounded-full ${
+                  isConnected ? 'bg-green-500 animate-pulse' : 'bg-yellow-500'
+                }`} />
+                <Users className="w-4 h-4" />
+                <span className="text-sm font-medium">
+                  {isConnected ? `Live (${participants})` : 'Connecting...'}
+                </span>
+              </div>
+            )}
           </div>
         </div>
       </div>
+      )}
 
       {/* Canvas */}
       <div className="bg-gradient-to-br from-gray-100 to-gray-200 rounded-lg p-6 flex justify-center">

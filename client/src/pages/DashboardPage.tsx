@@ -4,7 +4,7 @@ import { useAuthStore } from '../store/authStore';
 import { classService, type Class } from '../services/classService';
 import { Layout } from '../components/Layout';
 import { ClassModal } from '../components/ClassModal';
-import { Plus, BookOpen, Edit, Trash2, Eye } from 'lucide-react';
+import { Plus, BookOpen, Edit, Trash2, Eye, Radio } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 export const DashboardPage = () => {
@@ -88,19 +88,36 @@ export const DashboardPage = () => {
     navigate(`/classes/${classItem.id}`);
   };
 
+  const handleJoinSession = () => {
+    navigate('/join');
+  };
+
   return (
     <Layout>
       <div className="p-8">
         {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">
-            {isTeacher ? 'My Classes' : 'Available Classes'}
-          </h1>
-          <p className="text-gray-600">
-            {isTeacher
-              ? 'Manage your classes and create new lessons'
-              : 'Browse and join available classes'}
-          </p>
+        <div className="mb-8 flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900 mb-2">
+              {isTeacher ? 'My Classes' : 'Available Classes'}
+            </h1>
+            <p className="text-gray-600">
+              {isTeacher
+                ? 'Manage your classes and create new lessons'
+                : 'Browse and join available classes'}
+            </p>
+          </div>
+
+          {/* Join Live Session Button (Student Only) */}
+          {!isTeacher && (
+            <button
+              onClick={handleJoinSession}
+              className="flex items-center space-x-2 px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition font-medium shadow-lg hover:shadow-xl"
+            >
+              <Radio className="w-5 h-5" />
+              <span>Join Live Session</span>
+            </button>
+          )}
         </div>
 
         {/* Create Button (Teacher Only) */}

@@ -8,7 +8,10 @@ import { asyncHandler } from '../middleware/error.middleware';
 
 const router = Router();
 
-// POST /api/sessions - Start new session (teacher only)
+/**
+ * POST /api/sessions
+ * Create a new live session (teacher only)
+ */
 router.post(
   '/',
   authMiddleware,
@@ -17,25 +20,65 @@ router.post(
     body('class_id')
       .notEmpty().withMessage('Class ID is required')
       .isString().withMessage('Class ID must be a string'),
+    body('slide_id')
+      .notEmpty().withMessage('Slide ID is required')
+      .isString().withMessage('Slide ID must be a string'),
+    body('allow_student_draw')
+      .optional()
+      .isBoolean().withMessage('allow_student_draw must be a boolean'),
   ],
   validate,
   asyncHandler(async (req: any, res: any) => {
-    const { class_id } = req.body;
+    const { class_id, slide_id, allow_student_draw } = req.body;
     const teacher_id = req.user.userId;
 
-    const session = await SessionService.start({
+    const session = await SessionService.create({
       class_id,
+      slide_id,
       teacher_id,
+      allow_student_draw,
     });
 
     res.status(201).json({
       success: true,
       session,
+      message: 'Live session created successfully',
     });
   })
 );
 
-// GET /api/sessions/:id - Get session with participants
+/**
+ * POST /api/sessions/join
+ * Join a session using session code (students)
+ */
+router.post(
+  '/join',
+  authMiddleware,
+  [
+    body('session_code')
+      .notEmpty().withMessage('Session code is required')
+      .isString().withMessage('Session code must be a string')
+      .isLength({ min: 6, max: 6 }).withMessage('Session code must be 6 characters'),
+  ],
+  validate,
+  asyncHandler(async (req: any, res: any) => {
+    const { session_code } = req.body;
+    const userId = req.user.userId;
+
+    const session = await SessionService.joinByCode(session_code, userId);
+
+    res.status(200).json({
+      success: true,
+      session,
+      message: 'Joined session successfully',
+    });
+  })
+);
+
+/**
+ * GET /api/sessions/:id
+ * Get session details
+ */
 router.get(
   '/:id',
   authMiddleware,
@@ -56,49 +99,46 @@ router.get(
   })
 );
 
-// POST /api/sessions/:id/join - Join session
-router.post(
-  '/:id/join',
+/**
+ * PUT /api/sessions/:id/permissions
+ * Update session permissions (teacher only)
+ */
+router.put(
+  '/:id/permissions',
   authMiddleware,
+  teacherOnly,
   [
     param('id')
       .notEmpty().withMessage('Session ID is required'),
+    body('allow_student_draw')
+      .notEmpty().withMessage('allow_student_draw is required')
+      .isBoolean().withMessage('allow_student_draw must be a boolean'),
   ],
   validate,
   asyncHandler(async (req: any, res: any) => {
     const { id } = req.params;
-    const userId = req.user.userId;
+    const { allow_student_draw } = req.body;
+    const teacherId = req.user.userId;
 
-    const result = await SessionService.join(id, userId);
-
-    res.status(200).json(result);
-  })
-);
-
-// POST /api/sessions/:id/leave - Leave session
-router.post(
-  '/:id/leave',
-  authMiddleware,
-  [
-    param('id')
-      .notEmpty().withMessage('Session ID is required'),
-  ],
-  validate,
-  asyncHandler(async (req: any, res: any) => {
-    const { id } = req.params;
-    const userId = req.user.userId;
-
-    await SessionService.leave(id, userId);
+    const session = await SessionService.updatePermissions(
+      id,
+      teacherId,
+      allow_student_draw
+    );
 
     res.status(200).json({
       success: true,
-      message: 'Left session successfully',
+      session,
+      message: 'Permissions updated successfully',
     });
   })
 );
 
-// POST /api/sessions/:id/end - End session (teacher only)
-router.post(
+/**
+ * PUT /api/sessions/:id/end
+ * End a session (teacher only)
+ */
+router.put(
   '/:id/end',
   authMiddleware,
   teacherOnly,
@@ -109,42 +149,82 @@ router.post(
   validate,
   asyncHandler(async (req: any, res: any) => {
     const { id } = req.params;
-    const userId = req.user.userId;
+    const teacherId = req.user.userId;
 
-    const session = await SessionService.end(id, userId);
+    const session = await SessionService.end(id, teacherId);
 
     res.status(200).json({
       success: true,
       session,
+      message: 'Session ended successfully',
     });
   })
 );
 
-// GET /api/classes/:id/active-session - Get active session for class
+/**
+ * GET /api/sessions/teacher/active
+ * Get all active sessions for the logged-in teacher
+ */
 router.get(
-  '/classes/:id/active-session',
+  '/teacher/active',
   authMiddleware,
+  teacherOnly,
+  asyncHandler(async (req: any, res: any) => {
+    const teacherId = req.user.userId;
+
+    const sessions = await SessionService.getActiveByTeacher(teacherId);
+
+    res.status(200).json({
+      success: true,
+      sessions,
+      count: sessions.length,
+    });
+  })
+);
+
+/**
+ * GET /api/sessions/class/:classId
+ * Get session history for a class (teacher only)
+ */
+router.get(
+  '/class/:classId',
+  authMiddleware,
+  teacherOnly,
   [
-    param('id')
+    param('classId')
       .notEmpty().withMessage('Class ID is required'),
   ],
   validate,
   asyncHandler(async (req: any, res: any) => {
-    const { id } = req.params;
+    const { classId } = req.params;
+    const teacherId = req.user.userId;
 
-    const session = await SessionService.getActiveByClass(id);
-
-    if (!session) {
-      return res.status(200).json({
-        success: true,
-        session: null,
-        message: 'No active session found',
-      });
-    }
+    const sessions = await SessionService.getByClass(classId, teacherId);
 
     res.status(200).json({
       success: true,
-      session,
+      sessions,
+      count: sessions.length,
+    });
+  })
+);
+
+/**
+ * GET /api/sessions/teacher/stats
+ * Get session statistics for the logged-in teacher
+ */
+router.get(
+  '/teacher/stats',
+  authMiddleware,
+  teacherOnly,
+  asyncHandler(async (req: any, res: any) => {
+    const teacherId = req.user.userId;
+
+    const stats = await SessionService.getStats(teacherId);
+
+    res.status(200).json({
+      success: true,
+      stats,
     });
   })
 );

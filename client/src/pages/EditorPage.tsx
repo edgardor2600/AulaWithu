@@ -2,16 +2,19 @@ import { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { classService, type ClassWithDetails } from '../services/classService';
 import { slideService, type Slide } from '../services/slideService';
+import { sessionService, type Session } from '../services/sessionService';
 import { Layout } from '../components/Layout';
 import { CanvasEditor } from '../components/CanvasEditor';
 import { SlideThumbnail } from '../components/SlideThumbnail';
+import { LiveSessionModal } from '../components/LiveSessionModal';
 import { 
   ArrowLeft, 
   Plus, 
   ChevronLeft, 
   ChevronRight,
   Trash2,
-  Copy
+  Copy,
+  Radio
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -25,10 +28,24 @@ export const EditorPage = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   
+  // Live session state
+  const [activeSession, setActiveSession] = useState<Session | null>(null);
+  const [showSessionModal, setShowSessionModal] = useState(false);
+  const [participantsCount, setParticipantsCount] = useState(0);
+  const [participantsList, setParticipantsList] = useState<Array<{
+    clientId: number;
+    name: string;
+    color: string;
+  }>>([]);
+  const [currentClientId, setCurrentClientId] = useState<number>();
+  
   // Store canvas data for each slide in memory
   const slidesDataRef = useRef<Map<string, string>>(new Map());
   const saveTimeoutRef = useRef<number | undefined>(undefined);
   const lastSavedDataRef = useRef<string>('');
+  
+  // ✅ NUEVO: Ref para función de actualización de permisos
+  const updateSessionPermissionsRef = useRef<((allow: boolean) => void) | null>(null);
 
   useEffect(() => {
     if (classId) {
@@ -214,6 +231,95 @@ export const EditorPage = () => {
     }
   };
 
+  // Live Session Functions
+  const startLiveSession = async () => {
+    const currentSlide = slides[currentSlideIndex];
+    if (!currentSlide || !classId) return;
+
+    try {
+      // First, check if there's already an active session for this slide
+      const activeSessions = await sessionService.getActive();
+      const existingSession = activeSessions.find(
+        (s) => s.slide_id === currentSlide.id && s.is_active === 1
+      );
+
+      if (existingSession) {
+        // Session already exists, just show it
+        setActiveSession(existingSession);
+        setShowSessionModal(true);
+        toast.success(`Rejoined session: ${existingSession.session_code}`);
+        return;
+      }
+
+      // No existing session, create new one
+      const session = await sessionService.create({
+        class_id: classId,
+        slide_id: currentSlide.id,
+        allow_student_draw: false,
+      });
+      
+      setActiveSession(session);
+      setShowSessionModal(true);
+      toast.success(`Live session started! Code: ${session.session_code}`);
+    } catch (error: any) {
+      console.error('Failed to start session:', error);
+      
+      // Handle 409 Conflict - session already exists
+      if (error.response?.status === 409) {
+        toast.error('A session is already active for this slide. Please end it first.');
+        
+        // Try to fetch and show the existing session
+        try {
+          const activeSessions = await sessionService.getActive();
+          const existingSession = activeSessions.find(
+            (s) => s.slide_id === currentSlide.id && s.is_active === 1
+          );
+          if (existingSession) {
+            setActiveSession(existingSession);
+            setShowSessionModal(true);
+          }
+        } catch (fetchError) {
+          console.error('Failed to fetch existing session:', fetchError);
+        }
+      } else {
+        toast.error('Failed to start live session');
+      }
+    }
+  };
+
+  const toggleStudentDrawPermission = async (allow: boolean) => {
+    if (!activeSession) return;
+
+    try {
+      const updated = await sessionService.updatePermissions(activeSession.id, allow);
+      setActiveSession(updated);
+      
+      // ✅ NUEVO: Sincronizar permisos via Yjs en tiempo real
+      if (updateSessionPermissionsRef.current) {
+        updateSessionPermissionsRef.current(allow);
+      }
+      
+      toast.success(allow ? 'Students can now draw' : 'Students can only view');
+    } catch (error) {
+      console.error('Failed to update permissions:', error);
+      toast.error('Failed to update permissions');
+    }
+  };
+
+  const endLiveSession = async () => {
+    if (!activeSession) return;
+
+    try {
+      await sessionService.end(activeSession.id);
+      setActiveSession(null);
+      setShowSessionModal(false);
+      toast.success('Live session ended');
+    } catch (error) {
+      console.error('Failed to end session:', error);
+      toast.error('Failed to end session');
+    }
+  };
+
   const goToPrevSlide = () => {
     if (currentSlideIndex > 0) {
       setCurrentSlideIndex(currentSlideIndex - 1);
@@ -274,6 +380,40 @@ export const EditorPage = () => {
             </div>
 
             <div className="flex items-center space-x-4">
+              {/* Live Session Button */}
+              {!activeSession ? (
+                <button
+                  onClick={startLiveSession}
+                  className="flex items-center space-x-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition shadow-md"
+                >
+                  <Radio className="w-4 h-4" />
+                  <span className="font-medium">Start Live Session</span>
+                </button>
+              ) : (
+                <div className="flex items-center space-x-2">
+                  <button
+                    onClick={() => setShowSessionModal(true)}
+                    className="flex items-center space-x-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition shadow-md relative"
+                  >
+                    <div className="w-2 h-2 bg-white rounded-full animate-pulse absolute -top-1 -right-1" />
+                    <Radio className="w-4 h-4" />
+                    <span className="font-medium">Live: {activeSession.session_code}</span>
+                  </button>
+                  
+                  {/* Quick Copy Button */}
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText(activeSession.session_code);
+                      toast.success('Code copied!');
+                    }}
+                    className="p-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition shadow-md"
+                    title="Copy session code"
+                  >
+                    <Copy className="w-4 h-4" />
+                  </button>
+                </div>
+              )}
+              
               {/* Slide Navigation */}
               <div className="flex items-center space-x-2">
                 <button
@@ -377,11 +517,35 @@ export const EditorPage = () => {
                 initialData={currentSlideData}
                 onSave={handleManualSave}
                 onChange={handleCanvasChange}
+                sessionId={activeSession?.session_code || null}  // ✅ FIX: Usar session_code en vez de id
+                onParticipantsChange={(count, list, clientId) => {
+                  setParticipantsCount(count);
+                  if (list) setParticipantsList(list);
+                  if (clientId !== undefined) setCurrentClientId(clientId);
+                }}
+                isTeacher={true}  // ✅ NUEVO: EditorPage siempre es el profesor
+                onPermissionsReady={(updateFn) => {
+                  updateSessionPermissionsRef.current = updateFn;
+                }}
               />
             )}
           </div>
         </div>
       </div>
+
+      {/* Live Session Modal */}
+      {showSessionModal && activeSession && (
+        <LiveSessionModal
+          sessionCode={activeSession.session_code}
+          participants={participantsCount}
+          participantsList={participantsList}
+          currentClientId={currentClientId}
+          allowStudentDraw={activeSession.allow_student_draw === 1}
+          onTogglePermissions={toggleStudentDrawPermission}
+          onEndSession={endLiveSession}
+          onClose={() => setShowSessionModal(false)}
+        />
+      )}
     </Layout>
   );
 };

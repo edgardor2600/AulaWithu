@@ -31,11 +31,13 @@ export interface Slide {
 export interface Session {
   id: string;
   class_id: string;
+  slide_id: string;
   teacher_id: string;
-  status: 'active' | 'paused' | 'ended';
-  started_at: string;
+  session_code: string;
+  is_active: number; // SQLite boolean (0 or 1)
+  allow_student_draw: number; // SQLite boolean (0 or 1)
+  created_at: string;
   ended_at: string | null;
-  yjs_room_name: string;
 }
 
 export interface SessionParticipant {

@@ -1,139 +1,215 @@
-import { runQuery, getOne, getAll, transaction } from '../database';
-import { Session, SessionParticipant } from '../../types/database';
+import { runQuery, getOne, getAll } from '../database';
+import { Session } from '../../types/database';
 import { generateId } from '../../utils/id-generator';
 
+/**
+ * SessionsRepository
+ * 
+ * Data access layer for live collaboration sessions.
+ * Follows repository pattern for clean architecture and testability.
+ * 
+ * Responsibilities:
+ * - CRUD operations for sessions
+ * - Session code generation
+ * - Active session queries
+ * - No business logic (that belongs in SessionService)
+ */
 export class SessionsRepository {
-  // Create a new session
-  static create(data: { 
-    class_id: string; 
+  
+  /**
+   * Generate a unique 6-character session code (e.g., "ABC123")
+   * Format: 3 uppercase letters + 3 digits
+   */
+  private static generateSessionCode(): string {
+    const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+    const digits = '0123456789';
+    
+    let code = '';
+    for (let i = 0; i < 3; i++) {
+      code += letters.charAt(Math.floor(Math.random() * letters.length));
+    }
+    for (let i = 0; i < 3; i++) {
+      code += digits.charAt(Math.floor(Math.random() * digits.length));
+    }
+    
+    return code;
+  }
+
+  /**
+   * Create a new live session
+   * 
+   * @param data Session creation data
+   * @returns Created session with generated code
+   * @throws Error if session_code collision (retry in service layer)
+   */
+  static create(data: {
+    class_id: string;
+    slide_id: string;
     teacher_id: string;
+    allow_student_draw?: boolean;
   }): Session {
     const id = generateId();
-    const yjs_room_name = `room-${id}`;
+    const sessionCode = this.generateSessionCode();
     
     runQuery(
-      `INSERT INTO sessions (id, class_id, teacher_id, status, yjs_room_name) 
-       VALUES (?, ?, ?, 'active', ?)`,
-      [id, data.class_id, data.teacher_id, yjs_room_name]
+      `INSERT INTO sessions (
+        id, class_id, slide_id, teacher_id, session_code, allow_student_draw
+      ) VALUES (?, ?, ?, ?, ?, ?)`,
+      [
+        id,
+        data.class_id,
+        data.slide_id,
+        data.teacher_id,
+        sessionCode,
+        data.allow_student_draw ? 1 : 0
+      ]
     );
     
     return this.getById(id)!;
   }
 
-  // Get session by ID
+  /**
+   * Get session by ID
+   */
   static getById(id: string): Session | undefined {
-    return getOne<Session>(`SELECT * FROM sessions WHERE id = ?`, [id]);
-  }
-
-  // Get active session for a class
-  static getActiveByClass(classId: string): Session | undefined {
     return getOne<Session>(
-      `SELECT * FROM sessions WHERE class_id = ? AND status = 'active' ORDER BY started_at DESC LIMIT 1`,
-      [classId]
+      `SELECT * FROM sessions WHERE id = ?`,
+      [id]
     );
   }
 
-  // Get all sessions for a class
+  /**
+   * Get session by session code
+   * Used when students join with a code
+   */
+  static getByCode(sessionCode: string): Session | undefined {
+    return getOne<Session>(
+      `SELECT * FROM sessions WHERE session_code = ?`,
+      [sessionCode]
+    );
+  }
+
+  /**
+   * Get active session for a specific slide
+   * Returns the most recent active session
+   */
+  static getActiveBySlide(slideId: string): Session | undefined {
+    return getOne<Session>(
+      `SELECT * FROM sessions 
+       WHERE slide_id = ? AND is_active = 1 
+       ORDER BY created_at DESC 
+       LIMIT 1`,
+      [slideId]
+    );
+  }
+
+  /**
+   * Get all active sessions for a teacher
+   * Useful for dashboard view
+   */
+  static getActiveByTeacher(teacherId: string): Session[] {
+    return getAll<Session>(
+      `SELECT * FROM sessions 
+       WHERE teacher_id = ? AND is_active = 1 
+       ORDER BY created_at DESC`,
+      [teacherId]
+    );
+  }
+
+  /**
+   * Get all sessions for a class (active and ended)
+   * Useful for history view
+   */
   static getByClass(classId: string): Session[] {
     return getAll<Session>(
-      `SELECT * FROM sessions WHERE class_id = ? ORDER BY started_at DESC`,
+      `SELECT * FROM sessions 
+       WHERE class_id = ? 
+       ORDER BY created_at DESC`,
       [classId]
     );
   }
 
-  // Update session status
-  static updateStatus(id: string, status: 'active' | 'paused' | 'ended'): Session | undefined {
-    const updates = ['status = ?'];
-    const params: any[] = [status];
-
-    if (status === 'ended') {
-      updates.push('ended_at = CURRENT_TIMESTAMP');
-    }
-
-    params.push(id);
-    runQuery(`UPDATE sessions SET ${updates.join(', ')} WHERE id = ?`, params);
+  /**
+   * Update session permissions
+   * Allows teacher to toggle student drawing permission
+   */
+  static updatePermissions(id: string, allowStudentDraw: boolean): Session | undefined {
+    runQuery(
+      `UPDATE sessions 
+       SET allow_student_draw = ? 
+       WHERE id = ?`,
+      [allowStudentDraw ? 1 : 0, id]
+    );
     
     return this.getById(id);
   }
 
-  // End session
+  /**
+   * End a session
+   * Sets is_active to 0 and records ended_at timestamp
+   */
   static end(id: string): Session | undefined {
-    return this.updateStatus(id, 'ended');
-  }
-
-  // Add participant to session
-  static addParticipant(sessionId: string, userId: string): SessionParticipant {
-    const id = generateId();
-    
-    // Check if already exists
-    const existing = getOne<SessionParticipant>(
-      `SELECT * FROM session_participants WHERE session_id = ? AND user_id = ?`,
-      [sessionId, userId]
-    );
-
-    if (existing) {
-      // Update joined_at, clear left_at
-      runQuery(
-        `UPDATE session_participants SET joined_at = CURRENT_TIMESTAMP, left_at = NULL WHERE id = ?`,
-        [existing.id]
-      );
-      return getOne<SessionParticipant>(`SELECT * FROM session_participants WHERE id = ?`, [existing.id])!;
-    }
-
     runQuery(
-      `INSERT INTO session_participants (id, session_id, user_id) VALUES (?, ?, ?)`,
-      [id, sessionId, userId]
+      `UPDATE sessions 
+       SET is_active = 0, ended_at = CURRENT_TIMESTAMP 
+       WHERE id = ?`,
+      [id]
     );
     
-    return getOne<SessionParticipant>(`SELECT * FROM session_participants WHERE id = ?`, [id])!;
+    return this.getById(id);
   }
 
-  // Remove participant from session
-  static removeParticipant(sessionId: string, userId: string): boolean {
-    const result = runQuery(
-      `UPDATE session_participants SET left_at = CURRENT_TIMESTAMP 
-       WHERE session_id = ? AND user_id = ? AND left_at IS NULL`,
-      [sessionId, userId]
-    );
-    return result.changes > 0;
-  }
-
-  // Get active participants
-  static getActiveParticipants(sessionId: string): any[] {
-    return getAll(`
-      SELECT sp.*, u.name, u.role, u.avatar_color
-      FROM session_participants sp
-      JOIN users u ON sp.user_id = u.id
-      WHERE sp.session_id = ? AND sp.left_at IS NULL
-      ORDER BY sp.joined_at ASC
-    `, [sessionId]);
-  }
-
-  // Get all participants (including those who left)
-  static getAllParticipants(sessionId: string): any[] {
-    return getAll(`
-      SELECT sp.*, u.name, u.role, u.avatar_color
-      FROM session_participants sp
-      JOIN users u ON sp.user_id = u.id
-      WHERE sp.session_id = ?
-      ORDER BY sp.joined_at ASC
-    `, [sessionId]);
-  }
-
-  // Get session with details
-  static getWithDetails(id: string): any {
-    return getOne(`
-      SELECT s.*, c.title as class_title, u.name as teacher_name
-      FROM sessions s
-      JOIN classes c ON s.class_id = c.id
-      JOIN users u ON s.teacher_id = u.id
-      WHERE s.id = ?
-    `, [id]);
-  }
-
-  // Delete session
+  /**
+   * Delete a session (hard delete)
+   * Use with caution - prefer soft delete (end) instead
+   */
   static delete(id: string): boolean {
-    const result = runQuery(`DELETE FROM sessions WHERE id = ?`, [id]);
+    const result = runQuery(
+      `DELETE FROM sessions WHERE id = ?`,
+      [id]
+    );
+    
     return result.changes > 0;
+  }
+
+  /**
+   * Check if a session code already exists
+   * Used for validation before creating session
+   */
+  static codeExists(sessionCode: string): boolean {
+    const result = getOne<{ count: number }>(
+      `SELECT COUNT(*) as count FROM sessions WHERE session_code = ?`,
+      [sessionCode]
+    );
+    
+    return (result?.count || 0) > 0;
+  }
+
+  /**
+   * Get session statistics for analytics
+   * Returns count of active vs ended sessions
+   */
+  static getStats(teacherId?: string): {
+    total: number;
+    active: number;
+    ended: number;
+  } {
+    const query = teacherId
+      ? `SELECT 
+          COUNT(*) as total,
+          SUM(CASE WHEN is_active = 1 THEN 1 ELSE 0 END) as active,
+          SUM(CASE WHEN is_active = 0 THEN 1 ELSE 0 END) as ended
+         FROM sessions 
+         WHERE teacher_id = ?`
+      : `SELECT 
+          COUNT(*) as total,
+          SUM(CASE WHEN is_active = 1 THEN 1 ELSE 0 END) as active,
+          SUM(CASE WHEN is_active = 0 THEN 1 ELSE 0 END) as ended
+         FROM sessions`;
+    
+    const params = teacherId ? [teacherId] : [];
+    const result = getOne<{ total: number; active: number; ended: number }>(query, params);
+    
+    return result || { total: 0, active: 0, ended: 0 };
   }
 }
