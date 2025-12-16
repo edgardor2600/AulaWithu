@@ -1,4 +1,4 @@
-import { SlidesRepository, ClassesRepository } from '../db/repositories';
+import { SlidesRepository, ClassesRepository, StudentCopiesRepository, SessionsRepository } from '../db/repositories';
 import { Slide } from '../types/database';
 import { NotFoundError, ForbiddenError, ValidationError } from '../utils/AppError';
 
@@ -162,26 +162,54 @@ export class SlideService {
 
   // Delete slide (only class owner)
   static async delete(slideId: string, userId: string): Promise<void> {
-    // Get slide
-    const slide = SlidesRepository.getById(slideId);
-    if (!slide) {
-      throw new NotFoundError('Slide');
-    }
+    console.log('=== DELETE SLIDE START ===');
+    console.log('Slide ID:', slideId);
+    console.log('User ID:', userId);
 
-    // Check class ownership
-    const classData = ClassesRepository.getById(slide.class_id);
-    if (!classData) {
-      throw new NotFoundError('Class');
-    }
+    try {
+      // Get slide
+      const slide = SlidesRepository.getById(slideId);
+      if (!slide) {
+        console.error('Slide not found for deletion');
+        throw new NotFoundError('Slide');
+      }
 
-    if (classData.teacher_id !== userId) {
-      throw new ForbiddenError('You can only delete slides in your own classes');
-    }
+      // Check class ownership
+      const classData = ClassesRepository.getById(slide.class_id);
+      if (!classData) {
+        console.error('Class not found for slide');
+        throw new NotFoundError('Class');
+      }
 
-    // Delete slide
-    const deleted = SlidesRepository.delete(slideId);
-    if (!deleted) {
-      throw new NotFoundError('Slide');
+      if (classData.teacher_id !== userId) {
+        console.error('Permission denied for deletion');
+        throw new ForbiddenError('You can only delete slides in your own classes');
+      }
+
+      // ✅ Borrado manual en cascada para evitar errores de FK
+      // 1. Borrar sesiones que usan esta slide
+      console.log('Deleting sessions using this slide...');
+      const sessionsDeleted = SessionsRepository.deleteBySlide(slideId);
+      console.log(`Deleted ${sessionsDeleted} sessions.`);
+
+      // 2. Borrar copias de estudiantes
+      console.log('Deleting dependent student copies...');
+      const copiesDeleted = StudentCopiesRepository.deleteBySlide(slideId);
+      console.log(`Deleted ${copiesDeleted} student copies.`);
+
+      // 3. Borrar la slide
+      console.log('Attempting to delete slide from repository...');
+      const deleted = SlidesRepository.delete(slideId);
+      
+      if (!deleted) {
+        console.error('Repository returned false (deletion failed)');
+        throw new Error('Failed to delete slide from database');
+      }
+      
+      console.log('=== DELETE SLIDE SUCCESS ===');
+    } catch (error) {
+      console.error('Error deleting slide:', error);
+      throw error;
     }
   }
 }

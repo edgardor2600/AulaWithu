@@ -187,6 +187,26 @@ export class SessionsRepository {
     return result.changes > 0;
   }
 
+  // ✅ NUEVO: Delete sessions by class (for cascade delete)
+  static deleteByClass(classId: string): number {
+    const result = runQuery(
+      `DELETE FROM sessions WHERE class_id = ?`,
+      [classId]
+    );
+    
+    return result.changes;
+  }
+
+  // ✅ NUEVO: Delete sessions by slide (for cascade delete)
+  static deleteBySlide(slideId: string): number {
+    const result = runQuery(
+      `DELETE FROM sessions WHERE slide_id = ?`,
+      [slideId]
+    );
+    
+    return result.changes;
+  }
+
   /**
    * Check if a session code already exists
    * Used for validation before creating session

@@ -92,6 +92,12 @@ export class SlidesRepository {
     return result.changes > 0;
   }
 
+  // ✅ NUEVO: Delete slides by class
+  static deleteByClass(classId: string): number {
+    const result = runQuery(`DELETE FROM slides WHERE class_id = ?`, [classId]);
+    return result.changes;
+  }
+
   // Reorder slides
   static reorder(classId: string, slideId: string, newPosition: number): boolean {
     // This would require a transaction to update multiple slides

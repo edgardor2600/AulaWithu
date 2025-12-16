@@ -13,7 +13,11 @@ import {
   Download,
   Undo2,
   Redo2,
-  Users
+  Users,
+  ZoomIn,
+  ZoomOut,
+  Maximize2,
+  Hand
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useYjs } from '../hooks/useYjs';
@@ -36,7 +40,7 @@ interface CanvasEditorProps {
   onPermissionsChange?: (allowDraw: boolean) => void;  // ✅ NUEVO: Callback cuando cambien permisos
 }
 
-type Tool = 'select' | 'pencil' | 'rectangle' | 'circle' | 'line' | 'text' | 'eraser';
+type Tool = 'select' | 'pencil' | 'rectangle' | 'circle' | 'line' | 'text' | 'eraser' | 'hand';
 
 export const CanvasEditor = ({ 
   slideId, 
@@ -75,6 +79,12 @@ export const CanvasEditor = ({
   const [isReady, setIsReady] = useState(false);
   const [canUndo, setCanUndo] = useState(false);
   const [canRedo, setCanRedo] = useState(false);
+  
+  // ✅ NUEVO: Zoom and Pan state
+  const [zoomLevel, setZoomLevel] = useState(1);
+  const MIN_ZOOM = 0.1;
+  const MAX_ZOOM = 5;
+  const [isSpacePressed, setIsSpacePressed] = useState(false);  // ✅ Para pan temporal con Espacio
 
   // Yjs real-time collaboration
   const { isConnected, participants, participantsList, clientId, updateSessionPermissions } = useYjs(
@@ -230,6 +240,40 @@ export const CanvasEditor = ({
     }, 500); // Longer delay to ensure history doesn't get saved again
   }, [onChange]);
 
+  // ✅ NUEVO: Zoom functions
+  const zoomIn = useCallback(() => {
+    const canvas = fabricCanvasRef.current;
+    if (!canvas) return;
+    
+    const newZoom = Math.min(zoomLevel * 1.2, MAX_ZOOM);
+    setZoomLevel(newZoom);
+    
+    const center = canvas.getCenter();
+    canvas.zoomToPoint(new fabric.Point(center.left, center.top), newZoom);
+    canvas.renderAll();
+  }, [zoomLevel, MAX_ZOOM]);
+
+  const zoomOut = useCallback(() => {
+    const canvas = fabricCanvasRef.current;
+    if (!canvas) return;
+    
+    const newZoom = Math.max(zoomLevel / 1.2, MIN_ZOOM);
+    setZoomLevel(newZoom);
+    
+    const center = canvas.getCenter();
+    canvas.zoomToPoint(new fabric.Point(center.left, center.top), newZoom);
+    canvas.renderAll();
+  }, [zoomLevel, MIN_ZOOM]);
+
+  const resetZoom = useCallback(() => {
+    const canvas = fabricCanvasRef.current;
+    if (!canvas) return;
+    
+    setZoomLevel(1);
+    canvas.setViewportTransform([1, 0, 0, 1, 0, 0]);
+    canvas.renderAll();
+  }, []);
+
   // Copy selected object
   const copySelected = useCallback(async () => {
     const canvas = fabricCanvasRef.current;
@@ -350,11 +394,216 @@ export const CanvasEditor = ({
         e.preventDefault();
         handleSave();
       }
+      
+      // Espacio para pan temporal
+      if (e.key === ' ' && currentTool !== 'hand') {
+        e.preventDefault();
+        if (!isSpacePressed) {
+          setIsSpacePressed(true);
+          const canvas = fabricCanvasRef.current;
+          if (canvas) {
+            canvas.defaultCursor = 'grab';
+            canvas.hoverCursor = 'grab';
+          }
+        }
+      }
+    };
+
+    const handleKeyUp = (e: KeyboardEvent) => {
+      // Soltar Espacio vuelve a cursor normal
+      if (e.key === ' ') {
+        setIsSpacePressed(false);
+        const canvas = fabricCanvasRef.current;
+        if (canvas && currentTool !== 'hand') {
+          canvas.defaultCursor = 'default';
+          canvas.hoverCursor = 'move';
+        }
+      }
     };
 
     window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isReady, isReadOnly, undo, redo, copySelected, paste, deleteSelected]);
+    window.addEventListener('keyup', handleKeyUp);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+    };
+  }, [isReady, isReadOnly, undo, redo, copySelected, paste, deleteSelected, currentTool, isSpacePressed]);
+
+  // ✅ NUEVO: Ref para isSpacePressed para evitar re-render del useEffect
+  const isSpacePressedRef = useRef(isSpacePressed);
+  useEffect(() => {
+    isSpacePressedRef.current = isSpacePressed;
+  }, [isSpacePressed]);
+
+  // ✅ NUEVO: Zoom con Ctrl+Scroll y Pan con mouse
+  useEffect(() => {
+    const canvas = fabricCanvasRef.current;
+    if (!canvas) return;
+
+    let isPanning = false;
+    let lastPosX = 0;
+    let lastPosY = 0;
+    let wasDrawingMode = false;  // Guardar estado del modo de dibujo
+    let restoreTimeout: number | null = null;  // Para delay al restaurar
+
+    // Zoom con Ctrl + Scroll
+    const handleWheel = (e: WheelEvent) => {
+      if (e.ctrlKey || e.metaKey) {
+        e.preventDefault();
+        
+        const delta = e.deltaY;
+        let newZoom = canvas.getZoom();
+        
+        if (delta < 0) {
+          // Scroll up = Zoom in
+          newZoom = Math.min(newZoom * 1.1, MAX_ZOOM);
+        } else {
+          // Scroll down = Zoom out
+          newZoom = Math.max(newZoom / 1.1, MIN_ZOOM);
+        }
+        
+        setZoomLevel(newZoom);
+        
+        // Zoom hacia el punto del mouse
+        const point = new fabric.Point(e.offsetX, e.offsetY);
+        canvas.zoomToPoint(point, newZoom);
+        canvas.renderAll();
+      }
+    };
+
+    // ✅ MEJORADO: Pan con Hand Tool, Espacio, Alt+Click, middle click o right+alt
+    const handleMouseDown = (e: fabric.TEvent) => {
+      const evt = e.e as MouseEvent;
+      
+      // Activar pan si:
+      // 1. Hand tool está seleccionado
+      // 2. Espacio está presionado (leído desde ref)
+      // 3. Middle click (rueda del mouse)
+      const shouldPan = 
+        currentTool === 'hand' || 
+        isSpacePressedRef.current || 
+        evt.button === 1;  // Middle click
+      
+      if (shouldPan) {
+        isPanning = true;
+        lastPosX = evt.clientX;
+        lastPosY = evt.clientY;
+        canvas.defaultCursor = 'grabbing';
+        
+        // ✅ CRÍTICO: Guardar y desactivar el modo de dibujo para prevenir que dibuje mientras hace pan
+        wasDrawingMode = canvas.isDrawingMode;
+        if (wasDrawingMode) {
+          canvas.isDrawingMode = false;
+          
+          // Limpiar cualquier estado de dibujo pendiente en Fabric.js
+          if ((canvas as any).freeDrawingBrush) {
+            (canvas as any).freeDrawingBrush._reset();
+          }
+        }
+        
+        // Prevenir que Fabric.js procese este evento
+        evt.preventDefault();
+        evt.stopPropagation();
+        evt.stopImmediatePropagation();
+        
+        // Desactivar interacciones de Fabric.js temporalmente
+        canvas.selection = false;
+        canvas.skipTargetFind = true;
+        
+        return false;
+      }
+    };
+
+
+    const handleMouseMove = (e: fabric.TEvent) => {
+      if (!isPanning) return;
+      
+      const evt = e.e as MouseEvent;
+      
+      // Prevenir que Fabric.js dibuje selection box o líneas
+      evt.preventDefault();
+      evt.stopPropagation();
+      evt.stopImmediatePropagation();
+      
+      // ✅ MEJORADO: Usar relativePan en lugar de manipular viewportTransform manualmente
+      // Esto asegura compatibilidad total con el zoom y evita desincronizaciones
+      const deltaX = evt.clientX - lastPosX;
+      const deltaY = evt.clientY - lastPosY;
+      
+      canvas.relativePan(new fabric.Point(deltaX, deltaY));
+      
+      lastPosX = evt.clientX;
+      lastPosY = evt.clientY;
+      
+      return false;
+    };
+
+    const handleMouseUp = (e: fabric.TEvent) => {
+      if (isPanning) {
+        const evt = e.e as MouseEvent;
+        
+        // CRÍTICO: Prevenir que Fabric.js procese este mouse:up
+        evt.preventDefault();
+        evt.stopPropagation();
+        evt.stopImmediatePropagation();
+        
+        isPanning = false;
+        canvas.defaultCursor = 'default';
+        
+        // Limpiar estado interno
+        (canvas as any)._isCurrentlyDrawing = false;
+        (canvas as any)._currentTransform = null;
+        (canvas as any).__corner = null;
+        canvas.discardActiveObject();
+        canvas.skipTargetFind = false;
+        
+        // ✅ LÓGICA MEJORADA DE RESTAURACIÓN
+        if (wasDrawingMode) {
+          // Si íbamos a dibujar, MANTENER selección apagada para evitar blink azul
+          // Y programar la restauración del dibujo
+          
+          if (restoreTimeout) clearTimeout(restoreTimeout);
+          
+          restoreTimeout = setTimeout(() => {
+            if (canvas && !isPanning) {
+              canvas.isDrawingMode = true;
+              if ((canvas as any).freeDrawingBrush) {
+                (canvas as any).freeDrawingBrush._reset();
+              }
+            }
+            wasDrawingMode = false;
+            restoreTimeout = null;
+          }, 50);
+        } else {
+          // Solo reactivar selección si NO estábamos dibujando
+          canvas.selection = true;
+        }
+        
+        canvas.requestRenderAll();
+        return false;
+      }
+    };
+
+    // Agregar event listeners
+    const canvasElement = canvas.getElement();
+    canvasElement.addEventListener('wheel', handleWheel, { passive: false });
+    
+    canvas.on('mouse:down', handleMouseDown);
+    canvas.on('mouse:move', handleMouseMove);
+    canvas.on('mouse:up', handleMouseUp);
+
+    return () => {
+      if (restoreTimeout) {
+        clearTimeout(restoreTimeout);
+      }
+      
+      canvasElement.removeEventListener('wheel', handleWheel);
+      canvas.off('mouse:down', handleMouseDown);
+      canvas.off('mouse:move', handleMouseMove);
+      canvas.off('mouse:up', handleMouseUp);
+    };
+    // Quitamos isSpacePressed de las dependencias para evitar re-subscribe al pulsar espacio
+  }, [MAX_ZOOM, MIN_ZOOM, currentTool]);
 
 
 
@@ -493,10 +742,14 @@ export const CanvasEditor = ({
       });
     };
 
-    setTimeout(setupListeners, 100);
+    const timeoutId = setTimeout(setupListeners, 100);
 
     return () => {
       console.log('Disposing canvas for slide:', slideId);
+      
+      // Cancelar setTimeout si aún no se ejecutó
+      clearTimeout(timeoutId);
+      
       canvas.dispose();
       fabricCanvasRef.current = null;
       setIsReady(false);
@@ -512,11 +765,18 @@ export const CanvasEditor = ({
     canvas.isDrawingMode = false;
     canvas.selection = true;
     
-    // Remove previous mouse event listeners
-    canvas.off('mouse:down');
-    canvas.off('mouse:move');
-    canvas.off('mouse:up');
-
+    // Handlers específicos para poder removerlos selectivamente
+    let mouseDownHandler: ((o: fabric.TEvent) => void) | undefined;
+    let mouseMoveHandler: ((o: fabric.TEvent) => void) | undefined;
+    let mouseUpHandler: ((o: fabric.TEvent) => void) | undefined;
+    
+    // ✅ NUEVO: Hand tool - no remover event listeners de pan
+    if (currentTool === 'hand') {
+      canvas.selection = false;
+      canvas.isDrawingMode = false;
+      return;
+    }
+    
     if (currentTool === 'pencil') {
       canvas.isDrawingMode = true;
       canvas.freeDrawingBrush = new fabric.PencilBrush(canvas);
@@ -530,12 +790,16 @@ export const CanvasEditor = ({
       let isErasing = false;
       const erasedObjects = new Set<fabric.Object>();
 
-      canvas.on('mouse:down', () => {
+      mouseDownHandler = (options) => {
+        // ✅ CRÍTICO: No borrar si se está haciendo pan (Space o Middle Click)
+        const evt = options.e as MouseEvent;
+        if (isSpacePressedRef.current || evt.button === 1) return;
+        
         isErasing = true;
         erasedObjects.clear();
-      });
+      };
 
-      canvas.on('mouse:move', (o) => {
+      mouseMoveHandler = (o) => {
         if (!isErasing) return;
 
         const pointer = canvas.getPointer(o.e);
@@ -569,12 +833,12 @@ export const CanvasEditor = ({
         });
 
         canvas.renderAll();
-      });
+      };
 
-      canvas.on('mouse:up', () => {
+      mouseUpHandler = () => {
         isErasing = false;
         erasedObjects.clear();
-      });
+      };
     } else if (currentTool === 'rectangle' || currentTool === 'circle' || currentTool === 'line') {
       // Drag-to-draw mode for shapes
       canvas.selection = false;
@@ -583,7 +847,11 @@ export const CanvasEditor = ({
       let startY = 0;
       let shape: fabric.Object | null = null;
 
-      canvas.on('mouse:down', (o) => {
+      mouseDownHandler = (o) => {
+        // ✅ CRÍTICO: No dibujar formas si se está haciendo pan (Space o Middle Click)
+        const evt = o.e as MouseEvent;
+        if (isSpacePressedRef.current || evt.button === 1) return;
+
         isDrawing = true;
         const pointer = canvas.getPointer(o.e);
         startX = pointer.x;
@@ -619,9 +887,9 @@ export const CanvasEditor = ({
         if (shape) {
           canvas.add(shape);
         }
-      });
+      };
 
-      canvas.on('mouse:move', (o) => {
+      mouseMoveHandler = (o) => {
         if (!isDrawing || !shape) return;
 
         const pointer = canvas.getPointer(o.e);
@@ -649,17 +917,32 @@ export const CanvasEditor = ({
         }
 
         canvas.renderAll();
-      });
+      };
 
-      canvas.on('mouse:up', () => {
+      mouseUpHandler = () => {
         if (isDrawing && shape) {
           isDrawing = false;
           canvas.setActiveObject(shape);
           shape = null;
           setCurrentTool('select'); // Auto-switch back to select
         }
-      });
+      };
     }
+    
+    // Registrar listeners si existen
+    if (mouseDownHandler) canvas.on('mouse:down', mouseDownHandler);
+    if (mouseMoveHandler) canvas.on('mouse:move', mouseMoveHandler);
+    if (mouseUpHandler) canvas.on('mouse:up', mouseUpHandler);
+
+    // ✅ CRÍTICO: Limpieza quirúrgica - remover SOLO los listeners de esta herramienta
+    return () => {
+      if (mouseDownHandler) canvas.off('mouse:down', mouseDownHandler);
+      if (mouseMoveHandler) canvas.off('mouse:move', mouseMoveHandler);
+      if (mouseUpHandler) canvas.off('mouse:up', mouseUpHandler);
+      
+      // Si era lápiz, apagar modo dibujo
+      canvas.isDrawingMode = false;
+    };
   }, [currentTool, color, brushWidth, isReadOnly, isReady]);
 
   const addText = () => {
@@ -686,6 +969,18 @@ export const CanvasEditor = ({
       setCurrentTool('select');
     } else {
       setCurrentTool(tool);
+      
+      // ✅ NUEVO: Cambiar cursor cuando se selecciona hand tool
+      const canvas = fabricCanvasRef.current;
+      if (canvas) {
+        if (tool === 'hand') {
+          canvas.defaultCursor = 'grab';
+          canvas.hoverCursor = 'grab';
+        } else {
+          canvas.defaultCursor = 'default';
+          canvas.hoverCursor = 'move';
+        }
+      }
     }
   };
 
@@ -738,6 +1033,7 @@ export const CanvasEditor = ({
 
   const tools = [
     { id: 'select' as Tool, icon: MousePointer, label: 'Select', desc: 'Select and move (V)' },
+    { id: 'hand' as Tool, icon: Hand, label: 'Hand', desc: 'Pan canvas (H or Space)' },  // ✅ NUEVO
     { id: 'pencil' as Tool, icon: Pencil, label: 'Pencil', desc: 'Draw freehand (P)' },
     { id: 'rectangle' as Tool, icon: Square, label: 'Rectangle', desc: 'Add rectangle (R)' },
     { id: 'circle' as Tool, icon: CircleIcon, label: 'Circle', desc: 'Add circle (C)' },
@@ -805,6 +1101,34 @@ export const CanvasEditor = ({
               title="Redo (Ctrl+Y)"
             >
               <Redo2 className="w-5 h-5" />
+            </button>
+          </div>
+
+          {/* ✅ NUEVO: Zoom Controls */}
+          <div className="flex items-center space-x-1 bg-gray-50 px-3 py-1.5 rounded-lg">
+            <button
+              onClick={zoomOut}
+              className="p-2 rounded-lg transition-all hover:bg-white hover:shadow-sm"
+              title="Zoom Out (Ctrl + Scroll Down)"
+            >
+              <ZoomOut className="w-4 h-4" />
+            </button>
+            <span className="text-xs font-medium text-gray-600 min-w-[60px] text-center">
+              {Math.round(zoomLevel * 100)}%
+            </span>
+            <button
+              onClick={zoomIn}
+              className="p-2 rounded-lg transition-all hover:bg-white hover:shadow-sm"
+              title="Zoom In (Ctrl + Scroll Up)"
+            >
+              <ZoomIn className="w-4 h-4" />
+            </button>
+            <button
+              onClick={resetZoom}
+              className="p-2 rounded-lg transition-all hover:bg-white hover:shadow-sm"
+              title="Reset Zoom (100%)"
+            >
+              <Maximize2 className="w-4 h-4" />
             </button>
           </div>
 

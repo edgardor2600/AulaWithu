@@ -1,4 +1,4 @@
-import { ClassesRepository, SlidesRepository } from '../db/repositories';
+import { ClassesRepository, SlidesRepository, SessionsRepository, StudentCopiesRepository } from '../db/repositories';
 import { Class } from '../types/database';
 import { NotFoundError, ForbiddenError, ValidationError } from '../utils/AppError';
 
@@ -104,6 +104,8 @@ export class ClassService {
 
   // Delete class (only owner can delete)
   static async delete(classId: string, userId: string): Promise<void> {
+    console.log('=== DELETE CLASS START ===', classId);
+    
     // Check if class exists
     const existingClass = ClassesRepository.getById(classId);
     if (!existingClass) {
@@ -115,10 +117,35 @@ export class ClassService {
       throw new ForbiddenError('You can only delete your own classes');
     }
 
-    // Delete class (CASCADE will delete slides)
-    const deleted = ClassesRepository.delete(classId);
-    if (!deleted) {
-      throw new NotFoundError('Class');
+    try {
+      // 1. Borrar Sesiones
+      console.log('Deleting sessions...');
+      SessionsRepository.deleteByClass(classId);
+
+      // 2. Borrar copias de estudiantes para cada slide
+      console.log('Fetching slides to delete student copies...');
+      const slides = SlidesRepository.getByClass(classId);
+      
+      for (const slide of slides) {
+        console.log(`Deleting student copies for slide ${slide.id}...`);
+        StudentCopiesRepository.deleteBySlide(slide.id);
+      }
+
+      // 3. Borrar Slides
+      console.log('Deleting slides...');
+      SlidesRepository.deleteByClass(classId);
+
+      // 4. Borrar Clase
+      console.log('Deleting class...');
+      const deleted = ClassesRepository.delete(classId);
+      
+      if (!deleted) {
+        throw new NotFoundError('Class'); // Should not happen if getById worked
+      }
+      console.log('=== DELETE CLASS SUCCESS ===');
+    } catch (error) {
+      console.error('Error deleting class manually:', error);
+      throw error;
     }
   }
 

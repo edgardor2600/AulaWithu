@@ -89,4 +89,10 @@ export class StudentCopiesRepository {
     const result = runQuery(`DELETE FROM student_copies WHERE student_id = ?`, [studentId]);
     return result.changes;
   }
+
+  // ✅ NUEVO: Delete all copies by slide (for cascade delete)
+  static deleteBySlide(slideId: string): number {
+    const result = runQuery(`DELETE FROM student_copies WHERE slide_id = ?`, [slideId]);
+    return result.changes;
+  }
 }
