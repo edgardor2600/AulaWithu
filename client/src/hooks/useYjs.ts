@@ -129,6 +129,9 @@ export function useYjs(
     // ✅ NUEVO: Mapa compartido para permisos de sesión
     const ySessionPermissions = ydoc.getMap('sessionPermissions');
     
+    // ✅ NUEVO: Mapa compartido para sincronizar viewport (pan/zoom)
+    const yViewport = ydoc.getMap('viewport');
+    
     // Listener para cambios en permisos (para estudiantes)
     const handlePermissionsChange = () => {
       const allowDraw = ySessionPermissions.get('allowStudentDraw');
@@ -181,6 +184,66 @@ export function useYjs(
     
     ySessionPermissions.observe(handlePermissionsChange);
 
+    // ✅ NUEVO: Sincronización de viewport (pan/zoom)
+    let isApplyingViewport = false; // Flag para evitar loops
+    
+    // Listener para cambios de viewport (solo estudiantes)
+    const handleViewportChange = () => {
+      if (isTeacher || !canvas || isApplyingViewport) return;
+      
+      const viewportData = yViewport.get('transform');
+      if (viewportData && Array.isArray(viewportData) && viewportData.length === 6) {
+        isApplyingViewport = true;
+        console.log('📺 Applying teacher viewport:', viewportData);
+        
+        // Aplicar transformación del viewport
+        canvas.setViewportTransform(viewportData as [number, number, number, number, number, number]);
+        canvas.requestRenderAll();
+        
+        isApplyingViewport = false;
+      }
+    };
+    
+    yViewport.observe(handleViewportChange);
+    
+    // Broadcast viewport changes (solo profesor)
+    let viewportBroadcastTimeout: number | null = null;
+    
+    const broadcastViewport = () => {
+      if (!isTeacher || !canvas || isApplyingViewport) return;
+      
+      // Debounce para no saturar la red
+      if (viewportBroadcastTimeout) {
+        clearTimeout(viewportBroadcastTimeout);
+      }
+      
+      viewportBroadcastTimeout = setTimeout(() => {
+        const vpt = canvas.viewportTransform;
+        if (vpt) {
+          yViewport.set('transform', [...vpt]); // Clonar array
+          console.log('📡 Teacher broadcasting viewport:', vpt);
+        }
+      }, 50) as unknown as number; // 50ms debounce
+    };
+    
+    // Escuchar eventos de viewport del canvas (solo profesor)
+    if (isTeacher) {
+      // Detectar cambios en el viewport (pan/zoom)
+      const handleCanvasMouseWheel = () => broadcastViewport();
+      const handleCanvasMouseMove = () => {
+        // Solo broadcast si se está haciendo pan
+        if ((canvas as any)._isPanning) {
+          broadcastViewport();
+        }
+      };
+      
+      canvas.on('mouse:wheel', handleCanvasMouseWheel);
+      canvas.on('mouse:move', handleCanvasMouseMove);
+      
+      // También capturar cuando termine el pan
+      canvas.on('mouse:up', broadcastViewport);
+    }
+
     /**
      * Load existing objects from Yjs to Fabric canvas
      * Called on initial sync
@@ -195,6 +258,7 @@ export function useYjs(
       }
 
       console.log('📥 Loading objects from Yjs...');
+      console.log('🔒 Current permissions:', { isReadOnly, enforceOwnership, isTeacher });
       isRemoteChangeRef.current = true;
 
       yCanvas.forEach((objectData: any, objectId: string) => {
@@ -202,6 +266,28 @@ export function useYjs(
           addObjectToCanvas(objectData, objectId);
         }
       });
+
+      // ✅ CRÍTICO: Aplicar permisos inmediatamente después de cargar
+      if (isReadOnly && !isTeacher) {
+        console.log('🔐 Applying read-only lock to all objects for student...');
+        canvas.forEachObject((obj: any) => {
+          obj.selectable = false;
+          obj.evented = false;
+          obj.hasControls = false;
+          obj.hasBorders = false;
+          obj.lockMovementX = true;
+          obj.lockMovementY = true;
+          obj.lockRotation = true;
+          obj.lockScalingX = true;
+          obj.lockScalingY = true;
+          obj.editable = false;
+          
+          if (obj instanceof fabric.IText) {
+            obj.editable = false;
+            obj.selectable = false;
+          }
+        });
+      }
 
       canvas.renderAll();
       isRemoteChangeRef.current = false;
@@ -228,11 +314,22 @@ export function useYjs(
           const createdBy = (obj as any).createdBy;
           const isOwner = createdBy === ydocRef.current?.clientID;
           
-          // ✅ MODIFICADO: Lógica de bloqueo mejorada
-          // - Si isReadOnly: bloquear TODO
-          // - Si enforceOwnership Y no es owner Y no es teacher: bloquear
-          // - Si es teacher: NUNCA bloquear (puede editar todo)
-          const shouldLock = isReadOnly || (enforceOwnership && !isOwner && !isTeacher);
+          // ✅ MODIFICADO: Lógica de bloqueo mejorada con prioridad clara
+          // PRIORIDAD 1: Si es profesor, NUNCA bloquear (puede editar todo)
+          // PRIORIDAD 2: Si isReadOnly está activo, bloquear TODO (modo view-only)
+          // PRIORIDAD 3: Si enforceOwnership está activo, bloquear objetos que no son propios
+          let shouldLock = false;
+          
+          if (isTeacher) {
+            // Profesor: siempre puede editar
+            shouldLock = false;
+          } else if (isReadOnly) {
+            // Estudiante en modo view-only: bloquear TODO
+            shouldLock = true;
+          } else if (enforceOwnership && !isOwner) {
+            // Estudiante con permisos pero solo puede editar lo suyo
+            shouldLock = true;
+          }
 
           console.log('🔐 Object permissions:', {
             objectId,
@@ -240,6 +337,8 @@ export function useYjs(
             myClientId: ydocRef.current?.clientID,
             isOwner,
             isTeacher,
+            isReadOnly,
+            enforceOwnership,
             shouldLock
           });
 
@@ -328,7 +427,10 @@ export function useYjs(
             // Update existing object
             const newData = yCanvas.get(key);
             if (newData) {
-              existingObj.set(newData);
+              // ✅ CRÍTICO: Filtrar propiedades read-only de Fabric.js
+              // 'type' y 'version' son read-only y causan errores si intentamos setearlas
+              const { type, version, ...updateData } = newData as any;
+              existingObj.set(updateData);
               existingObj.setCoords();
             }
           } else {
@@ -422,6 +524,14 @@ export function useYjs(
       // ✅ NUEVO: Limpiar observer de permisos
       const ySessionPermissions = ydoc.getMap('sessionPermissions');
       ySessionPermissions.unobserve(handlePermissionsChange);
+      
+      // ✅ NUEVO: Limpiar observer de viewport
+      yViewport.unobserve(handleViewportChange);
+      
+      // ✅ NUEVO: Limpiar timeout de viewport si existe
+      if (viewportBroadcastTimeout) {
+        clearTimeout(viewportBroadcastTimeout);
+      }
       
       // Disconnect provider
       provider.disconnect();

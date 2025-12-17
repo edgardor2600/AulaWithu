@@ -73,10 +73,7 @@ export const SessionViewPage = () => {
     
     const checkSessionStatus = async () => {
       try {
-        console.log('🔍 Checking session status...');
         const sessionData = await sessionService.getById(sessionId);
-        console.log('📊 Current session slide_id:', session?.slide_id);
-        console.log('📊 Server session slide_id:', sessionData.slide_id);
         
         if (!sessionData.is_active) {
           console.log('⚠️ Session ended by teacher');
@@ -212,7 +209,7 @@ export const SessionViewPage = () => {
         {/* Main Content with Sidebar */}
         <div className="flex-1 flex overflow-hidden">
           {/* Canvas */}
-          <div className="flex-1 overflow-hidden bg-gray-50 p-6">
+          <div className="flex-1 overflow-hidden bg-gradient-to-br from-blue-50 to-indigo-50 p-6">
             <CanvasEditor
               slideId={session.slide_id.toString()}
               initialData={slide.canvas_data || undefined}
@@ -235,7 +232,7 @@ export const SessionViewPage = () => {
           </div>
 
           {/* Participants Sidebar */}
-          <div className="w-80 bg-gray-50 border-l border-gray-200 p-6 overflow-y-auto">
+          <div className="w-64 bg-gray-50 border-l border-gray-200 p-4 overflow-y-auto">
             <ParticipantsList 
               participants={participantsList}
               currentUserId={currentClientId}

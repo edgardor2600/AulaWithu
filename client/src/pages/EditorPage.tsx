@@ -14,7 +14,9 @@ import {
   ChevronRight,
   Trash2,
   Copy,
-  Radio
+  Radio,
+  PanelLeftClose,
+  PanelLeft
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -27,6 +29,7 @@ export const EditorPage = () => {
   const [currentSlideIndex, setCurrentSlideIndex] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [isSidebarVisible, setIsSidebarVisible] = useState(true); // ✅ NUEVO: Estado para sidebar
   
   // Live session state
   const [activeSession, setActiveSession] = useState<Session | null>(null);
@@ -381,6 +384,19 @@ export const EditorPage = () => {
         <div className="bg-white border-b border-gray-200 px-6 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-4">
+              {/* Toggle Sidebar Button */}
+              <button
+                onClick={() => setIsSidebarVisible(!isSidebarVisible)}
+                className="p-2 rounded-lg hover:bg-gray-100 transition"
+                title={isSidebarVisible ? "Hide slides" : "Show slides"}
+              >
+                {isSidebarVisible ? (
+                  <PanelLeftClose className="w-5 h-5 text-gray-600" />
+                ) : (
+                  <PanelLeft className="w-5 h-5 text-gray-600" />
+                )}
+              </button>
+              
               <button
                 onClick={() => navigate(`/classes/${classId}`)}
                 className="flex items-center space-x-2 text-gray-600 hover:text-gray-900 transition"
@@ -471,66 +487,68 @@ export const EditorPage = () => {
 
         {/* Main Content */}
         <div className="flex-1 overflow-hidden flex">
-          {/* Slide Thumbnails */}
-          <div className="w-64 bg-gray-50 border-r border-gray-200 overflow-y-auto p-4">
-            <h3 className="text-sm font-medium text-gray-700 mb-3">Slides</h3>
-            <div className="space-y-2">
-              {slides.map((slide, index) => {
-                const slideData = slidesDataRef.current.get(slide.id) || slide.canvas_data || '';
-                
-                return (
-                  <div
-                    key={slide.id}
-                    onClick={() => setCurrentSlideIndex(index)}
-                    className={`relative group cursor-pointer rounded-lg border-2 transition ${
-                      index === currentSlideIndex
-                        ? 'border-blue-500 bg-blue-50 shadow-md'
-                        : 'border-gray-200 hover:border-gray-300 bg-white hover:shadow'
-                    }`}
-                  >
-                    <SlideThumbnail 
-                      canvasData={slideData}
-                      slideNumber={slide.slide_number}
-                    />
-                    <div className="p-2 border-t border-gray-200">
-                      <p className="text-xs text-gray-600 truncate font-medium">
-                        Slide {slide.slide_number}
-                      </p>
-                    </div>
-                    
-                    {/* Action Buttons */}
-                    <div className="absolute top-2 right-2 flex space-x-1 opacity-0 group-hover:opacity-100 transition">
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          duplicateSlide(slide.id, index);
-                        }}
-                        className="p-1.5 bg-blue-500 text-white rounded-md shadow-lg hover:bg-blue-600 transition"
-                        title="Duplicate slide"
-                      >
-                        <Copy className="w-3 h-3" />
-                      </button>
-                      {slides.length > 1 && (
+          {/* Slide Thumbnails - Conditionally Rendered */}
+          {isSidebarVisible && (
+            <div className="w-64 bg-white border-r-2 border-gray-300 overflow-y-auto p-4 shadow-sm">
+              <h3 className="text-sm font-semibold text-gray-800 mb-3 pb-2 border-b-2 border-gray-200">Slides</h3>
+              <div className="space-y-2">
+                {slides.map((slide, index) => {
+                  const slideData = slidesDataRef.current.get(slide.id) || slide.canvas_data || '';
+                  
+                  return (
+                    <div
+                      key={slide.id}
+                      onClick={() => setCurrentSlideIndex(index)}
+                      className={`relative group cursor-pointer rounded-lg border-2 transition ${
+                        index === currentSlideIndex
+                          ? 'border-blue-500 bg-blue-50 shadow-md'
+                          : 'border-gray-200 hover:border-gray-300 bg-white hover:shadow'
+                      }`}
+                    >
+                      <SlideThumbnail 
+                        canvasData={slideData}
+                        slideNumber={slide.slide_number}
+                      />
+                      <div className="p-2 border-t border-gray-200">
+                        <p className="text-xs text-gray-600 truncate font-medium">
+                          Slide {slide.slide_number}
+                        </p>
+                      </div>
+                      
+                      {/* Action Buttons */}
+                      <div className="absolute top-2 right-2 flex space-x-1 opacity-0 group-hover:opacity-100 transition">
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
-                            deleteSlide(slide.id, index);
+                            duplicateSlide(slide.id, index);
                           }}
-                          className="p-1.5 bg-red-500 text-white rounded-md shadow-lg hover:bg-red-600 transition"
-                          title="Delete slide"
+                          className="p-1.5 bg-blue-500 text-white rounded-md shadow-lg hover:bg-blue-600 transition"
+                          title="Duplicate slide"
                         >
-                          <Trash2 className="w-3 h-3" />
+                          <Copy className="w-3 h-3" />
                         </button>
-                      )}
+                        {slides.length > 1 && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              deleteSlide(slide.id, index);
+                            }}
+                            className="p-1.5 bg-red-500 text-white rounded-md shadow-lg hover:bg-red-600 transition"
+                            title="Delete slide"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                          </button>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                );
-              })}
+                  );
+                })}
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Canvas Editor */}
-          <div className="flex-1 overflow-y-auto p-6">
+          <div className="flex-1 overflow-hidden flex flex-col p-6 bg-gradient-to-br from-blue-50 to-indigo-50">
             {currentSlide && (
               <CanvasEditor
                 key={currentSlide.id}
