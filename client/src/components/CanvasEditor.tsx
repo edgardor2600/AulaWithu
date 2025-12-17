@@ -85,6 +85,7 @@ export const CanvasEditor = ({
   const MIN_ZOOM = 0.1;
   const MAX_ZOOM = 5;
   const [isSpacePressed, setIsSpacePressed] = useState(false);  // ✅ Para pan temporal con Espacio
+  const miniMapCanvasRef = useRef<HTMLCanvasElement | null>(null);  // ✅ NUEVO: Ref para mini-mapa
 
   // Yjs real-time collaboration
   const { isConnected, participants, participantsList, clientId, updateSessionPermissions } = useYjs(
@@ -345,6 +346,205 @@ export const CanvasEditor = ({
     }
   }, []);
 
+  // ✅ NUEVO: Función para actualizar el mini-mapa
+  const updateMiniMap = useCallback(() => {
+    const miniCanvas = miniMapCanvasRef.current;
+    const mainCanvas = fabricCanvasRef.current;
+    
+    if (!miniCanvas || !mainCanvas) return;
+    
+    const miniCtx = miniCanvas.getContext('2d');
+    if (!miniCtx) return;
+    
+    // Clear
+    miniCtx.fillStyle = '#f3f4f6';
+    miniCtx.fillRect(0, 0, 150, 100);
+    
+    // Get viewport info
+    const vpt = mainCanvas.viewportTransform || [1, 0, 0, 1, 0, 0];
+    const zoom = mainCanvas.getZoom();
+    
+    const viewportX = -vpt[4] / zoom;
+    const viewportY = -vpt[5] / zoom;
+    const viewportWidth = mainCanvas.width! / zoom;
+    const viewportHeight = mainCanvas.height! / zoom;
+    
+    // ✅ MEJORADO: Calcular bounds que incluyan objetos Y viewport
+    let minX = Math.min(0, viewportX);
+    let minY = Math.min(0, viewportY);
+    let maxX = Math.max(mainCanvas.width!, viewportX + viewportWidth);
+    let maxY = Math.max(mainCanvas.height!, viewportY + viewportHeight);
+    
+    // Incluir todos los objetos en los bounds
+    mainCanvas.getObjects().forEach((obj: any) => {
+      const bounds = obj.getBoundingRect();
+      minX = Math.min(minX, bounds.left);
+      minY = Math.min(minY, bounds.top);
+      maxX = Math.max(maxX, bounds.left + bounds.width);
+      maxY = Math.max(maxY, bounds.top + bounds.height);
+    });
+    
+    // Agregar padding del 10%
+    const paddingX = (maxX - minX) * 0.1;
+    const paddingY = (maxY - minY) * 0.1;
+    minX -= paddingX;
+    minY -= paddingY;
+    maxX += paddingX;
+    maxY += paddingY;
+    
+    const totalWidth = maxX - minX;
+    const totalHeight = maxY - minY;
+    
+    // Calculate scale to fit everything
+    const scale = Math.min(150 / totalWidth, 100 / totalHeight);
+    
+    // Draw canvas content
+    miniCtx.save();
+    miniCtx.translate(-minX * scale, -minY * scale);
+    miniCtx.scale(scale, scale);
+    
+    // ✅ MEJORADO: Draw objects según su tipo
+    mainCanvas.getObjects().forEach((obj: any) => {
+      miniCtx.save();
+      
+      // Configurar estilos
+      miniCtx.fillStyle = obj.fill || 'transparent';
+      miniCtx.strokeStyle = obj.stroke || '#000';
+      miniCtx.lineWidth = (obj.strokeWidth || 1) / scale;
+      
+      // Dibujar según el tipo de objeto
+      if (obj.type === 'path') {
+        // ✅ Dibujar paths (líneas dibujadas a mano)
+        const path = obj.path;
+        const pathOffsetX = obj.pathOffset?.x || 0;
+        const pathOffsetY = obj.pathOffset?.y || 0;
+        const left = obj.left || 0;
+        const top = obj.top || 0;
+        
+        if (path && path.length > 0) {
+          miniCtx.translate(left - pathOffsetX, top - pathOffsetY);
+          
+          miniCtx.beginPath();
+          path.forEach((cmd: any) => {
+            if (cmd[0] === 'M') {
+              miniCtx.moveTo(cmd[1], cmd[2]);
+            } else if (cmd[0] === 'L') {
+              miniCtx.lineTo(cmd[1], cmd[2]);
+            } else if (cmd[0] === 'Q') {
+              miniCtx.quadraticCurveTo(cmd[1], cmd[2], cmd[3], cmd[4]);
+            } else if (cmd[0] === 'C') {
+              miniCtx.bezierCurveTo(cmd[1], cmd[2], cmd[3], cmd[4], cmd[5], cmd[6]);
+            }
+          });
+          miniCtx.stroke();
+        }
+      } else if (obj.type === 'line') {
+        // ✅ Dibujar líneas rectas
+        const left = obj.left || 0;
+        const top = obj.top || 0;
+        const x1 = (obj.x1 || 0);
+        const y1 = (obj.y1 || 0);
+        const x2 = (obj.x2 || 0);
+        const y2 = (obj.y2 || 0);
+        
+        miniCtx.translate(left, top);
+        miniCtx.beginPath();
+        miniCtx.moveTo(x1, y1);
+        miniCtx.lineTo(x2, y2);
+        miniCtx.stroke();
+      } else if (obj.type === 'circle') {
+        // ✅ Dibujar círculos
+        const left = obj.left || 0;
+        const top = obj.top || 0;
+        const radius = (obj.radius || 10) * (obj.scaleX || 1);
+        
+        miniCtx.translate(left, top);
+        miniCtx.beginPath();
+        miniCtx.arc(0, 0, radius, 0, 2 * Math.PI);
+        if (obj.fill && obj.fill !== 'transparent') miniCtx.fill();
+        if (obj.stroke) miniCtx.stroke();
+      } else if (obj.type === 'rect') {
+        // ✅ Dibujar rectángulos
+        const left = obj.left || 0;
+        const top = obj.top || 0;
+        const width = (obj.width || 10) * (obj.scaleX || 1);
+        const height = (obj.height || 10) * (obj.scaleY || 1);
+        
+        miniCtx.translate(left, top);
+        miniCtx.beginPath();
+        miniCtx.rect(-width / 2, -height / 2, width, height);
+        if (obj.fill && obj.fill !== 'transparent') miniCtx.fill();
+        if (obj.stroke) miniCtx.stroke();
+      } else if (obj.type === 'i-text' || obj.type === 'text') {
+        // ✅ Dibujar texto (simplificado como rectángulo pequeño)
+        const left = obj.left || 0;
+        const top = obj.top || 0;
+        const width = (obj.width || 20) * (obj.scaleX || 1);
+        const height = (obj.height || 10) * (obj.scaleY || 1);
+        
+        miniCtx.translate(left, top);
+        miniCtx.fillRect(-width / 2, -height / 2, width, height);
+      } else {
+        // ✅ Fallback: dibujar como rectángulo
+        const left = obj.left || 0;
+        const top = obj.top || 0;
+        const width = (obj.width || 10) * (obj.scaleX || 1);
+        const height = (obj.height || 10) * (obj.scaleY || 1);
+        
+        miniCtx.translate(left, top);
+        miniCtx.fillRect(-width / 2, -height / 2, width, height);
+      }
+      
+      miniCtx.restore();
+    });
+    
+    miniCtx.restore();
+    
+    // Draw viewport rectangle (always visible now)
+    miniCtx.strokeStyle = '#3b82f6';
+    miniCtx.lineWidth = 2;
+    miniCtx.strokeRect(
+      (viewportX - minX) * scale,
+      (viewportY - minY) * scale,
+      viewportWidth * scale,
+      viewportHeight * scale
+    );
+    
+    // Draw canvas bounds (original canvas size)
+    miniCtx.strokeStyle = '#9ca3af';
+    miniCtx.lineWidth = 1;
+    miniCtx.setLineDash([3, 3]);
+    miniCtx.strokeRect(
+      (0 - minX) * scale,
+      (0 - minY) * scale,
+      mainCanvas.width! * scale,
+      mainCanvas.height! * scale
+    );
+    miniCtx.setLineDash([]);
+  }, []);
+
+  // ✅ NUEVO: Actualizar mini-mapa cuando cambie el canvas o viewport
+  useEffect(() => {
+    const canvas = fabricCanvasRef.current;
+    if (!canvas || !isReady) return;
+    
+    // Actualizar mini-mapa cuando cambie el canvas
+    const handleCanvasChange = () => {
+      updateMiniMap();
+    };
+    
+    canvas.on('after:render', handleCanvasChange);
+    canvas.on('mouse:wheel', handleCanvasChange);
+    
+    // Actualizar inicialmente
+    updateMiniMap();
+    
+    return () => {
+      canvas.off('after:render', handleCanvasChange);
+      canvas.off('mouse:wheel', handleCanvasChange);
+    };
+  }, [isReady, updateMiniMap]);
+
   // Keyboard shortcuts
   useEffect(() => {
     if (!isReady || isReadOnly) return;
@@ -404,6 +604,7 @@ export const CanvasEditor = ({
           if (canvas) {
             canvas.defaultCursor = 'grab';
             canvas.hoverCursor = 'grab';
+            // ✅ NO desactivar selection aquí - lo haremos en mouse:down
           }
         }
       }
@@ -475,6 +676,12 @@ export const CanvasEditor = ({
     const handleMouseDown = (e: fabric.TEvent) => {
       const evt = e.e as MouseEvent;
       
+      // ✅ CRÍTICO: Si Space está presionado, desactivar selection INMEDIATAMENTE
+      // Esto previene el recuadro azul antes de que Fabric.js lo dibuje
+      if (isSpacePressedRef.current) {
+        canvas.selection = false;
+      }
+      
       // Activar pan si:
       // 1. Hand tool está seleccionado
       // 2. Espacio está presionado (leído desde ref)
@@ -511,9 +718,14 @@ export const CanvasEditor = ({
         canvas.skipTargetFind = true;
         
         return false;
+      } else if (isSpacePressedRef.current) {
+        // ✅ NUEVO: Si Space está presionado pero no se activó pan (ej: click en objeto)
+        // Prevenir el evento para evitar selección
+        evt.preventDefault();
+        evt.stopPropagation();
+        return false;
       }
     };
-
 
     const handleMouseMove = (e: fabric.TEvent) => {
       if (!isPanning) return;
@@ -581,12 +793,52 @@ export const CanvasEditor = ({
         
         canvas.requestRenderAll();
         return false;
+      } else if (isSpacePressedRef.current) {
+        // ✅ NUEVO: Si Space está presionado pero NO se hizo pan
+        // Restaurar selection (fue desactivada en mouse:down)
+        if (!canvas.isDrawingMode) {
+          canvas.selection = true;
+        }
       }
+    };
+
+    // ✅ NUEVO: Listener nativo como fallback para cuando Fabric.js no dispara mouse:down
+    // Esto asegura que Space+Click funcione incluso en áreas vacías del canvas
+    const handleNativeMouseDownForPan = (evt: MouseEvent) => {
+      // Solo actuar si Space está presionado
+      if (!isSpacePressedRef.current && evt.button !== 1) return;
+      
+      // Desactivar selection inmediatamente
+      canvas.selection = false;
+      
+      // Iniciar pan
+      isPanning = true;
+      lastPosX = evt.clientX;
+      lastPosY = evt.clientY;
+      canvas.defaultCursor = 'grabbing';
+      
+      // Guardar estado de dibujo
+      wasDrawingMode = canvas.isDrawingMode;
+      if (wasDrawingMode) {
+        canvas.isDrawingMode = false;
+        if ((canvas as any).freeDrawingBrush) {
+          (canvas as any).freeDrawingBrush._reset();
+        }
+      }
+      
+      // Prevenir comportamiento por defecto
+      evt.preventDefault();
+      evt.stopPropagation();
+      
+      canvas.skipTargetFind = true;
     };
 
     // Agregar event listeners
     const canvasElement = canvas.getElement();
     canvasElement.addEventListener('wheel', handleWheel, { passive: false });
+    
+    // ✅ NUEVO: Agregar listener nativo para pan
+    canvasElement.addEventListener('mousedown', handleNativeMouseDownForPan);
     
     canvas.on('mouse:down', handleMouseDown);
     canvas.on('mouse:move', handleMouseMove);
@@ -598,6 +850,9 @@ export const CanvasEditor = ({
       }
       
       canvasElement.removeEventListener('wheel', handleWheel);
+      // ✅ NUEVO: Limpiar listener nativo
+      canvasElement.removeEventListener('mousedown', handleNativeMouseDownForPan);
+      
       canvas.off('mouse:down', handleMouseDown);
       canvas.off('mouse:move', handleMouseMove);
       canvas.off('mouse:up', handleMouseUp);
@@ -1056,183 +1311,199 @@ export const CanvasEditor = ({
   ];
 
   return (
-    <div className="flex flex-col space-y-4">
-      {/* Toolbar - Solo mostrar si NO es read-only */}
+    <div className="h-full flex flex-col">
+      {/* Toolbar Compacto - Solo mostrar si NO es read-only */}
       {!isReadOnly && (
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
-        <div className="flex items-center justify-between flex-wrap gap-4">
-          {/* Tools */}
-          <div className="flex items-center space-x-1">
-            <span className="text-xs font-medium text-gray-500 mr-2">Tools:</span>
-            {tools.map((tool) => {
-              const Icon = tool.icon;
-              const isActive = currentTool === tool.id;
-              return (
+        <div className="bg-white border-b border-gray-200 shadow-sm">
+          <div className="px-3 py-2">
+            {/* Primera fila: Tools + Actions principales */}
+            <div className="flex items-center justify-between gap-3 mb-2">
+              {/* Tools */}
+              <div className="flex items-center gap-1">
+                {tools.map((tool) => {
+                  const Icon = tool.icon;
+                  const isActive = currentTool === tool.id;
+                  return (
+                    <button
+                      key={tool.id}
+                      onClick={() => handleToolClick(tool.id)}
+                      className={`p-2 rounded transition-all ${
+                        isActive
+                          ? 'bg-blue-600 text-white shadow-sm'
+                          : 'hover:bg-gray-100 text-gray-700'
+                      }`}
+                      title={tool.desc}
+                    >
+                      <Icon className="w-4 h-4" />
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Divider */}
+              <div className="h-8 w-px bg-gray-300" />
+
+              {/* Undo/Redo */}
+              <div className="flex items-center gap-1">
                 <button
-                  key={tool.id}
-                  onClick={() => handleToolClick(tool.id)}
-                  className={`p-2.5 rounded-lg transition-all ${
-                    isActive
-                      ? 'bg-blue-600 text-white shadow-md'
-                      : 'hover:bg-gray-100 text-gray-700 hover:shadow'
-                  }`}
-                  title={tool.desc}
+                  onClick={undo}
+                  disabled={!canUndo}
+                  className="p-2 rounded transition-all hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed"
+                  title="Undo (Ctrl+Z)"
                 >
-                  <Icon className="w-5 h-5" />
+                  <Undo2 className="w-4 h-4" />
                 </button>
-              );
-            })}
-          </div>
+                <button
+                  onClick={redo}
+                  disabled={!canRedo}
+                  className="p-2 rounded transition-all hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed"
+                  title="Redo (Ctrl+Y)"
+                >
+                  <Redo2 className="w-4 h-4" />
+                </button>
+              </div>
 
-          {/* Undo/Redo */}
-          <div className="flex items-center space-x-1">
-            <button
-              onClick={undo}
-              disabled={!canUndo}
-              className="p-2.5 rounded-lg transition-all hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed"
-              title="Undo (Ctrl+Z)"
-            >
-              <Undo2 className="w-5 h-5" />
-            </button>
-            <button
-              onClick={redo}
-              disabled={!canRedo}
-              className="p-2.5 rounded-lg transition-all hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed"
-              title="Redo (Ctrl+Y)"
-            >
-              <Redo2 className="w-5 h-5" />
-            </button>
-          </div>
+              {/* Divider */}
+              <div className="h-8 w-px bg-gray-300" />
 
-          {/* ✅ NUEVO: Zoom Controls */}
-          <div className="flex items-center space-x-1 bg-gray-50 px-3 py-1.5 rounded-lg">
-            <button
-              onClick={zoomOut}
-              className="p-2 rounded-lg transition-all hover:bg-white hover:shadow-sm"
-              title="Zoom Out (Ctrl + Scroll Down)"
-            >
-              <ZoomOut className="w-4 h-4" />
-            </button>
-            <span className="text-xs font-medium text-gray-600 min-w-[60px] text-center">
-              {Math.round(zoomLevel * 100)}%
-            </span>
-            <button
-              onClick={zoomIn}
-              className="p-2 rounded-lg transition-all hover:bg-white hover:shadow-sm"
-              title="Zoom In (Ctrl + Scroll Up)"
-            >
-              <ZoomIn className="w-4 h-4" />
-            </button>
-            <button
-              onClick={resetZoom}
-              className="p-2 rounded-lg transition-all hover:bg-white hover:shadow-sm"
-              title="Reset Zoom (100%)"
-            >
-              <Maximize2 className="w-4 h-4" />
-            </button>
-          </div>
+              {/* Zoom Controls */}
+              <div className="flex items-center gap-1 bg-gray-50 px-2 py-1 rounded">
+                <button
+                  onClick={zoomOut}
+                  className="p-1.5 rounded hover:bg-white transition-all"
+                  title="Zoom Out"
+                >
+                  <ZoomOut className="w-3.5 h-3.5" />
+                </button>
+                <span className="text-xs font-medium text-gray-700 min-w-[45px] text-center">
+                  {Math.round(zoomLevel * 100)}%
+                </span>
+                <button
+                  onClick={zoomIn}
+                  className="p-1.5 rounded hover:bg-white transition-all"
+                  title="Zoom In"
+                >
+                  <ZoomIn className="w-3.5 h-3.5" />
+                </button>
+                <button
+                  onClick={resetZoom}
+                  className="p-1.5 rounded hover:bg-white transition-all"
+                  title="Reset"
+                >
+                  <Maximize2 className="w-3.5 h-3.5" />
+                </button>
+              </div>
 
-          {/* Colors */}
-          <div className="flex items-center space-x-1">
-            <span className="text-xs font-medium text-gray-500 mr-2">Color:</span>
-            {colors.map((c) => (
-              <button
-                key={c.value}
-                onClick={() => setColor(c.value)}
-                className={`w-9 h-9 rounded-lg border-2 transition-all ${
-                  color === c.value 
-                    ? 'border-blue-500 scale-110 shadow-md' 
-                    : 'border-gray-300 hover:border-gray-400 hover:scale-105'
-                }`}
-                style={{ backgroundColor: c.value }}
-                title={c.name}
-              />
-            ))}
-          </div>
+              {/* Divider */}
+              <div className="h-8 w-px bg-gray-300" />
 
-          {/* Brush Width */}
-          <div className="flex items-center space-x-3 bg-gray-50 px-4 py-2 rounded-lg">
-            <label className="text-xs font-medium text-gray-600">Width:</label>
-            <input
-              type="range"
-              min="1"
-              max="20"
-              value={brushWidth}
-              onChange={(e) => setBrushWidth(Number(e.target.value))}
-              className="w-32"
-            />
-            <span className="text-sm font-semibold text-gray-700 w-8 text-center">
-              {brushWidth}px
-            </span>
-          </div>
+              {/* Actions */}
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleSave}
+                  disabled={isSaving}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white rounded hover:bg-blue-700 transition disabled:opacity-50 text-sm font-medium"
+                  title="Save (Ctrl+S)"
+                >
+                  <Save className="w-3.5 h-3.5" />
+                  {isSaving ? 'Saving...' : 'Save'}
+                </button>
+                <button
+                  onClick={downloadImage}
+                  className="p-2 text-gray-700 hover:bg-gray-100 rounded transition"
+                  title="Download"
+                >
+                  <Download className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={clearCanvas}
+                  className="p-2 text-red-600 hover:bg-red-50 rounded transition"
+                  title="Clear"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
 
-          {/* Actions */}
-          <div className="flex items-center space-x-2">
-            <button
-              onClick={clearCanvas}
-              className="flex items-center space-x-2 px-3 py-2 text-red-600 hover:bg-red-50 rounded-lg transition border border-red-200"
-              title="Clear entire canvas"
-            >
-              <Trash2 className="w-4 h-4" />
-              <span className="text-sm font-medium">Clear</span>
-            </button>
-            <button
-              onClick={downloadImage}
-              className="flex items-center space-x-2 px-3 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition border border-gray-300"
-              title="Download as PNG"
-            >
-              <Download className="w-4 h-4" />
-              <span className="text-sm font-medium">Download</span>
-            </button>
-            <button
-              onClick={handleSave}
-              disabled={isSaving}
-              className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition disabled:opacity-50 shadow-md"
-              title="Save slide (Ctrl+S)"
-            >
-              <Save className="w-4 h-4" />
-              <span className="text-sm font-medium">{isSaving ? 'Saving...' : 'Save'}</span>
-            </button>
-            
-            {/* Live Session Indicator */}
-            {sessionId && (
-              <div className={`flex items-center space-x-2 px-3 py-2 rounded-lg border ${
-                isConnected 
-                  ? 'bg-green-50 border-green-200 text-green-700' 
-                  : 'bg-yellow-50 border-yellow-200 text-yellow-700'
-              }`}>
-                <div className={`w-2 h-2 rounded-full ${
-                  isConnected ? 'bg-green-500 animate-pulse' : 'bg-yellow-500'
-                }`} />
-                <Users className="w-4 h-4" />
-                <span className="text-sm font-medium">
-                  {isConnected ? `Live (${participants})` : 'Connecting...'}
+              {/* Live Session Indicator */}
+              {sessionId && (
+                <>
+                  <div className="h-8 w-px bg-gray-300" />
+                  <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium ${
+                    isConnected 
+                      ? 'bg-green-50 text-green-700' 
+                      : 'bg-yellow-50 text-yellow-700'
+                  }`}>
+                    <div className={`w-1.5 h-1.5 rounded-full ${
+                      isConnected ? 'bg-green-500 animate-pulse' : 'bg-yellow-500'
+                    }`} />
+                    <Users className="w-3.5 h-3.5" />
+                    {isConnected ? `Live (${participants})` : 'Connecting...'}
+                  </div>
+                </>
+              )}
+            </div>
+
+            {/* Segunda fila: Colors + Brush Width */}
+            <div className="flex items-center gap-3">
+              {/* Colors */}
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs font-medium text-gray-600">Color:</span>
+                {colors.map((c) => (
+                  <button
+                    key={c.value}
+                    onClick={() => setColor(c.value)}
+                    className={`w-6 h-6 rounded border-2 transition-all ${
+                      color === c.value 
+                        ? 'border-blue-500 scale-110' 
+                        : 'border-gray-300 hover:border-gray-400'
+                    }`}
+                    style={{ backgroundColor: c.value }}
+                    title={c.name}
+                  />
+                ))}
+              </div>
+
+              {/* Divider */}
+              <div className="h-6 w-px bg-gray-300" />
+
+              {/* Brush Width */}
+              <div className="flex items-center gap-2 bg-gray-50 px-3 py-1 rounded">
+                <label className="text-xs font-medium text-gray-600">Width:</label>
+                <input
+                  type="range"
+                  min="1"
+                  max="20"
+                  value={brushWidth}
+                  onChange={(e) => setBrushWidth(Number(e.target.value))}
+                  className="w-24"
+                />
+                <span className="text-xs font-semibold text-gray-700 w-7 text-center">
+                  {brushWidth}px
                 </span>
               </div>
-            )}
+            </div>
           </div>
         </div>
-      </div>
       )}
 
-      {/* Canvas */}
-      <div className="bg-gradient-to-br from-gray-100 to-gray-200 rounded-lg p-6 flex justify-center">
-        <div className="bg-white rounded-lg shadow-2xl p-2">
+      {/* Canvas - Ocupa todo el espacio restante */}
+      <div className="flex-1 bg-slate-200 p-4 flex justify-center items-center overflow-hidden">
+        <div className="bg-white rounded-lg shadow-2xl border-2 border-gray-300">
           <canvas ref={canvasRef} className="rounded" />
         </div>
       </div>
 
-      {/* Help Text */}
-      <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-        <p className="text-sm text-blue-800 text-center">
-          <span className="font-semibold">⌨️ Shortcuts:</span> 
-          <strong> Ctrl+Z</strong> Undo · 
-          <strong> Ctrl+Y</strong> Redo · 
-          <strong> Ctrl+C</strong> Copy · 
-          <strong> Ctrl+V</strong> Paste · 
-          <strong> Delete</strong> Remove · 
-          <strong> Ctrl+S</strong> Save
-        </p>
+      {/* Mini-Map Navigator - Fixed position */}
+      <div className="fixed bottom-4 right-4 bg-white rounded-lg shadow-xl border-2 border-gray-400 p-2 z-20">
+        <div className="text-xs font-semibold text-gray-600 mb-1 text-center">Navigator</div>
+        <div className="relative bg-gray-100 rounded" style={{ width: '150px', height: '100px' }}>
+          <canvas 
+            ref={miniMapCanvasRef}
+            width={150}
+            height={100}
+            className="rounded"
+          />
+        </div>
       </div>
     </div>
   );
