@@ -92,3 +92,13 @@ export interface TeacherStudent {
   active: number; // SQLite boolean (0 or 1)
 }
 
+export interface Message {
+  id: string;
+  sender_id: string;
+  receiver_id: string;
+  message: string;
+  created_at: string;
+  read: number; // SQLite boolean (0 or 1)
+  deleted_by_sender: number; // SQLite boolean (0 or 1)
+  deleted_by_receiver: number; // SQLite boolean (0 or 1)
+}
