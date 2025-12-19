@@ -5,7 +5,7 @@ const JWT_EXPIRES_IN = '7d'; // 7 days
 
 export interface JwtPayload {
   userId: string;
-  role: 'teacher' | 'student';
+  role: 'admin' | 'teacher' | 'student';
 }
 
 // Generate JWT token
