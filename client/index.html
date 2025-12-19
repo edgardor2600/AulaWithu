@@ -1,10 +1,51 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>client</title>
+    <!-- Error filter - must be first to catch all errors -->
+    <script>
+      // Save original console methods
+      const originalError = console.error;
+      const originalWarn = console.warn;
+
+      // Filter console.error
+      console.error = function (...args) {
+        const errorMessage = args.join(" ");
+
+        // Suppress share-modal.js errors
+        if (errorMessage.includes("share-modal")) {
+          return;
+        }
+
+        originalError.apply(console, args);
+      };
+
+      // Filter console.warn
+      console.warn = function (...args) {
+        const warnMessage = args.join(" ");
+
+        if (warnMessage.includes("share-modal")) {
+          return;
+        }
+
+        originalWarn.apply(console, args);
+      };
+
+      // Also suppress uncaught errors from share-modal
+      window.addEventListener(
+        "error",
+        function (event) {
+          if (event.filename && event.filename.includes("share-modal")) {
+            event.preventDefault();
+            return true;
+          }
+        },
+        true
+      );
+    </script>
   </head>
   <body>
     <div id="root"></div>
