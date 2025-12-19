@@ -11,6 +11,7 @@ import slidesRoutes from './api/slides.routes';
 import sessionsRoutes from './api/sessions.routes';
 import uploadsRoutes from './api/uploads.routes';
 import snapshotsRoutes from './api/snapshots.routes';
+import usersRoutes from './api/users.routes';
 import { errorHandler } from './middleware/error.middleware';
 import { logDatabaseSize } from './db/monitoring';
 
@@ -43,6 +44,7 @@ app.use('/uploads', (req, res, next) => {
 
 // API Routes
 app.use('/api/auth', authRoutes);
+app.use('/api/users', usersRoutes);
 app.use('/api/classes', classesRoutes);
 app.use('/api/slides', slidesRoutes);
 app.use('/api/sessions', sessionsRoutes);
