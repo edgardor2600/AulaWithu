@@ -49,12 +49,45 @@ export class ClassService {
     };
   }
 
-  // Get all classes (optionally filter by teacher)
-  static async getAll(teacherId?: string): Promise<Class[]> {
-    if (teacherId) {
-      return ClassesRepository.getByTeacher(teacherId);
+  // Get all classes (filtered by role and assignments)
+  static async getAll(userId: string, userRole: string, teacherId?: string): Promise<Class[]> {
+    // ADMIN: Ve todas las clases
+    if (userRole === 'admin') {
+      if (teacherId) {
+        return ClassesRepository.getByTeacher(teacherId);
+      }
+      return ClassesRepository.getAll();
     }
-    return ClassesRepository.getAll();
+
+    // PROFESOR: Solo ve sus propias clases
+    if (userRole === 'teacher') {
+      return ClassesRepository.getByTeacher(userId);
+    }
+
+    // ESTUDIANTE: Solo ve clases de profesores asignados
+    if (userRole === 'student') {
+      const { TeacherStudentsRepository } = require('../db/repositories');
+      
+      // Obtener los profesores asignados a este estudiante
+      const assignments = TeacherStudentsRepository.getTeachersByStudent(userId);
+      
+      if (assignments.length === 0) {
+        return []; // No tiene profesores asignados
+      }
+
+      // Obtener clases de todos los profesores asignados
+      const teacherIds = assignments.map((a: any) => a.teacher_id);
+      const allClasses: Class[] = [];
+
+      for (const teacherId of teacherIds) {
+        const classes = ClassesRepository.getByTeacher(teacherId);
+        allClasses.push(...classes);
+      }
+
+      return allClasses;
+    }
+
+    return [];
   }
 
   // Update class (only owner can update)
