@@ -164,13 +164,69 @@ CREATE UNIQUE INDEX idx_users_unique_username
 
 ---
 
-## 🔜 PHASE 2: BACKEND - REPOSITORIES (PENDING)
+---
 
-**Planned Actions:**
+## ✅ PHASE 2: BACKEND - TYPES & REPOSITORIES (COMPLETED)
 
-1. Update `UsersRepository`
-2. Add new methods for username-based auth
-3. Update TypeScript types
+**Date:** 2025-12-19 09:00 AM  
+**Duration:** ~15 minutes  
+**Status:** ✅ COMPLETED  
+**Commit:** `b9c6015`
+
+### Actions Taken:
+
+1. **Updated User Interface** ✅
+
+   - File: `server/src/types/database.ts`
+   - Added fields:
+     - `username: string | null`
+     - `password_hash: string | null`
+     - `active: number` (SQLite boolean)
+     - `last_login: string | null`
+   - Maintains backward compatibility with NULL values
+
+2. **Extended UsersRepository** ✅
+
+   - File: `server/src/db/repositories/users-repository.ts`
+   - New methods added (6 total):
+     - `getByUsername(username)` - Find user by username for login
+     - `createWithAuth(data)` - Create user with authentication
+     - `updatePassword(id, hash)` - Change password
+     - `updateLastLogin(id)` - Track login timestamp
+     - `setActive(id, active)` - Enable/disable user (soft delete)
+     - `isUsernameTaken(username)` - Check username availability
+   - Features:
+     - Case-insensitive username matching (stored lowercase)
+     - Only returns active users in `getByUsername()`
+     - Automatic username trimming and lowercasing
+     - Comprehensive JSDoc documentation
+
+3. **Maintained Legacy Methods** ✅
+   - All old methods still functional:
+     - `create()` - Original user creation (name-based)
+     - `getById()` - Find by ID
+     - `getByName()` - Find by name (legacy login)
+     - `getAll()`, `update()`, `delete()` - CRUD operations
+   - No breaking changes to existing code
+
+###validation:
+
+- ✅ TypeScript compilation successful
+- ✅ dist/ folder generated without errors
+- ✅ All imports resolved correctly
+- ✅ No type errors in IDE
+- ✅ Repository methods properly typed
+
+### Code Quality:
+
+- ✅ Full JSDoc comments on all new methods
+- ✅ Consistent error handling
+- ✅ SQL injection protection (parameterized queries)
+- ✅ Username normalization (lowercase, trimmed)
+- ✅ Clean code structure with divider comments
+
+**Risk Level:** 🟢 LOW (only code changes, no DB changes)  
+**Rollback:** Easy (git revert if needed)
 
 ---
 
