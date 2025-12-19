@@ -3,8 +3,9 @@ import { create } from 'zustand';
 interface User {
   id: string;
   name: string;
-  role: 'teacher' | 'student';
+  role: 'admin' | 'teacher' | 'student';
   avatar_color: string;
+  username?: string;
 }
 
 interface AuthState {

@@ -6,6 +6,7 @@ import { ClassDetailPage } from './pages/ClassDetailPage';
 import { EditorPage } from './pages/EditorPage';
 import { JoinSessionPage } from './pages/JoinSessionPage';
 import { SessionViewPage } from './pages/SessionViewPage';
+import { AdminPanel } from './pages/AdminPanel';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { useAuthStore } from './store/authStore';
 
@@ -46,6 +47,16 @@ function App() {
         <Route
           path="/login"
           element={isAuthenticated ? <Navigate to="/dashboard" replace /> : <LoginPage />}
+        />
+
+        {/* Admin Routes */}
+        <Route
+          path="/admin"
+          element={
+            <ProtectedRoute requiredRole="admin">
+              <AdminPanel />
+            </ProtectedRoute>
+          }
         />
 
         {/* Protected Routes */}
@@ -109,3 +120,4 @@ function App() {
 }
 
 export default App;
+
