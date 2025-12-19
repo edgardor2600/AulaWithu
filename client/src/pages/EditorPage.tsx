@@ -548,7 +548,7 @@ export const EditorPage = () => {
           )}
 
           {/* Canvas Editor */}
-          <div className="flex-1 overflow-hidden flex flex-col p-6 bg-gradient-to-br from-blue-50 to-indigo-50">
+          <div className="flex-1 overflow-hidden flex flex-col p-0 bg-slate-100">
             {currentSlide && (
               <CanvasEditor
                 key={currentSlide.id}

@@ -31,21 +31,32 @@ export const SlideThumbnail = ({ canvasData, slideNumber }: SlideThumbnailProps)
           const data = JSON.parse(canvasData);
           if (data && data.objects && data.objects.length > 0) {
             // Use enlivenObjects instead of loadFromJSON
-            const scale = 200 / 1200; // thumbnail width / original width
             
             fabric.util.enlivenObjects(data.objects).then((enlivenedObjects: any[]) => {
               enlivenedObjects.forEach((obj) => {
-                // Scale down to fit thumbnail
+                // Scale down to fit thumbnail (200 / 1200 = 0.1666)
+                const scale = 200 / 1200;
+                
                 obj.scaleX = (obj.scaleX || 1) * scale;
                 obj.scaleY = (obj.scaleY || 1) * scale;
                 obj.left = (obj.left || 0) * scale;
                 obj.top = (obj.top || 0) * scale;
+
+                // Si es un path, asegurar grosor mínimo ABSOLUTO para que sea visible (mínimo 1.5px reales)
+                const originalStroke = obj.strokeWidth || 2;
+                const scaledStroke = originalStroke * scale;
+                obj.strokeWidth = Math.max(scaledStroke, 1.5);
+                
                 obj.setCoords();
                 canvas.add(obj);
               });
               
               canvas.renderAll();
-              setTimeout(() => canvas.renderAll(), 50);
+              // Doble render para asegurar que objetos asíncronos (texto/imágenes) se vean
+              setTimeout(() => {
+                canvas.requestRenderAll();
+                console.log('Thumbnail re-rendered for slide:', slideNumber);
+              }, 200);
             }).catch((err: any) => {
               console.error('Thumbnail enliven error:', err);
             });

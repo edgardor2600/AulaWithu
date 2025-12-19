@@ -17,10 +17,12 @@ import {
   ZoomIn,
   ZoomOut,
   Maximize2,
-  Hand
+  Hand,
+  Image as ImageIcon
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useYjs } from '../hooks/useYjs';
+import { uploadImage } from '../services/uploadService';
 
 interface CanvasEditorProps {
   slideId: string;
@@ -40,7 +42,7 @@ interface CanvasEditorProps {
   onPermissionsChange?: (allowDraw: boolean) => void;  // ✅ NUEVO: Callback cuando cambien permisos
 }
 
-type Tool = 'select' | 'pencil' | 'rectangle' | 'circle' | 'line' | 'text' | 'eraser' | 'hand';
+type Tool = 'select' | 'pencil' | 'rectangle' | 'circle' | 'line' | 'text' | 'eraser' | 'hand' | 'image';
 
 export const CanvasEditor = ({ 
   slideId, 
@@ -82,10 +84,13 @@ export const CanvasEditor = ({
   
   // ✅ NUEVO: Zoom and Pan state
   const [zoomLevel, setZoomLevel] = useState(1);
+  const [manualZoom, setManualZoom] = useState('100'); // Estado para el input de zoom
   const MIN_ZOOM = 0.1;
   const MAX_ZOOM = 5;
   const [isSpacePressed, setIsSpacePressed] = useState(false);  // ✅ Para pan temporal con Espacio
   const miniMapCanvasRef = useRef<HTMLCanvasElement | null>(null);  // ✅ NUEVO: Ref para mini-mapa
+  const imageInputRef = useRef<HTMLInputElement | null>(null);  // ✅ NUEVO: Ref para input de imagen
+  const containerRef = useRef<HTMLDivElement>(null); // ✅ NUEVO: Ref para el contenedor principal
 
   // Yjs real-time collaboration
   const { isConnected, participants, participantsList, clientId, updateSessionPermissions } = useYjs(
@@ -127,6 +132,11 @@ export const CanvasEditor = ({
     });
     return JSON.stringify(json);
   }, []);
+
+  // MiniMap Refs for Interaction
+  const miniMapStateRef = useRef({ scale: 1, minX: 0, minY: 0 });
+  const isDraggingMiniMapRef = useRef(false);
+  const hasInitialFitRef = useRef(false); // Para controlar el auto-zoom inicial
 
   const saveHistory = useCallback(() => {
     const canvas = fabricCanvasRef.current;
@@ -241,39 +251,258 @@ export const CanvasEditor = ({
     }, 500); // Longer delay to ensure history doesn't get saved again
   }, [onChange]);
 
-  // ✅ NUEVO: Zoom functions
+  // ✅ NUEVO: Función para actualizar el mini-mapa (movida arriba para ser usada en zoom)
+  const updateMiniMap = useCallback(() => {
+    const miniCanvas = miniMapCanvasRef.current;
+    const mainCanvas = fabricCanvasRef.current;
+    
+    if (!miniCanvas || !mainCanvas) return;
+    
+    const miniCtx = miniCanvas.getContext('2d');
+    if (!miniCtx) return;
+    
+    // Clear background
+    miniCtx.fillStyle = '#1e293b'; // Slate 800 para contraste
+    miniCtx.fillRect(0, 0, 150, 100);
+    
+    // Get viewport info
+    const vpt = mainCanvas.viewportTransform || [1, 0, 0, 1, 0, 0];
+    const zoom = mainCanvas.getZoom();
+    
+    const viewportX = -vpt[4] / zoom;
+    const viewportY = -vpt[5] / zoom;
+    const viewportWidth = mainCanvas.width! / zoom;
+    const viewportHeight = mainCanvas.height! / zoom;
+    
+    // ✅ MEJORADO: Bounds Dinámicos (El mapa crece si te sales)
+    let minX = 0;
+    let minY = 0;
+    let maxX = 1200;
+    let maxY = 675;
+
+    // 1. Expandir con objetos
+    mainCanvas.getObjects().forEach((obj) => {
+      const br = obj.getBoundingRect();
+      minX = Math.min(minX, br.left);
+      minY = Math.min(minY, br.top);
+      maxX = Math.max(maxX, br.left + br.width);
+      maxY = Math.max(maxY, br.top + br.height);
+    });
+
+    // 2. Expandir con Viewport actual (Crucial para no perder el indicador)
+    // ✅ AJUSTE: Solo expandimos con la POSICIÓN (x,y) del viewport, no con su tamaño total.
+    // Esto evita que el minimapa se aleje solo porque la pantalla es ancha.
+    minX = Math.min(minX, viewportX);
+    minY = Math.min(minY, viewportY);
+    // Aseguramos ver al menos el inicio del viewport si nos fuimos muy a la derecha/abajo
+    maxX = Math.max(maxX, viewportX + 100); 
+    maxY = Math.max(maxY, viewportY + 100);
+
+    // Agregar padding suave
+    const padding = 40;
+    minX -= padding;
+    minY -= padding;
+    maxX += padding;
+    maxY += padding;
+    
+    const totalWidth = maxX - minX;
+    const totalHeight = maxY - minY;
+    
+    // Calculate scale
+    const scale = Math.min(150 / totalWidth, 100 / totalHeight);
+    
+    // Guardar estado para interacción
+    miniMapStateRef.current = { scale, minX, minY };
+
+    miniCtx.save();
+    miniCtx.clearRect(0, 0, 150, 100); // Limpiar
+    
+    // Fondo general del mini-mapa (neutro)
+    miniCtx.fillStyle = '#f1f5f9'; // Slate 100
+    miniCtx.fillRect(0, 0, 150, 100);
+    
+    // Centrar el contenido en el canvas del minimap si sobra espacio
+    const offsetX = (150 - totalWidth * scale) / 2;
+    const offsetY = (100 - totalHeight * scale) / 2;
+    
+    // Guardar offsets para el drag
+    (miniMapStateRef.current as any).offsetX = offsetX;
+    (miniMapStateRef.current as any).offsetY = offsetY;
+    
+    miniCtx.translate(offsetX, offsetY);
+    miniCtx.translate(-minX * scale, -minY * scale);
+    miniCtx.scale(scale, scale);
+    
+    // ✅ Dibujar "Papel" de la pizarra 
+    miniCtx.shadowColor = 'rgba(0,0,0,0.1)'; // Sombra suave
+    miniCtx.shadowBlur = 10;
+    miniCtx.fillStyle = '#ffffff';
+    miniCtx.fillRect(0, 0, 1200, 675);
+    miniCtx.shadowBlur = 0; // Reset shadow
+    
+    // Borde de la pizarra
+    miniCtx.strokeStyle = '#94a3b8';
+    miniCtx.lineWidth = 2;
+    miniCtx.strokeRect(0, 0, 1200, 675);
+    
+    // Dibujar objetos con grosor aumentado para visibilidad
+    mainCanvas.getObjects().forEach((obj: any) => {
+      miniCtx.save();
+      
+      const bounds = obj.getBoundingRect();
+      const objColor = obj.stroke || obj.fill || '#000';
+      
+      if (obj.type === 'path') {
+        miniCtx.strokeStyle = objColor;
+        // Forzar un grosor mínimo mucho mayor (8px) para que se vea claro en el mapa
+        miniCtx.lineWidth = Math.max((obj.strokeWidth || 2) * 2, 8);
+        const path = obj.path;
+        if (path) {
+          miniCtx.translate(obj.left - (obj.pathOffset?.x || 0), obj.top - (obj.pathOffset?.y || 0));
+          miniCtx.beginPath();
+          path.forEach((cmd: any) => {
+            if (cmd[0] === 'M') miniCtx.moveTo(cmd[1], cmd[2]);
+            else if (cmd[0] === 'L') miniCtx.lineTo(cmd[1], cmd[2]);
+            else if (cmd[0] === 'Q') miniCtx.quadraticCurveTo(cmd[1], cmd[2], cmd[3], cmd[4]);
+            else if (cmd[0] === 'C') miniCtx.bezierCurveTo(cmd[1], cmd[2], cmd[3], cmd[4], cmd[5], cmd[6]);
+          });
+          miniCtx.stroke();
+        }
+      } else if (obj.type === 'image' || obj.type === 'fabric.Image') {
+        miniCtx.fillStyle = '#64748b';
+        miniCtx.globalAlpha = 0.7;
+        miniCtx.fillRect(bounds.left, bounds.top, bounds.width, bounds.height);
+      } else {
+        miniCtx.fillStyle = (obj.fill && obj.fill !== 'transparent') ? obj.fill : objColor;
+        miniCtx.fillRect(bounds.left, bounds.top, Math.max(bounds.width, 20), Math.max(bounds.height, 20));
+      }
+      
+      miniCtx.restore();
+    });
+    
+    miniCtx.restore();
+    
+    // ✅ VIEWPORT INDICATOR (Más grueso y con relleno)
+    // Hay que aplicar el mismo offset de centrado
+    const vx = (viewportX - minX) * scale + offsetX;
+    const vy = (viewportY - minY) * scale + offsetY;
+    const vw = viewportWidth * scale;
+    const vh = viewportHeight * scale;
+    
+    // Relleno suave para el viewport
+    miniCtx.fillStyle = 'rgba(59, 130, 246, 0.25)';
+    miniCtx.fillRect(vx, vy, vw, vh);
+    
+    // Borde más refinado
+    miniCtx.strokeStyle = '#3b82f6';
+    miniCtx.lineWidth = 2; // Reducido de 4 a 2 para un look más limpio
+    miniCtx.strokeRect(vx, vy, vw, vh);
+    
+    // Esquineras ajustadas
+    miniCtx.fillStyle = '#3b82f6';
+    const dotSize = 4;
+    miniCtx.fillRect(vx - 2, vy - 2, dotSize, dotSize); 
+    miniCtx.fillRect(vx + vw - 2, vy - 2, dotSize, dotSize); 
+    miniCtx.fillRect(vx - 2, vy + vh - 2, dotSize, dotSize); 
+    miniCtx.fillRect(vx + vw - 2, vy + vh - 2, dotSize, dotSize); 
+  }, []);
+
+  // ✅ NUEVO: Fit to Viewport con Redimensionamiento Físico
+  const fitToViewport = useCallback(() => {
+    const canvas = fabricCanvasRef.current;
+    const container = containerRef.current;
+    if (!canvas || !container) return;
+
+    // Obtener ancho disponible
+    const containerWidth = container.clientWidth;
+    
+    // Calcular escala para llenar el ancho completo (sin márgenes)
+    // Esto asegura que se vea GRANDE por defecto
+    const targetWidth = containerWidth; 
+    const scale = targetWidth / 1200;
+    
+    // Aplicar dimensiones físicas
+    canvas.setWidth(targetWidth);
+    canvas.setHeight(675 * scale); // Mantener ratio 16:9
+    
+    // Aplicar zoom
+    canvas.setZoom(scale);
+    canvas.setViewportTransform([scale, 0, 0, scale, 0, 0]);
+    
+    setZoomLevel(scale);
+    canvas.renderAll();
+    updateMiniMap();
+  }, [updateMiniMap]);
+
+  // ✅ NUEVO: Sensor de tamaño inteligente (ResizeObserver)
+  // AJUSTADO: Solo hace "Fit" (Zoom automático) la primera vez.
+  // Después, solo redimensiona el lienzo sin tocar el zoom del usuario.
+  useEffect(() => {
+    if (!isReady || !containerRef.current) return;
+    
+    const resizeObserver = new ResizeObserver(() => {
+      window.requestAnimationFrame(() => {
+        const canvas = fabricCanvasRef.current;
+        const container = containerRef.current;
+        if (!canvas || !container) return;
+
+        if (!hasInitialFitRef.current) {
+          // Primera vez: Hacemos Fit para que se vea grande
+          fitToViewport();
+          hasInitialFitRef.current = true;
+        } else {
+          // Veces siguientes (ej: ocultar sidebar): Solo ajustamos tamaño físico
+          // MANTENIENDO el zoom actual del usuario
+          canvas.setWidth(container.clientWidth);
+          canvas.setHeight(container.clientHeight);
+          
+          canvas.requestRenderAll();
+          updateMiniMap();
+        }
+      });
+    });
+    
+    resizeObserver.observe(containerRef.current);
+    return () => resizeObserver.disconnect();
+  }, [isReady, fitToViewport, updateMiniMap]);
+
   const zoomIn = useCallback(() => {
     const canvas = fabricCanvasRef.current;
     if (!canvas) return;
-    
-    const newZoom = Math.min(zoomLevel * 1.2, MAX_ZOOM);
-    setZoomLevel(newZoom);
-    
+    const newZoom = Math.min(zoomLevel * 1.1, MAX_ZOOM);
     const center = canvas.getCenter();
     canvas.zoomToPoint(new fabric.Point(center.left, center.top), newZoom);
-    canvas.renderAll();
-  }, [zoomLevel, MAX_ZOOM]);
+    setZoomLevel(newZoom);
+    updateMiniMap();
+  }, [zoomLevel, MAX_ZOOM, updateMiniMap]);
+
+  // Sincronizar input manual cuando cambia el zoom externamente (botones/scroll)
+  useEffect(() => {
+    setManualZoom(Math.round(zoomLevel * 100).toString());
+  }, [zoomLevel]);
 
   const zoomOut = useCallback(() => {
     const canvas = fabricCanvasRef.current;
     if (!canvas) return;
-    
-    const newZoom = Math.max(zoomLevel / 1.2, MIN_ZOOM);
-    setZoomLevel(newZoom);
-    
+    const newZoom = Math.max(zoomLevel / 1.1, MIN_ZOOM);
     const center = canvas.getCenter();
     canvas.zoomToPoint(new fabric.Point(center.left, center.top), newZoom);
-    canvas.renderAll();
-  }, [zoomLevel, MIN_ZOOM]);
+    setZoomLevel(newZoom);
+    updateMiniMap();
+  }, [zoomLevel, MIN_ZOOM, updateMiniMap]);
 
   const resetZoom = useCallback(() => {
     const canvas = fabricCanvasRef.current;
     if (!canvas) return;
     
-    setZoomLevel(1);
-    canvas.setViewportTransform([1, 0, 0, 1, 0, 0]);
-    canvas.renderAll();
-  }, []);
+    // Zoom al 100% exacto
+    const newZoom = 1;
+    setZoomLevel(newZoom);
+    
+    const center = canvas.getCenter();
+    canvas.zoomToPoint({ x: center.left, y: center.top } as any, newZoom);
+    updateMiniMap();
+  }, [updateMiniMap]);
 
   // Copy selected object
   const copySelected = useCallback(async () => {
@@ -346,182 +575,12 @@ export const CanvasEditor = ({
     }
   }, []);
 
-  // ✅ NUEVO: Función para actualizar el mini-mapa
-  const updateMiniMap = useCallback(() => {
-    const miniCanvas = miniMapCanvasRef.current;
-    const mainCanvas = fabricCanvasRef.current;
-    
-    if (!miniCanvas || !mainCanvas) return;
-    
-    const miniCtx = miniCanvas.getContext('2d');
-    if (!miniCtx) return;
-    
-    // Clear
-    miniCtx.fillStyle = '#f3f4f6';
-    miniCtx.fillRect(0, 0, 150, 100);
-    
-    // Get viewport info
-    const vpt = mainCanvas.viewportTransform || [1, 0, 0, 1, 0, 0];
-    const zoom = mainCanvas.getZoom();
-    
-    const viewportX = -vpt[4] / zoom;
-    const viewportY = -vpt[5] / zoom;
-    const viewportWidth = mainCanvas.width! / zoom;
-    const viewportHeight = mainCanvas.height! / zoom;
-    
-    // ✅ MEJORADO: Calcular bounds que incluyan objetos Y viewport
-    let minX = Math.min(0, viewportX);
-    let minY = Math.min(0, viewportY);
-    let maxX = Math.max(mainCanvas.width!, viewportX + viewportWidth);
-    let maxY = Math.max(mainCanvas.height!, viewportY + viewportHeight);
-    
-    // Incluir todos los objetos en los bounds
-    mainCanvas.getObjects().forEach((obj: any) => {
-      const bounds = obj.getBoundingRect();
-      minX = Math.min(minX, bounds.left);
-      minY = Math.min(minY, bounds.top);
-      maxX = Math.max(maxX, bounds.left + bounds.width);
-      maxY = Math.max(maxY, bounds.top + bounds.height);
-    });
-    
-    // Agregar padding del 10%
-    const paddingX = (maxX - minX) * 0.1;
-    const paddingY = (maxY - minY) * 0.1;
-    minX -= paddingX;
-    minY -= paddingY;
-    maxX += paddingX;
-    maxY += paddingY;
-    
-    const totalWidth = maxX - minX;
-    const totalHeight = maxY - minY;
-    
-    // Calculate scale to fit everything
-    const scale = Math.min(150 / totalWidth, 100 / totalHeight);
-    
-    // Draw canvas content
-    miniCtx.save();
-    miniCtx.translate(-minX * scale, -minY * scale);
-    miniCtx.scale(scale, scale);
-    
-    // ✅ MEJORADO: Draw objects según su tipo
-    mainCanvas.getObjects().forEach((obj: any) => {
-      miniCtx.save();
-      
-      // Configurar estilos
-      miniCtx.fillStyle = obj.fill || 'transparent';
-      miniCtx.strokeStyle = obj.stroke || '#000';
-      miniCtx.lineWidth = (obj.strokeWidth || 1) / scale;
-      
-      // Dibujar según el tipo de objeto
-      if (obj.type === 'path') {
-        // ✅ Dibujar paths (líneas dibujadas a mano)
-        const path = obj.path;
-        const pathOffsetX = obj.pathOffset?.x || 0;
-        const pathOffsetY = obj.pathOffset?.y || 0;
-        const left = obj.left || 0;
-        const top = obj.top || 0;
-        
-        if (path && path.length > 0) {
-          miniCtx.translate(left - pathOffsetX, top - pathOffsetY);
-          
-          miniCtx.beginPath();
-          path.forEach((cmd: any) => {
-            if (cmd[0] === 'M') {
-              miniCtx.moveTo(cmd[1], cmd[2]);
-            } else if (cmd[0] === 'L') {
-              miniCtx.lineTo(cmd[1], cmd[2]);
-            } else if (cmd[0] === 'Q') {
-              miniCtx.quadraticCurveTo(cmd[1], cmd[2], cmd[3], cmd[4]);
-            } else if (cmd[0] === 'C') {
-              miniCtx.bezierCurveTo(cmd[1], cmd[2], cmd[3], cmd[4], cmd[5], cmd[6]);
-            }
-          });
-          miniCtx.stroke();
-        }
-      } else if (obj.type === 'line') {
-        // ✅ Dibujar líneas rectas
-        const left = obj.left || 0;
-        const top = obj.top || 0;
-        const x1 = (obj.x1 || 0);
-        const y1 = (obj.y1 || 0);
-        const x2 = (obj.x2 || 0);
-        const y2 = (obj.y2 || 0);
-        
-        miniCtx.translate(left, top);
-        miniCtx.beginPath();
-        miniCtx.moveTo(x1, y1);
-        miniCtx.lineTo(x2, y2);
-        miniCtx.stroke();
-      } else if (obj.type === 'circle') {
-        // ✅ Dibujar círculos
-        const left = obj.left || 0;
-        const top = obj.top || 0;
-        const radius = (obj.radius || 10) * (obj.scaleX || 1);
-        
-        miniCtx.translate(left, top);
-        miniCtx.beginPath();
-        miniCtx.arc(0, 0, radius, 0, 2 * Math.PI);
-        if (obj.fill && obj.fill !== 'transparent') miniCtx.fill();
-        if (obj.stroke) miniCtx.stroke();
-      } else if (obj.type === 'rect') {
-        // ✅ Dibujar rectángulos
-        const left = obj.left || 0;
-        const top = obj.top || 0;
-        const width = (obj.width || 10) * (obj.scaleX || 1);
-        const height = (obj.height || 10) * (obj.scaleY || 1);
-        
-        miniCtx.translate(left, top);
-        miniCtx.beginPath();
-        miniCtx.rect(-width / 2, -height / 2, width, height);
-        if (obj.fill && obj.fill !== 'transparent') miniCtx.fill();
-        if (obj.stroke) miniCtx.stroke();
-      } else if (obj.type === 'i-text' || obj.type === 'text') {
-        // ✅ Dibujar texto (simplificado como rectángulo pequeño)
-        const left = obj.left || 0;
-        const top = obj.top || 0;
-        const width = (obj.width || 20) * (obj.scaleX || 1);
-        const height = (obj.height || 10) * (obj.scaleY || 1);
-        
-        miniCtx.translate(left, top);
-        miniCtx.fillRect(-width / 2, -height / 2, width, height);
-      } else {
-        // ✅ Fallback: dibujar como rectángulo
-        const left = obj.left || 0;
-        const top = obj.top || 0;
-        const width = (obj.width || 10) * (obj.scaleX || 1);
-        const height = (obj.height || 10) * (obj.scaleY || 1);
-        
-        miniCtx.translate(left, top);
-        miniCtx.fillRect(-width / 2, -height / 2, width, height);
-      }
-      
-      miniCtx.restore();
-    });
-    
-    miniCtx.restore();
-    
-    // Draw viewport rectangle (always visible now)
-    miniCtx.strokeStyle = '#3b82f6';
-    miniCtx.lineWidth = 2;
-    miniCtx.strokeRect(
-      (viewportX - minX) * scale,
-      (viewportY - minY) * scale,
-      viewportWidth * scale,
-      viewportHeight * scale
-    );
-    
-    // Draw canvas bounds (original canvas size)
-    miniCtx.strokeStyle = '#9ca3af';
-    miniCtx.lineWidth = 1;
-    miniCtx.setLineDash([3, 3]);
-    miniCtx.strokeRect(
-      (0 - minX) * scale,
-      (0 - minY) * scale,
-      mainCanvas.width! * scale,
-      mainCanvas.height! * scale
-    );
-    miniCtx.setLineDash([]);
+  // ✅ NUEVO: Trigger file input for image upload
+  const triggerImageUpload = useCallback(() => {
+    imageInputRef.current?.click();
   }, []);
+
+  // (updateMiniMap movida arriba)
 
   // ✅ NUEVO: Actualizar mini-mapa cuando cambie el canvas o viewport
   useEffect(() => {
@@ -595,6 +654,12 @@ export const CanvasEditor = ({
         handleSave();
       }
       
+      // ✅ NUEVO: Image upload: I
+      if (e.key === 'i' || e.key === 'I') {
+        e.preventDefault();
+        triggerImageUpload();
+      }
+      
       // Espacio para pan temporal
       if (e.key === ' ' && currentTool !== 'hand') {
         e.preventDefault();
@@ -628,7 +693,7 @@ export const CanvasEditor = ({
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
     };
-  }, [isReady, isReadOnly, undo, redo, copySelected, paste, deleteSelected, currentTool, isSpacePressed]);
+  }, [isReady, isReadOnly, undo, redo, copySelected, paste, deleteSelected, currentTool, isSpacePressed, triggerImageUpload]);
 
   // ✅ NUEVO: Ref para isSpacePressed para evitar re-render del useEffect
   const isSpacePressedRef = useRef(isSpacePressed);
@@ -669,6 +734,7 @@ export const CanvasEditor = ({
         const point = new fabric.Point(e.offsetX, e.offsetY);
         canvas.zoomToPoint(point, newZoom);
         canvas.renderAll();
+        updateMiniMap();
       }
     };
 
@@ -747,6 +813,7 @@ export const CanvasEditor = ({
       lastPosX = evt.clientX;
       lastPosY = evt.clientY;
       
+      updateMiniMap();
       return false;
     };
 
@@ -858,7 +925,7 @@ export const CanvasEditor = ({
       canvas.off('mouse:up', handleMouseUp);
     };
     // Quitamos isSpacePressed de las dependencias para evitar re-subscribe al pulsar espacio
-  }, [MAX_ZOOM, MIN_ZOOM, currentTool]);
+  }, [MAX_ZOOM, MIN_ZOOM, currentTool, updateMiniMap]);
 
 
 
@@ -942,6 +1009,9 @@ export const CanvasEditor = ({
       
       isLoadingRef.current = false;
       setIsReady(true);
+      
+      // ✅ NUEVO: Ajustar al viewport al cargar
+      setTimeout(() => fitToViewport(), 100);
     };
 
     loadData();
@@ -1218,10 +1288,87 @@ export const CanvasEditor = ({
     canvas.renderAll();
   };
 
+  // ✅ NUEVO: Handle image file selection
+  const handleImageFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Reset input so same file can be selected again
+    e.target.value = '';
+
+    const canvas = fabricCanvasRef.current;
+    if (!canvas) return;
+
+    try {
+      // Show loading toast
+      const loadingToast = toast.loading('Uploading image...');
+
+      // Upload image (will be compressed automatically)
+      const upload = await uploadImage(file);
+
+      // Dismiss loading toast
+      toast.dismiss(loadingToast);
+
+      // Add image to canvas
+      await addImageToCanvas(upload.url);
+
+      toast.success('Image added to canvas!');
+    } catch (error: any) {
+      console.error('Error uploading image:', error);
+      toast.error(error.message || 'Failed to upload image');
+    }
+  };
+
+  // ✅ NUEVO: Add image to canvas from URL
+  const addImageToCanvas = async (imageUrl: string) => {
+    const canvas = fabricCanvasRef.current;
+    if (!canvas) return;
+
+    try {
+      // Load image from URL
+      const img = await fabric.FabricImage.fromURL(imageUrl, {
+        crossOrigin: 'anonymous',
+      });
+
+      // Calculate scale to fit image nicely on canvas
+      const maxWidth = canvas.width! * 0.5; // 50% of canvas width
+      const maxHeight = canvas.height! * 0.5; // 50% of canvas height
+      
+      const scaleX = maxWidth / (img.width || 1);
+      const scaleY = maxHeight / (img.height || 1);
+      const scale = Math.min(scaleX, scaleY, 1); // Don't upscale
+
+      // Position image in center
+      img.set({
+        left: canvas.width! / 2,
+        top: canvas.height! / 2,
+        scaleX: scale,
+        scaleY: scale,
+        originX: 'center',
+        originY: 'center',
+      });
+
+      // Add to canvas
+      canvas.add(img);
+      canvas.setActiveObject(img);
+      canvas.renderAll();
+
+      // Save to history
+      setTimeout(() => saveHistory(), 100);
+    } catch (error) {
+      console.error('Error adding image to canvas:', error);
+      throw new Error('Failed to load image');
+    }
+  };
+
   const handleToolClick = (tool: Tool) => {
     if (tool === 'text') {
       addText();
       setCurrentTool('select');
+    } else if (tool === 'image') {
+      // ✅ NUEVO: Trigger image upload
+      triggerImageUpload();
+      // Don't change current tool, stay on select
     } else {
       setCurrentTool(tool);
       
@@ -1294,6 +1441,7 @@ export const CanvasEditor = ({
     { id: 'circle' as Tool, icon: CircleIcon, label: 'Circle', desc: 'Add circle (C)' },
     { id: 'line' as Tool, icon: Minus, label: 'Line', desc: 'Add line (L)' },
     { id: 'text' as Tool, icon: Type, label: 'Text', desc: 'Add text (T)' },
+    { id: 'image' as Tool, icon: ImageIcon, label: 'Image', desc: 'Upload image (I)' },  // ✅ NUEVO
     { id: 'eraser' as Tool, icon: Eraser, label: 'Eraser', desc: 'Erase (E)' },
   ];
 
@@ -1368,22 +1516,61 @@ export const CanvasEditor = ({
 
               {/* Zoom Controls */}
               <div className="flex items-center gap-1 bg-gray-50 px-2 py-1 rounded">
-                <button
-                  onClick={zoomOut}
-                  className="p-1.5 rounded hover:bg-white transition-all"
-                  title="Zoom Out"
-                >
-                  <ZoomOut className="w-3.5 h-3.5" />
-                </button>
-                <span className="text-xs font-medium text-gray-700 min-w-[45px] text-center">
-                  {Math.round(zoomLevel * 100)}%
-                </span>
-                <button
-                  onClick={zoomIn}
-                  className="p-1.5 rounded hover:bg-white transition-all"
+                <button 
+              onClick={zoomOut}
+              className="p-1 hover:bg-gray-100 rounded text-gray-600"
+              title="Zoom Out"
+            >
+              <ZoomOut className="w-4 h-4" />
+            </button>
+            
+            {/* ✅ NUEVO: Input editable de Zoom Mejorado */}
+            <div className="relative group flex items-center bg-white rounded border border-gray-200 hover:border-blue-400">
+              <input
+                type="text"
+                className="w-10 text-center text-xs font-bold text-gray-700 border-none bg-transparent focus:ring-0 focus:outline-none p-1"
+                value={manualZoom}
+                onChange={(e) => {
+                  // Permitir solo números
+                  const val = e.target.value.replace(/[^0-9]/g, '');
+                  setManualZoom(val);
+                }}
+                onBlur={() => {
+                   // Aplicar al perder foco
+                   if (manualZoom) {
+                      let num = parseInt(manualZoom, 10);
+                      // Limites seguros
+                      if (num < 10) num = 10;
+                      if (num > 500) num = 500;
+                      
+                      const newZoom = num / 100;
+                      const canvas = fabricCanvasRef.current;
+                      if (canvas) {
+                        setZoomLevel(newZoom);
+                        const center = canvas.getCenter();
+                        canvas.zoomToPoint({ x: center.left, y: center.top } as any, newZoom);
+                        updateMiniMap();
+                      }
+                      setManualZoom(num.toString());
+                   } else {
+                      setManualZoom(Math.round(zoomLevel * 100).toString());
+                   }
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.currentTarget.blur(); // Dispara onBlur que aplica el cambio
+                  }
+                }}
+              />
+              <span className="text-xs text-gray-400 pr-1 pointer-events-none">%</span>
+            </div>
+
+            <button 
+              onClick={zoomIn}
+                  className="p-1 hover:bg-gray-100 rounded text-gray-600"
                   title="Zoom In"
                 >
-                  <ZoomIn className="w-3.5 h-3.5" />
+                  <ZoomIn className="w-4 h-4" />
                 </button>
                 <button
                   onClick={resetZoom}
@@ -1486,25 +1673,87 @@ export const CanvasEditor = ({
         </div>
       )}
 
-      {/* Canvas - Ocupa todo el espacio restante */}
-      <div className="flex-1 bg-slate-200 p-4 flex justify-center items-center overflow-hidden">
-        <div className="bg-white rounded-lg shadow-2xl border-2 border-gray-300">
-          <canvas ref={canvasRef} className="rounded" />
+      {/* Canvas - Scrollable Container */}
+      <div 
+        ref={containerRef}
+        className="flex-1 bg-[#e2e8f0] flex justify-center overflow-auto"
+      >
+        <div className="bg-white shadow-sm my-4">
+          <canvas ref={canvasRef} />
         </div>
       </div>
 
-      {/* Mini-Map Navigator - Fixed position */}
-      <div className="fixed bottom-4 right-4 bg-white rounded-lg shadow-xl border-2 border-gray-400 p-2 z-20">
-        <div className="text-xs font-semibold text-gray-600 mb-1 text-center">Navigator</div>
-        <div className="relative bg-gray-100 rounded" style={{ width: '150px', height: '100px' }}>
-          <canvas 
-            ref={miniMapCanvasRef}
-            width={150}
-            height={100}
-            className="rounded"
-          />
+      {/* Mini-Map Navigator - Fixed position (LIGHT THEME) */}
+      <div className="fixed bottom-6 right-6 bg-white rounded-xl shadow-[0_4px_20px_rgba(0,0,0,0.15)] border border-gray-200 p-3 z-20">
+        <div className="text-[10px] uppercase tracking-widest font-bold text-gray-500 mb-2 text-center">Navigator</div>
+        <div className="relative bg-gray-50 rounded-lg overflow-hidden border border-gray-200" style={{ width: '150px', height: '100px' }}>
+        <canvas 
+          ref={miniMapCanvasRef} 
+          width={150} 
+          height={100} 
+          className="cursor-move rounded"
+          onMouseDown={(e) => {
+            isDraggingMiniMapRef.current = true;
+            const canvas = fabricCanvasRef.current;
+            if (canvas && miniMapStateRef.current) {
+               const rect = e.currentTarget.getBoundingClientRect();
+               const { minX, minY, scale, offsetX = 0, offsetY = 0 } = miniMapStateRef.current as any;
+               
+               // Calcular posición clickeada en coords mundo
+               const x = e.clientX - rect.left - offsetX;
+               const y = e.clientY - rect.top - offsetY;
+               
+               const targetX = x / scale + minX;
+               const targetY = y / scale + minY;
+               
+               // Centrar vista ahí
+               const zoom = canvas.getZoom();
+               const vpt = canvas.viewportTransform!;
+               // vpt[4] es translate X. Formula: center_screen_x - target_world_x * zoom
+               vpt[4] = -targetX * zoom + canvas.getWidth() / 2;
+               vpt[5] = -targetY * zoom + canvas.getHeight() / 2;
+               
+               canvas.requestRenderAll();
+               updateMiniMap();
+            }
+          }}
+          onMouseMove={(e) => {
+            if (isDraggingMiniMapRef.current) {
+               const canvas = fabricCanvasRef.current;
+               if (canvas && miniMapStateRef.current) {
+                   const rect = e.currentTarget.getBoundingClientRect();
+                   const { minX, minY, scale, offsetX = 0, offsetY = 0 } = miniMapStateRef.current as any;
+                   
+                   const x = e.clientX - rect.left - offsetX;
+                   const y = e.clientY - rect.top - offsetY;
+                   
+                   const targetX = x / scale + minX;
+                   const targetY = y / scale + minY;
+                   
+                   const zoom = canvas.getZoom();
+                   const vpt = canvas.viewportTransform!;
+                   vpt[4] = -targetX * zoom + canvas.getWidth() / 2;
+                   vpt[5] = -targetY * zoom + canvas.getHeight() / 2;
+                   
+                   canvas.requestRenderAll();
+                   updateMiniMap();
+               }
+            }
+          }}
+          onMouseUp={() => isDraggingMiniMapRef.current = false}
+          onMouseLeave={() => isDraggingMiniMapRef.current = false}
+        />
         </div>
       </div>
+
+      {/* Hidden file input for image uploads */}
+      <input
+        ref={imageInputRef}
+        type="file"
+        accept="image/*"
+        onChange={handleImageFileSelect}
+        style={{ display: 'none' }}
+      />
     </div>
   );
 };
