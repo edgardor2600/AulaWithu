@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import type { ReactNode } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
@@ -12,6 +12,7 @@ import {
   X
 } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { messagesService } from '../services/messagesService';
 
 interface LayoutProps {
   children: ReactNode;
@@ -22,6 +23,38 @@ export const Layout = ({ children }: LayoutProps) => {
   const navigate = useNavigate();
   const location = useLocation();
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const pollIntervalRef = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
+
+  useEffect(() => {
+    // Initial load
+    checkUnread();
+
+    // Poll every 10 seconds
+    pollIntervalRef.current = setInterval(checkUnread, 10000);
+
+    return () => {
+      if (pollIntervalRef.current) {
+        clearInterval(pollIntervalRef.current);
+      }
+    };
+  }, []);
+
+  // Update badge when route changes (in case we read messages)
+  useEffect(() => {
+    checkUnread();
+  }, [location.pathname]);
+
+  const checkUnread = async () => {
+    try {
+      if (user) {
+        const count = await messagesService.getUnreadCount();
+        setUnreadCount(count);
+      }
+    } catch (error) {
+      console.error('Error checking unread messages:', error);
+    }
+  };
 
   const handleLogout = () => {
     logout();
@@ -33,7 +66,12 @@ export const Layout = ({ children }: LayoutProps) => {
 
   const navItems = [
     { path: '/dashboard', icon: Home, label: 'Dashboard' },
-    { path: '/classes', icon: BookOpen, label: 'Classes' },
+    { 
+      path: '/classes', 
+      icon: BookOpen, 
+      label: 'Classes',
+      badge: unreadCount > 0 ? unreadCount : undefined
+    },
   ];
 
   return (
@@ -76,14 +114,31 @@ export const Layout = ({ children }: LayoutProps) => {
               <button
                 key={item.path}
                 onClick={() => navigate(item.path)}
-                className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg transition ${
+                className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg transition relative ${
                   active
                     ? 'bg-blue-50 text-blue-600'
                     : 'text-gray-700 hover:bg-gray-100'
                 }`}
               >
-                <Icon className="w-5 h-5" />
-                {isSidebarOpen && <span className="font-medium">{item.label}</span>}
+                <div className="relative">
+                  <Icon className="w-5 h-5" />
+                  {!isSidebarOpen && item.badge && (
+                    <span className="absolute -top-2 -right-2 bg-red-500 text-white text-[10px] font-bold w-4 h-4 rounded-full flex items-center justify-center">
+                      {item.badge}
+                    </span>
+                  )}
+                </div>
+                
+                {isSidebarOpen && (
+                  <>
+                    <span className="font-medium flex-1 text-left">{item.label}</span>
+                    {item.badge && (
+                      <span className="bg-red-500 text-white text-xs font-bold px-2 py-0.5 rounded-full">
+                        {item.badge}
+                      </span>
+                    )}
+                  </>
+                )}
               </button>
             );
           })}
