@@ -7,4 +7,4 @@ export { StudentCopiesRepository } from './student-copies-repository';
 export { UploadsRepository } from './uploads-repository';
 export { EventsRepository } from './events-repository';
 export { TeacherStudentsRepository } from './teacher-students-repository';
-
+export { MessagesRepository } from './messages-repository';
