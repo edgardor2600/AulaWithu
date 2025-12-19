@@ -6,6 +6,11 @@ export interface User {
   role: 'teacher' | 'student';
   avatar_color: string | null;
   created_at: string;
+  // Authentication fields (added in migration 003)
+  username: string | null;
+  password_hash: string | null;
+  active: number; // SQLite boolean (0 or 1)
+  last_login: string | null;
 }
 
 export interface Class {
