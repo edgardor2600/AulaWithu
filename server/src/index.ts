@@ -21,13 +21,25 @@ const PORT = process.env.PORT || 3002;
 
 const YJS_PORT = process.env.YJS_PORT || 1234;
 
-app.use(cors());
+// ✅ MEJORADO: CORS configuration to allow image loading from client
+app.use(cors({
+  origin: true, // Allow all origins in development
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+}));
+
 app.use(express.json({ limit: '10mb' })); // Increased limit for canvas data
 app.use(express.urlencoded({ limit: '10mb', extended: true }));
 
-// Serve static files from uploads directory
+// Serve static files from uploads directory with CORS headers
 const uploadsDir = process.env.UPLOADS_DIR || path.join(__dirname, '../../uploads');
-app.use('/uploads', express.static(uploadsDir));
+app.use('/uploads', (req, res, next) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Methods', 'GET');
+  res.header('Access-Control-Allow-Headers', 'Content-Type');
+  next();
+}, express.static(uploadsDir));
 
 // API Routes
 app.use('/api/auth', authRoutes);
