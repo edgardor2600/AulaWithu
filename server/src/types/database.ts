@@ -3,7 +3,7 @@
 export interface User {
   id: string;
   name: string;
-  role: 'teacher' | 'student';
+  role: 'admin' | 'teacher' | 'student';
   avatar_color: string | null;
   created_at: string;
   // Authentication fields (added in migration 003)
@@ -81,3 +81,14 @@ export interface EventLog {
   payload: string | null;
   timestamp: string;
 }
+
+export interface TeacherStudent {
+  id: string;
+  teacher_id: string;
+  student_id: string;
+  assigned_at: string;
+  assigned_by: string | null;
+  notes: string | null;
+  active: number; // SQLite boolean (0 or 1)
+}
+

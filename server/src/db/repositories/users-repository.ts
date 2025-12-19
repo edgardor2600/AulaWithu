@@ -97,7 +97,7 @@ export class UsersRepository {
     name: string;
     username: string;
     password_hash: string;
-    role: 'teacher' | 'student';
+    role: 'admin' | 'teacher' | 'student';
     avatar_color?: string;
   }): User {
     const id = generateId();
