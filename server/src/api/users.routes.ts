@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import {  TeacherStudentsRepository, UsersRepository } from '../db/repositories';
+import { TeacherStudentsRepository, UsersRepository, ClassesRepository } from '../db/repositories';
 import { authMiddleware } from '../middleware/auth.middleware';
 import { teacherOnly } from '../middleware/role.middleware';
 import { asyncHandler } from '../middleware/error.middleware';
@@ -43,6 +43,54 @@ router.get(
       success: true,
       count: studentsWithDetails.length,
       students: studentsWithDetails,
+    });
+  })
+);
+
+/**
+ * GET /api/users/my-teachers
+ * Get teachers assigned to the logged-in student
+ * Only accessible by students
+ */
+router.get(
+  '/my-teachers',
+  authMiddleware,
+  asyncHandler(async (req: any, res: any) => {
+    const studentId = req.user.userId;
+    const userRole = req.user.role;
+
+    // Only students can access this
+    if (userRole !== 'student') {
+      return res.status(403).json({
+        success: false,
+        message: 'Only students can access this endpoint',
+      });
+    }
+
+    // Get teacher assignments
+    const assignments = TeacherStudentsRepository.getTeachersByStudent(studentId);
+
+    // Get full teacher details with classes count
+    const teachersWithDetails = assignments.map((assignment) => {
+      const teacher = UsersRepository.getById(assignment.teacher_id);
+      if (!teacher || !teacher.active) return null;
+
+      // Count classes for this teacher
+      const classes = ClassesRepository.getByTeacher(assignment.teacher_id);
+
+      return {
+        teacher_id: teacher.id,
+        teacher_name: teacher.name,
+        teacher_avatar_color: teacher.avatar_color || '#4F46E5',
+        assigned_at: assignment.assigned_at,
+        classes_count: classes.length,
+      };
+    }).filter(item => item !== null);
+
+    res.status(200).json({
+      success: true,
+      count: teachersWithDetails.length,
+      teachers: teachersWithDetails,
     });
   })
 );
