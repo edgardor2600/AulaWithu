@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import { LoginPage } from './pages/LoginPage';
 import { DashboardPage } from './pages/DashboardPage';
+import { ClassesPage } from './pages/ClassesPage';
 import { ClassDetailPage } from './pages/ClassDetailPage';
 import { EditorPage } from './pages/EditorPage';
 import { JoinSessionPage } from './pages/JoinSessionPage';
@@ -76,6 +77,15 @@ function App() {
           element={
             <ProtectedRoute>
               <DashboardPage />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/classes"
+          element={
+            <ProtectedRoute>
+              <ClassesPage />
             </ProtectedRoute>
           }
         />
