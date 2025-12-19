@@ -10,6 +10,17 @@ import { AdminPanel } from './pages/AdminPanel';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { useAuthStore } from './store/authStore';
 
+// Component to handle authenticated redirect based on role
+const AuthenticatedRedirect = () => {
+  const user = useAuthStore((state) => state.user);
+  
+  // Redirect based on role
+  if (user?.role === 'admin') {
+    return <Navigate to="/admin" replace />;
+  }
+  return <Navigate to="/dashboard" replace />;
+};
+
 function App() {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
 
@@ -46,7 +57,7 @@ function App() {
         {/* Public Routes */}
         <Route
           path="/login"
-          element={isAuthenticated ? <Navigate to="/dashboard" replace /> : <LoginPage />}
+          element={isAuthenticated ? <AuthenticatedRedirect /> : <LoginPage />}
         />
 
         {/* Admin Routes */}
@@ -106,10 +117,10 @@ function App() {
           }
         />
 
-        {/* Default Route */}
+        {/* Default Route - Redirect based on auth and role */}
         <Route
           path="/"
-          element={<Navigate to={isAuthenticated ? '/dashboard' : '/login'} replace />}
+          element={isAuthenticated ? <AuthenticatedRedirect /> : <Navigate to="/login" replace />}
         />
 
         {/* 404 - Redirect to home */}

@@ -38,6 +38,11 @@ export const AdminPanel = () => {
     }
   }, [user, navigate]);
 
+  // No renderizar nada si no es admin
+  if (!user || user.role !== 'admin') {
+    return null;
+  }
+
   // Cargar datos iniciales
   useEffect(() => {
     loadData();
