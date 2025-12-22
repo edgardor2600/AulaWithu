@@ -41,7 +41,7 @@ router.post(
   })
 );
 
-// GET /api/classes - Get all classes (optionally filter by teacher)
+// GET /api/classes - Get classes filtered by role
 router.get(
   '/',
   authMiddleware,
@@ -53,8 +53,10 @@ router.get(
   validate,
   asyncHandler(async (req: any, res: any) => {
     const { teacherId } = req.query;
+    const userId = req.user.userId;
+    const userRole = req.user.role;
 
-    const classes = await ClassService.getAll(teacherId);
+    const classes = await ClassService.getAll(userId, userRole, teacherId);
 
     res.status(200).json({
       success: true,

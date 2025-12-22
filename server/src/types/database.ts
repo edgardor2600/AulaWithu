@@ -3,9 +3,14 @@
 export interface User {
   id: string;
   name: string;
-  role: 'teacher' | 'student';
+  role: 'admin' | 'teacher' | 'student';
   avatar_color: string | null;
   created_at: string;
+  // Authentication fields (added in migration 003)
+  username: string | null;
+  password_hash: string | null;
+  active: number; // SQLite boolean (0 or 1)
+  last_login: string | null;
 }
 
 export interface Class {
@@ -75,4 +80,25 @@ export interface EventLog {
   slide_id: string | null;
   payload: string | null;
   timestamp: string;
+}
+
+export interface TeacherStudent {
+  id: string;
+  teacher_id: string;
+  student_id: string;
+  assigned_at: string;
+  assigned_by: string | null;
+  notes: string | null;
+  active: number; // SQLite boolean (0 or 1)
+}
+
+export interface Message {
+  id: string;
+  sender_id: string;
+  receiver_id: string;
+  message: string;
+  created_at: string;
+  read: number; // SQLite boolean (0 or 1)
+  deleted_by_sender: number; // SQLite boolean (0 or 1)
+  deleted_by_receiver: number; // SQLite boolean (0 or 1)
 }
