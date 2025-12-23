@@ -3,9 +3,12 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { classService, type ClassWithDetails } from '../services/classService';
 import { useAuthStore } from '../store/authStore';
 import { Layout } from '../components/Layout';
-import { SlideThumbnail } from '../components/SlideThumbnail';
-import { ArrowLeft, BookOpen, Edit2 } from 'lucide-react';
+import { TopicsPanel } from '../components/topics/TopicsPanel';
+import { GroupsPanel } from '../components/groups/GroupsPanel';
+import { ArrowLeft, BookOpen, Users } from 'lucide-react';
 import toast from 'react-hot-toast';
+
+type Tab = 'topics' | 'groups';
 
 export const ClassDetailPage = () => {
   const { id } = useParams<{ id: string }>();
@@ -13,9 +16,10 @@ export const ClassDetailPage = () => {
   const { user } = useAuthStore();
   const [classData, setClassData] = useState<ClassWithDetails | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState<Tab>('topics');
 
-  const isTeacher = user?.role === 'teacher';
-  const isOwner = classData?.teacher_id === user?.id;
+  const isTeacher = user?.role === 'teacher' || user?.role === 'admin';
+  const isOwner = classData?.teacher_id === user?.id || user?.role === 'admin';
 
   useEffect(() => {
     if (id) {
@@ -97,51 +101,50 @@ export const ClassDetailPage = () => {
                 </div>
               </div>
             </div>
-            
-            {/* Edit Button (Teacher Only) */}
-            {isTeacher && isOwner && (
-              <button
-                onClick={() => navigate(`/classes/${id}/edit`)}
-                className="flex items-center space-x-2 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition font-medium"
-              >
-                <Edit2 className="w-5 h-5" />
-                <span>Edit Slides</span>
-              </button>
-            )}
+
           </div>
         </div>
 
-        {/* Slides Section */}
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8">
-          <h2 className="text-xl font-semibold text-gray-900 mb-6">Slides</h2>
-          
-          {classData.slides && classData.slides.length > 0 ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {classData.slides.map((slide: any, index: number) => (
-                <div
-                  key={slide.id}
-                  className="border-2 border-gray-200 rounded-lg overflow-hidden hover:shadow-lg hover:border-blue-300 transition cursor-pointer"
-                >
-                  <SlideThumbnail 
-                    canvasData={slide.canvas_data || ''}
-                    slideNumber={slide.slide_number || index + 1}
-                  />
-                  <div className="p-4 bg-white border-t border-gray-200">
-                    <h3 className="font-medium text-gray-900">
-                      {slide.title || `Slide ${slide.slide_number || index + 1}`}
-                    </h3>
-                  </div>
-                </div>
-              ))}
+        {/* Tabs (Only for teachers/admins) */}
+        {isTeacher && isOwner && (
+          <div className="bg-white rounded-t-lg shadow-sm border border-b-0 border-gray-200">
+            <div className="flex border-b border-gray-200">
+              <button
+                onClick={() => setActiveTab('topics')}
+                className={`flex items-center gap-2 px-6 py-4 font-medium transition ${
+                  activeTab === 'topics'
+                    ? 'text-blue-600 border-b-2 border-blue-600'
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                <BookOpen className="w-5 h-5" />
+                Temas
+              </button>
+              <button
+                onClick={() => setActiveTab('groups')}
+                className={`flex items-center gap-2 px-6 py-4 font-medium transition ${
+                  activeTab === 'groups'
+                    ? 'text-blue-600 border-b-2 border-blue-600'
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                <Users className="w-5 h-5" />
+                Grupos
+              </button>
             </div>
-          ) : (
-            <div className="text-center py-12 border-2 border-dashed border-gray-300 rounded-lg">
-              <BookOpen className="w-12 h-12 text-gray-400 mx-auto mb-3" />
-              <p className="text-gray-600">No slides yet</p>
-              <p className="text-sm text-gray-500 mt-1">
-                Slides will appear here once created
-              </p>
-            </div>
+          </div>
+        )}
+
+        {/* Content Area */}
+        <div className="bg-white rounded-b-lg shadow-sm border border-gray-200 p-8">
+          {/* Topics Tab */}
+          {activeTab === 'topics' && id && (
+            <TopicsPanel classId={id} className={classData.title} />
+          )}
+
+          {/* Groups Tab (Teacher only) */}
+          {activeTab === 'groups' && isTeacher && isOwner && id && (
+            <GroupsPanel classId={id} className={classData.title} />
           )}
         </div>
       </div>
