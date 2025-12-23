@@ -31,6 +31,7 @@ export interface Slide {
   canvas_data: string | null;
   created_at: string;
   updated_at: string;
+  topic_id: string | null; // Added in migration 008
 }
 
 export interface Session {
@@ -101,4 +102,41 @@ export interface Message {
   read: number; // SQLite boolean (0 or 1)
   deleted_by_sender: number; // SQLite boolean (0 or 1)
   deleted_by_receiver: number; // SQLite boolean (0 or 1)
+}
+
+export interface Group {
+  id: string;
+  class_id: string;
+  name: string;
+  description: string | null;
+  max_students: number;
+  active: number; // SQLite boolean (0 or 1)
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Enrollment {
+  id: string;
+  group_id: string;
+  student_id: string;
+  enrolled_at: string;
+  enrolled_by: string | null;
+  status: 'active' | 'inactive' | 'completed';
+  notes: string | null;
+}
+
+// Topics (added in migration 008)
+export interface Topic {
+  id: string;
+  class_id: string;
+  title: string;
+  description: string | null;
+  topic_number: number;
+  active: number; // SQLite boolean (0 or 1)
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TopicWithSlideCount extends Topic {
+  slides_count: number;
 }

@@ -13,6 +13,8 @@ import uploadsRoutes from './api/uploads.routes';
 import snapshotsRoutes from './api/snapshots.routes';
 import usersRoutes from './api/users.routes';
 import messagesRoutes from './api/messages.routes';
+import groupsRoutes from './api/groups.routes';
+import topicsRoutes from './api/topics.routes';
 import { errorHandler } from './middleware/error.middleware';
 import { logDatabaseSize } from './db/monitoring';
 
@@ -47,6 +49,9 @@ app.use('/uploads', (req, res, next) => {
 app.use('/api/auth', authRoutes);
 app.use('/api/users', usersRoutes);
 app.use('/api/messages', messagesRoutes);
+app.use('/api/classes', groupsRoutes); // Groups routes (includes /classes/:classId/groups)
+app.use('/api', groupsRoutes); // Additional groups routes (includes /groups/:groupId)
+app.use('/api', topicsRoutes); // Topics routes (includes /classes/:classId/topics and /topics/:topicId)
 app.use('/api/classes', classesRoutes);
 app.use('/api/slides', slidesRoutes);
 app.use('/api/sessions', sessionsRoutes);

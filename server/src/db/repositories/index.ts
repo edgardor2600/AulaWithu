@@ -8,3 +8,6 @@ export { UploadsRepository } from './uploads-repository';
 export { EventsRepository } from './events-repository';
 export { TeacherStudentsRepository } from './teacher-students-repository';
 export { MessagesRepository } from './messages-repository';
+export { GroupsRepository } from './groups-repository';
+export { EnrollmentsRepository } from './enrollments-repository';
+export { TopicsRepository } from './topics-repository';
