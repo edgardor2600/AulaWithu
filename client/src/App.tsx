@@ -4,7 +4,9 @@ import { LoginPage } from './pages/LoginPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { ClassesPage } from './pages/ClassesPage';
 import { ClassDetailPage } from './pages/ClassDetailPage';
+import { TopicDetailPage } from './pages/TopicDetailPage';
 import { EditorPage } from './pages/EditorPage';
+import { SlideViewerPage } from './pages/SlideViewerPage';
 import { JoinSessionPage } from './pages/JoinSessionPage';
 import { SessionViewPage } from './pages/SessionViewPage';
 import { AdminPanel } from './pages/AdminPanel';
@@ -99,6 +101,27 @@ function App() {
           }
         />
         
+        {/* Topic Detail - View slides for a specific topic */}
+        <Route
+          path="/classes/:classId/topics/:topicId"
+          element={
+            <ProtectedRoute>
+              <TopicDetailPage />
+            </ProtectedRoute>
+          }
+        />
+        
+        {/* Slide Viewer - For students to view slides in read-only mode */}
+        <Route
+          path="/classes/:id/view"
+          element={
+            <ProtectedRoute>
+              <SlideViewerPage />
+            </ProtectedRoute>
+          }
+        />
+        
+        {/* Editor - Teachers only */}
         <Route
           path="/classes/:id/edit"
           element={
@@ -141,4 +164,3 @@ function App() {
 }
 
 export default App;
-
