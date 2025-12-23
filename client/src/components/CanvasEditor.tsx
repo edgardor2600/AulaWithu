@@ -373,8 +373,41 @@ export const CanvasEditor = ({
         miniCtx.globalAlpha = 0.7;
         miniCtx.fillRect(bounds.left, bounds.top, bounds.width, bounds.height);
       } else {
-        miniCtx.fillStyle = (obj.fill && obj.fill !== 'transparent') ? obj.fill : objColor;
-        miniCtx.fillRect(bounds.left, bounds.top, Math.max(bounds.width, 20), Math.max(bounds.height, 20));
+        // ✅ MEJORADO: Renderizado inteligente para formas en el minimapa
+        const hasFill = obj.fill && obj.fill !== 'transparent';
+        const hasStroke = obj.stroke && obj.stroke !== 'transparent' && (obj.strokeWidth || 0) > 0;
+        
+        // Caso especial: Texto (Bloque semitransparente para representar el texto)
+        if (obj.type === 'i-text' || obj.type === 'text') {
+           miniCtx.fillStyle = (obj.fill && obj.fill !== 'transparent') ? obj.fill : (obj.stroke || '#000');
+           miniCtx.globalAlpha = 0.6; // Un poco transparente para no ocultar otros objetos
+           miniCtx.fillRect(bounds.left, bounds.top, bounds.width, bounds.height);
+           miniCtx.globalAlpha = 1.0;
+        } 
+        else {
+          // Formas Genéricas (Rect, Circle, etc.)
+          
+          // 1. Dibujar relleno si existe
+          if (hasFill) {
+            miniCtx.fillStyle = obj.fill;
+            miniCtx.fillRect(bounds.left, bounds.top, bounds.width, bounds.height);
+          }
+          
+          // 2. Dibujar borde si existe
+          if (hasStroke) {
+            miniCtx.strokeStyle = obj.stroke;
+            // Grosor adaptado para visibilidad
+            miniCtx.lineWidth = Math.max((obj.strokeWidth || 1) * 2, 4); 
+            miniCtx.strokeRect(bounds.left, bounds.top, bounds.width, bounds.height);
+          }
+          
+          // 3. Fallback para objetos "invisibles" (sin fill ni stroke) o muy finos
+          if (!hasFill && !hasStroke) {
+            miniCtx.strokeStyle = '#94a3b8'; // Borde gris suave
+            miniCtx.lineWidth = 2;
+            miniCtx.strokeRect(bounds.left, bounds.top, bounds.width, bounds.height);
+          }
+        }
       }
       
       miniCtx.restore();
@@ -1248,6 +1281,11 @@ export const CanvasEditor = ({
         if (isDrawing && shape) {
           isDrawing = false;
           canvas.setActiveObject(shape);
+          
+          // ✅ CRÍTICO: Disparar evento para que useYjs sincronice el tamaño final
+          shape.setCoords();
+          canvas.fire('object:modified', { target: shape });
+          
           shape = null;
           setCurrentTool('select'); // Auto-switch back to select
         }

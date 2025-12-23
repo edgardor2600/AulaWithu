@@ -6,6 +6,7 @@ export interface Slide {
   slide_number: number;
   title: string | null;
   canvas_data: string;
+  topic_id: string | null;  // Added for topics
   created_at: string;
   updated_at: string;
 }
@@ -13,6 +14,7 @@ export interface Slide {
 export interface CreateSlideData {
   title?: string;
   slide_number?: number;
+  topic_id?: string;  // Added for topics
 }
 
 export interface UpdateSlideData {

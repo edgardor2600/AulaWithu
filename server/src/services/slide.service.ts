@@ -9,6 +9,7 @@ export class SlideService {
     user_id: string;
     title?: string;
     slide_number?: number;
+    topic_id?: string;  // Added for topics support
   }): Promise<Slide> {
     // Check if class exists
     const classData = ClassesRepository.getById(data.class_id);
@@ -31,6 +32,7 @@ export class SlideService {
       class_id: data.class_id,
       title: data.title?.trim(),
       slide_number: data.slide_number,
+      topic_id: data.topic_id,  // Pass topic_id to repository
     });
 
     return slide;

@@ -23,11 +23,14 @@ router.post(
     body('slide_number')
       .optional()
       .isInt({ min: 1 }).withMessage('Slide number must be a positive integer'),
+    body('topic_id')
+      .optional()
+      .isString().withMessage('Topic ID must be a string'),
   ],
   validate,
   asyncHandler(async (req: any, res: any) => {
     const { classId } = req.params;
-    const { title, slide_number } = req.body;
+    const { title, slide_number, topic_id } = req.body;
     const userId = req.user.userId;
 
     const slide = await SlideService.create({
@@ -35,6 +38,7 @@ router.post(
       user_id: userId,
       title,
       slide_number,
+      topic_id,  // Pass topic_id to service
     });
 
     res.status(201).json({
