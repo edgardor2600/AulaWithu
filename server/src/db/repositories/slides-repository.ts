@@ -9,6 +9,7 @@ export class SlidesRepository {
     slide_number?: number;
     title?: string;
     canvas_data?: string;
+    topic_id?: string;  // Added for topics support
   }): Slide {
     const id = generateId();
     
@@ -16,9 +17,16 @@ export class SlidesRepository {
     const slideNumber = data.slide_number || this.getNextSlideNumber(data.class_id);
     
     runQuery(
-      `INSERT INTO slides (id, class_id, slide_number, title, canvas_data) 
-       VALUES (?, ?, ?, ?, ?)`,
-      [id, data.class_id, slideNumber, data.title || null, data.canvas_data || '{"version":"5.3.0","objects":[]}']
+      `INSERT INTO slides (id, class_id, slide_number, title, canvas_data, topic_id) 
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [
+        id, 
+        data.class_id, 
+        slideNumber, 
+        data.title || null, 
+        data.canvas_data || '{"version":"5.3.0","objects":[]}',
+        data.topic_id || null  // Insert topic_id
+      ]
     );
     
     return this.getById(id)!;

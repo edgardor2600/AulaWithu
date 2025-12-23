@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef, useCallback, useMemo } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { classService, type ClassWithDetails } from '../services/classService';
 import { slideService, type Slide } from '../services/slideService';
 import { sessionService, type Session } from '../services/sessionService';
@@ -23,6 +23,8 @@ import toast from 'react-hot-toast';
 export const EditorPage = () => {
   const { id: classId } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const topicId = searchParams.get('topicId');  // ✅ NEW: Get topicId from URL
   
   const [classData, setClassData] = useState<ClassWithDetails | null>(null);
   const [slides, setSlides] = useState<Slide[]>([]);
@@ -54,7 +56,7 @@ export const EditorPage = () => {
     if (classId) {
       loadClassAndSlides(classId);
     }
-  }, [classId]);
+  }, [classId, topicId]); // ✅ NUEVO: Reload if topicId changes
 
   // ✅ NUEVO: Actualizar slide actual en sesión cuando profesor cambia de slide
   useEffect(() => {
@@ -66,8 +68,11 @@ export const EditorPage = () => {
       if (activeSession.slide_id === currentSlide.id) return;
       
       try {
-        await sessionService.updateSlide(activeSession.id, currentSlide.id);
+        const updatedSession = await sessionService.updateSlide(activeSession.id, currentSlide.id);
         console.log('📍 Session slide updated to:', currentSlide.id);
+        
+        // ✅ CRÍTICO: Actualizar estado local para mantener sincronía
+        setActiveSession(updatedSession);
       } catch (error) {
         console.error('Failed to update session slide:', error);
         // No mostrar error al usuario, no es crítico
@@ -77,16 +82,82 @@ export const EditorPage = () => {
     updateSessionSlide();
   }, [slides, currentSlideIndex, activeSession]);
 
+  // ✅ NUEVO: Recuperar sesión activa al recargar la página
+  useEffect(() => {
+    const checkActiveSession = async () => {
+      // Si ya tenemos sesión, no hacer nada (evita loops o sobreescrituras)
+      // Pero si activeSession es null y hay clase, intentamos recuperar
+      if (!classData || activeSession) return; 
+      
+      try {
+        const sessions = await sessionService.getActive();
+        // Buscar si existe una sesión activa para esta clase
+        const currentClassSession = sessions.find(s => s.class_id === classId);
+        
+        if (currentClassSession) {
+          console.log('🔄 Restoring active session:', currentClassSession.session_code);
+          setActiveSession(currentClassSession);
+          
+          // Importante: Si la sesión es de un slide diferente al actual, movernos a ese slide
+          const slideIndex = slides.findIndex(s => s.id === currentClassSession.slide_id);
+          if (slideIndex !== -1 && slideIndex !== currentSlideIndex) {
+            console.log('📍 Jumping to active session slide:', slideIndex);
+            setCurrentSlideIndex(slideIndex);
+          }
+        }
+      } catch (error) {
+        console.error('Failed to restore session:', error);
+      }
+    };
+    
+    // Solo ejecutar si tenemos datos de la clase y slides cargados
+    if (classData && slides.length > 0) {
+      checkActiveSession();
+    }
+  }, [classData, slides, classId]); // Dependencias claves
+
+  // ✅ NUEVO: Manejo seguro de "Atrás" con confirmación
+  const handleBack = async () => {
+    if (activeSession) {
+      if (confirm('⚠️ You have a live session active.\n\nDo you want to END the session for all students and exit?')) {
+        try {
+          const toastId = toast.loading('Ending session...');
+          await sessionService.end(activeSession.id);
+          setActiveSession(null);
+          toast.dismiss(toastId);
+          toast.success('Session ended successfully');
+          navigate(`/classes/${classId}`);
+        } catch (error) {
+          console.error('Error ending session:', error);
+          toast.error('Failed to end session properly, forcing exit');
+          navigate(`/classes/${classId}`);
+        }
+      }
+    } else {
+      navigate(`/classes/${classId}`);
+    }
+  };
+
   const loadClassAndSlides = async (id: string) => {
     try {
       setIsLoading(true);
       const data = await classService.getById(id);
       setClassData(data);
       
-      if (data.slides && data.slides.length > 0) {
-        setSlides(data.slides);
+      let slidesToLoad: Slide[] = [];
+      
+      // ✅ NUEVO: Filter by topicId if present
+      if (topicId && data.slides && data.slides.length > 0) {
+        slidesToLoad = data.slides.filter((slide: any) => slide.topic_id === topicId);
+        console.log(`📚 Filtered ${slidesToLoad.length} slides for topic ${topicId}`);
+      } else if (data.slides && data.slides.length > 0) {
+        slidesToLoad = data.slides;
+      }
+      
+      if (slidesToLoad.length > 0) {
+        setSlides(slidesToLoad);
         // Initialize slides data in memory
-        data.slides.forEach(slide => {
+        slidesToLoad.forEach(slide => {
           if (slide.canvas_data) {
             slidesDataRef.current.set(slide.id, slide.canvas_data);
           }
@@ -377,6 +448,8 @@ export const EditorPage = () => {
     );
   }
 
+
+
   return (
     <Layout>
       <div className="h-screen flex flex-col">
@@ -398,7 +471,7 @@ export const EditorPage = () => {
               </button>
               
               <button
-                onClick={() => navigate(`/classes/${classId}`)}
+                onClick={handleBack}
                 className="flex items-center space-x-2 text-gray-600 hover:text-gray-900 transition"
               >
                 <ArrowLeft className="w-5 h-5" />

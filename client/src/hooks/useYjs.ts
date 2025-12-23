@@ -92,9 +92,24 @@ export function useYjs(
     // Awareness for participant tracking
     const awareness = provider.awareness;
     
-    // Get user info from localStorage
-    const userStr = localStorage.getItem('user');
-    const user = userStr ? JSON.parse(userStr) : null;
+    // Get user info from localStorage (support auth-storage format)
+    let user = null;
+    try {
+      const authStr = localStorage.getItem('auth-storage');
+      if (authStr) {
+        const parsed = JSON.parse(authStr);
+        user = parsed.user;
+      }
+      
+      // Fallback for legacy format
+      if (!user) {
+        const userStr = localStorage.getItem('user');
+        user = userStr ? JSON.parse(userStr) : null;
+      }
+    } catch (e) {
+      console.error('Error parsing user data:', e);
+    }
+
     const userName = user?.name || 'Anonymous';
     const userColor = getRandomColor();
     
@@ -299,6 +314,14 @@ export function useYjs(
     async function addObjectToCanvas(objectData: any, objectId: string) {
       if (!canvas) return;
 
+      // ✅ PREVENCIÓN DE DUPLICADOS: Verificar si ya existe antes de procesar
+      // Esto evita que condiciones de carrera creen copias "fantasma"
+      const existingObject = canvas.getObjects().find((o: any) => o.id === objectId);
+      if (existingObject) {
+        console.log('⚠️ Object already exists, skipping add:', objectId);
+        return;
+      }
+
       try {
         // Enliven object from JSON (Fabric.js v6 uses async)
         const objects = await fabric.util.enlivenObjects([objectData]);
@@ -379,9 +402,18 @@ export function useYjs(
             }
           }
           
+          
           // Cast to any to avoid type issues with Fabric.js complex types
           isRemoteChangeRef.current = true;
+          
+          // CRITICAL: Ensure coordinates are calculated before adding
+          (obj as any).setCoords();
+          
           canvas.add(obj as any);
+          
+          // Force render for critical updates like paths
+          canvas.requestRenderAll();
+          
           isRemoteChangeRef.current = false;
           
           syncedObjectsRef.current.add(objectId);
@@ -415,6 +447,12 @@ export function useYjs(
      */
     function syncYjsToFabric(event: Y.YMapEvent<any>) {
       if (!canvas || isRemoteChangeRef.current) return;
+
+      // ✅ CRÍTICO: Ignorar eventos originados por este mismo cliente (Echo suppression)
+      // Si no filtramos esto, nuestros propios cambios vuelven y pueden causar duplicados o loops visuales
+      if (event.transaction.origin === ydocRef.current?.clientID || event.transaction.local) {
+        return;
+      }
 
       isRemoteChangeRef.current = true;
 
