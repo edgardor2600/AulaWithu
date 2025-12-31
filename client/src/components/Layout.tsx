@@ -23,6 +23,7 @@ export const Layout = ({ children }: LayoutProps) => {
   const navigate = useNavigate();
   const location = useLocation();
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
   const pollIntervalRef = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
 
@@ -43,6 +44,7 @@ export const Layout = ({ children }: LayoutProps) => {
   // Update badge when route changes (in case we read messages)
   useEffect(() => {
     checkUnread();
+    setIsMobileMenuOpen(false); // Cerrar menú al navegar
   }, [location.pathname]);
 
   const checkUnread = async () => {
@@ -76,10 +78,20 @@ export const Layout = ({ children }: LayoutProps) => {
 
   return (
     <div className="min-h-screen bg-gray-50 flex">
+      {/* Mobile Backdrop */}
+      {isMobileMenuOpen && (
+        <div 
+          className="fixed inset-0 bg-black/50 z-40 lg:hidden"
+          onClick={() => setIsMobileMenuOpen(false)}
+        />
+      )}
+
       {/* Sidebar */}
       <aside
-        className={`${
-          isSidebarOpen ? 'w-64' : 'w-20'
+        className={`fixed inset-y-0 left-0 z-50 lg:relative ${
+          isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
+        } ${
+          isSidebarOpen ? 'w-64' : 'lg:w-20'
         } bg-white border-r border-gray-200 transition-all duration-300 flex flex-col`}
       >
         {/* Logo */}
@@ -94,13 +106,21 @@ export const Layout = ({ children }: LayoutProps) => {
           )}
           <button
             onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-            className="p-2 hover:bg-gray-100 rounded-lg transition"
+            className="hidden lg:block p-2 hover:bg-gray-100 rounded-lg transition"
           >
             {isSidebarOpen ? (
               <X className="w-5 h-5 text-gray-600" />
             ) : (
               <Menu className="w-5 h-5 text-gray-600" />
             )}
+          </button>
+          
+          {/* Close button for mobile */}
+          <button
+            onClick={() => setIsMobileMenuOpen(false)}
+            className="lg:hidden p-2 hover:bg-gray-100 rounded-lg transition"
+          >
+            <X className="w-5 h-5 text-gray-600" />
           </button>
         </div>
 
@@ -192,8 +212,26 @@ export const Layout = ({ children }: LayoutProps) => {
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 overflow-auto">
-        {children}
+      <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
+        {/* Mobile Header */}
+        <header className="h-16 lg:hidden bg-white border-b border-gray-200 flex items-center justify-between px-4 shrink-0">
+          <div className="flex items-center space-x-2">
+            <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
+              <GraduationCap className="w-5 h-5 text-white" />
+            </div>
+            <span className="font-semibold text-gray-900">Aula</span>
+          </div>
+          <button
+            onClick={() => setIsMobileMenuOpen(true)}
+            className="p-2 hover:bg-gray-100 rounded-lg transition"
+          >
+            <Menu className="w-5 h-5 text-gray-600" />
+          </button>
+        </header>
+
+        <div className="flex-1 overflow-auto">
+          {children}
+        </div>
       </main>
     </div>
   );

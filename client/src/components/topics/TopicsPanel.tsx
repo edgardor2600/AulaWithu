@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { topicsService, type Topic } from '../../services/topicsService';
 import { BookOpen, Plus, Edit2, Trash2, GripVertical } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { useAuthStore } from '../../store/authStore';
 
 interface TopicsPanelProps {
   classId: string;
@@ -11,6 +12,7 @@ interface TopicsPanelProps {
 
 export const TopicsPanel = ({ classId, className }: TopicsPanelProps) => {
   const navigate = useNavigate();
+  const { user } = useAuthStore();
   const [topics, setTopics] = useState<Topic[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
@@ -19,6 +21,8 @@ export const TopicsPanel = ({ classId, className }: TopicsPanelProps) => {
     title: '',
     description: '',
   });
+
+  const isTeacher = user?.role === 'teacher' || user?.role === 'admin';
 
   useEffect(() => {
     loadTopics();
@@ -125,13 +129,15 @@ export const TopicsPanel = ({ classId, className }: TopicsPanelProps) => {
             Organiza el contenido de "{className}" en temas
           </p>
         </div>
-        <button
-          onClick={handleCreate}
-          className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
-        >
-          <Plus className="w-4 h-4" />
-          <span>Nuevo Tema</span>
-        </button>
+        {isTeacher && (
+          <button
+            onClick={handleCreate}
+            className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Nuevo Tema</span>
+          </button>
+        )}
       </div>
 
       {/* Topics List */}
@@ -144,13 +150,15 @@ export const TopicsPanel = ({ classId, className }: TopicsPanelProps) => {
           <p className="text-gray-600 mb-4">
             Crea el primer tema para organizar tus slides
           </p>
-          <button
-            onClick={handleCreate}
-            className="inline-flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
-          >
-            <Plus className="w-4 h-4" />
-            <span>Crear Primer Tema</span>
-          </button>
+          {isTeacher && (
+            <button
+              onClick={handleCreate}
+              className="inline-flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Crear Primer Tema</span>
+            </button>
+          )}
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -192,28 +200,30 @@ export const TopicsPanel = ({ classId, className }: TopicsPanelProps) => {
                   </div>
 
                   {/* Actions */}
-                  <div className="flex items-center space-x-2">
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleEdit(topic);
-                      }}
-                      className="p-2 text-gray-600 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition"
-                      title="Editar tema"
-                    >
-                      <Edit2 className="w-4 h-4" />
-                    </button>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleDelete(topic);
-                      }}
-                      className="p-2 text-gray-600 hover:text-red-600 hover:bg-red-50 rounded-lg transition"
-                      title="Eliminar tema"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
+                  {isTeacher && (
+                    <div className="flex items-center space-x-2">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleEdit(topic);
+                        }}
+                        className="p-2 text-gray-600 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition"
+                        title="Editar tema"
+                      >
+                        <Edit2 className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDelete(topic);
+                        }}
+                        className="p-2 text-gray-600 hover:text-red-600 hover:bg-red-50 rounded-lg transition"
+                        title="Eliminar tema"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>

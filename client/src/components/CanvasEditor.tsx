@@ -446,19 +446,23 @@ export const CanvasEditor = ({
     const container = containerRef.current;
     if (!canvas || !container) return;
 
-    // Obtener ancho disponible
+    // Obtener dimensiones disponibles
     const containerWidth = container.clientWidth;
+    const containerHeight = container.clientHeight;
     
-    // Calcular escala para llenar el ancho completo (sin márgenes)
-    // Esto asegura que se vea GRANDE por defecto
-    const targetWidth = containerWidth; 
-    const scale = targetWidth / 1200;
+    // Calcular escala para caber en AMBAS dimensiones (manteniendo 16:9)
+    // El tablero base es de 1200x675
+    const scaleX = containerWidth / 1200;
+    const scaleY = containerHeight / 675;
     
-    // Aplicar dimensiones físicas
-    canvas.setWidth(targetWidth);
-    canvas.setHeight(675 * scale); // Mantener ratio 16:9
+    // Elegimos la escala menor para que el tablero ENTERO sea visible
+    const scale = Math.min(scaleX, scaleY);
     
-    // Aplicar zoom
+    // Aplicar dimensiones físicas (el lienzo físico ocupa el espacio de escala)
+    canvas.setWidth(1200 * scale);
+    canvas.setHeight(675 * scale);
+    
+    // Aplicar zoom de Fabric
     canvas.setZoom(scale);
     canvas.setViewportTransform([scale, 0, 0, scale, 0, 0]);
     
@@ -1500,10 +1504,10 @@ export const CanvasEditor = ({
     <div className="h-full flex flex-col">
       {/* Toolbar Compacto - Solo mostrar si NO es read-only */}
       {!isReadOnly && (
-        <div className="bg-white border-b border-gray-200 shadow-sm">
-          <div className="px-3 py-2">
+        <div className="bg-white border-b border-gray-200 shadow-sm shrink-0 overflow-hidden">
+          <div className="px-3 py-2 overflow-x-auto custom-scrollbar">
             {/* Primera fila: Tools + Actions principales */}
-            <div className="flex items-center justify-between gap-3 mb-2">
+            <div className="flex items-center justify-between gap-4 mb-2 min-w-max">
               {/* Tools */}
               <div className="flex items-center gap-1">
                 {tools.map((tool) => {
@@ -1669,7 +1673,7 @@ export const CanvasEditor = ({
             </div>
 
             {/* Segunda fila: Colors + Brush Width */}
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-4 min-w-max pb-1">
               {/* Colors */}
               <div className="flex items-center gap-1.5">
                 <span className="text-xs font-medium text-gray-600">Color:</span>
@@ -1714,15 +1718,23 @@ export const CanvasEditor = ({
       {/* Canvas - Scrollable Container */}
       <div 
         ref={containerRef}
-        className="flex-1 bg-[#e2e8f0] flex justify-center overflow-auto"
+        className={`flex-1 flex items-center justify-center overflow-auto ${
+          isReadOnly && !isTeacher 
+            ? 'p-0 bg-white' // Pantalla completa blanca para estudiantes en lectura
+            : 'p-2 md:p-4 bg-gray-200/50' // Bordes grises para edición
+        }`}
       >
-        <div className="bg-white shadow-sm my-4">
+        <div className={`bg-white shrink-0 ${
+          isReadOnly && !isTeacher 
+            ? 'shadow-none' // Sin sombras para estudiantes en lectura
+            : 'shadow-lg border border-gray-100' // Con sombra para edición
+        }`}>
           <canvas ref={canvasRef} />
         </div>
       </div>
 
-      {/* Mini-Map Navigator - Fixed position (LIGHT THEME) */}
-      <div className="fixed bottom-6 right-6 bg-white rounded-xl shadow-[0_4px_20px_rgba(0,0,0,0.15)] border border-gray-200 p-3 z-20">
+      {/* Mini-Map Navigator - Fixed position (Visible only on Large screens) */}
+      <div className="hidden lg:block fixed bottom-6 right-6 bg-white rounded-xl shadow-[0_4px_20px_rgba(0,0,0,0.15)] border border-gray-200 p-3 z-20">
         <div className="text-[10px] uppercase tracking-widest font-bold text-gray-500 mb-2 text-center">Navigator</div>
         <div className="relative bg-gray-50 rounded-lg overflow-hidden border border-gray-200" style={{ width: '150px', height: '100px' }}>
         <canvas 
