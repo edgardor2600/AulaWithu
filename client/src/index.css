@@ -17,3 +17,12 @@
     min-height: 100vh;
   }
 }
+
+/* Ocultar barra de desplazamiento manteniendo funcionalidad */
+.custom-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.custom-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}

@@ -4,4 +4,22 @@ import react from '@vitejs/plugin-react'
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react()],
+  server: {
+    allowedHosts: true,
+    proxy: {
+      '/api': {
+        target: 'http://localhost:3002',
+        changeOrigin: true,
+      },
+      '/uploads': {
+        target: 'http://localhost:3002',
+        changeOrigin: true,
+      },
+      '/yjs': {
+        target: 'ws://localhost:1234',
+        ws: true,
+        rewrite: (path) => path.replace(/^\/yjs/, '')
+      }
+    }
+  }
 })
