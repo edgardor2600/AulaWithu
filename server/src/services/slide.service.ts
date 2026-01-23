@@ -12,7 +12,7 @@ export class SlideService {
     topic_id?: string;  // Added for topics support
   }): Promise<Slide> {
     // Check if class exists
-    const classData = ClassesRepository.getById(data.class_id);
+    const classData = await ClassesRepository.getById(data.class_id);
     if (!classData) {
       throw new NotFoundError('Class');
     }
@@ -28,7 +28,7 @@ export class SlideService {
     }
 
     // Create slide
-    const slide = SlidesRepository.create({
+    const slide = await SlidesRepository.create({
       class_id: data.class_id,
       title: data.title?.trim(),
       slide_number: data.slide_number,
@@ -40,7 +40,7 @@ export class SlideService {
 
   // Get slide by ID
   static async getById(slideId: string): Promise<Slide> {
-    const slide = SlidesRepository.getById(slideId);
+    const slide = await SlidesRepository.getById(slideId);
     if (!slide) {
       throw new NotFoundError('Slide');
     }
@@ -50,12 +50,12 @@ export class SlideService {
   // Get slides by class
   static async getByClass(classId: string): Promise<Slide[]> {
     // Check if class exists
-    const classData = ClassesRepository.getById(classId);
+    const classData = await ClassesRepository.getById(classId);
     if (!classData) {
       throw new NotFoundError('Class');
     }
 
-    return SlidesRepository.getByClass(classId);
+    return await SlidesRepository.getByClass(classId);
   }
 
   // Update slide (only class owner)
@@ -69,13 +69,13 @@ export class SlideService {
     }
   ): Promise<Slide> {
     // Get slide
-    const slide = SlidesRepository.getById(slideId);
+    const slide = await SlidesRepository.getById(slideId);
     if (!slide) {
       throw new NotFoundError('Slide');
     }
 
     // Check class ownership
-    const classData = ClassesRepository.getById(slide.class_id);
+    const classData = await ClassesRepository.getById(slide.class_id);
     if (!classData) {
       throw new NotFoundError('Class');
     }
@@ -90,7 +90,7 @@ export class SlideService {
     }
 
     // Update slide
-    const updated = SlidesRepository.update(slideId, {
+    const updated = await SlidesRepository.update(slideId, {
       title: data.title?.trim(),
       canvas_data: data.canvas_data,
       slide_number: data.slide_number,
@@ -115,7 +115,7 @@ export class SlideService {
     console.log('Canvas data length:', canvasData?.length);
     
     // Get slide
-    const slide = SlidesRepository.getById(slideId);
+    const slide = await SlidesRepository.getById(slideId);
     if (!slide) {
       console.error('Slide not found:', slideId);
       throw new NotFoundError('Slide');
@@ -123,7 +123,7 @@ export class SlideService {
     console.log('Slide found:', slide.id);
 
     // Check class ownership
-    const classData = ClassesRepository.getById(slide.class_id);
+    const classData = await ClassesRepository.getById(slide.class_id);
     if (!classData) {
       console.error('Class not found:', slide.class_id);
       throw new NotFoundError('Class');
@@ -149,7 +149,7 @@ export class SlideService {
     // Update canvas
     try {
       console.log('Updating repository...');
-      const updated = SlidesRepository.updateCanvas(slideId, canvasData);
+      const updated = await SlidesRepository.updateCanvas(slideId, canvasData);
       if (!updated) {
         console.error('Repository returned no slide');
         throw new NotFoundError('Slide');
@@ -170,14 +170,14 @@ export class SlideService {
 
     try {
       // Get slide
-      const slide = SlidesRepository.getById(slideId);
+      const slide = await SlidesRepository.getById(slideId);
       if (!slide) {
         console.error('Slide not found for deletion');
         throw new NotFoundError('Slide');
       }
 
       // Check class ownership
-      const classData = ClassesRepository.getById(slide.class_id);
+      const classData = await ClassesRepository.getById(slide.class_id);
       if (!classData) {
         console.error('Class not found for slide');
         throw new NotFoundError('Class');
@@ -191,17 +191,17 @@ export class SlideService {
       // ✅ Borrado manual en cascada para evitar errores de FK
       // 1. Borrar sesiones que usan esta slide
       console.log('Deleting sessions using this slide...');
-      const sessionsDeleted = SessionsRepository.deleteBySlide(slideId);
+      const sessionsDeleted = await SessionsRepository.deleteBySlide(slideId);
       console.log(`Deleted ${sessionsDeleted} sessions.`);
 
       // 2. Borrar copias de estudiantes
       console.log('Deleting dependent student copies...');
-      const copiesDeleted = StudentCopiesRepository.deleteBySlide(slideId);
+      const copiesDeleted = await StudentCopiesRepository.deleteBySlide(slideId);
       console.log(`Deleted ${copiesDeleted} student copies.`);
 
       // 3. Borrar la slide
       console.log('Attempting to delete slide from repository...');
-      const deleted = SlidesRepository.delete(slideId);
+      const deleted = await SlidesRepository.delete(slideId);
       
       if (!deleted) {
         console.error('Repository returned false (deletion failed)');

@@ -10,7 +10,7 @@ export class SnapshotService {
     canvas_data: string;
   }): Promise<StudentCopy> {
     // Check if slide exists
-    const slide = SlidesRepository.getById(data.slide_id);
+    const slide = await SlidesRepository.getById(data.slide_id);
     if (!slide) {
       throw new NotFoundError('Slide');
     }
@@ -23,7 +23,7 @@ export class SnapshotService {
     }
 
     // Save copy (upsert)
-    const copy = StudentCopiesRepository.save({
+    const copy = await StudentCopiesRepository.save({
       slide_id: data.slide_id,
       student_id: data.student_id,
       canvas_data: data.canvas_data,
@@ -34,7 +34,7 @@ export class SnapshotService {
 
   // Get copy by ID
   static async getById(copyId: string, userId: string): Promise<StudentCopy> {
-    const copy = StudentCopiesRepository.getById(copyId);
+    const copy = await StudentCopiesRepository.getById(copyId);
     if (!copy) {
       throw new NotFoundError('Snapshot');
     }
@@ -49,25 +49,25 @@ export class SnapshotService {
 
   // Get all copies by student with details
   static async getByStudent(studentId: string): Promise<any[]> {
-    return StudentCopiesRepository.getByStudentWithDetails(studentId);
+    return await StudentCopiesRepository.getByStudentWithDetails(studentId);
   }
 
   // Get copy for specific slide and student
   static async getBySlideAndStudent(slideId: string, studentId: string): Promise<StudentCopy | null> {
     // Check if slide exists
-    const slide = SlidesRepository.getById(slideId);
+    const slide = await SlidesRepository.getById(slideId);
     if (!slide) {
       throw new NotFoundError('Slide');
     }
 
-    const copy = StudentCopiesRepository.getBySlideAndStudent(slideId, studentId);
+    const copy = await StudentCopiesRepository.getBySlideAndStudent(slideId, studentId);
     return copy || null;
   }
 
   // Delete copy (only owner)
   static async delete(copyId: string, userId: string): Promise<void> {
     // Get copy
-    const copy = StudentCopiesRepository.getById(copyId);
+    const copy = await StudentCopiesRepository.getById(copyId);
     if (!copy) {
       throw new NotFoundError('Snapshot');
     }
@@ -78,7 +78,7 @@ export class SnapshotService {
     }
 
     // Delete copy
-    const deleted = StudentCopiesRepository.delete(copyId);
+    const deleted = await StudentCopiesRepository.delete(copyId);
     if (!deleted) {
       throw new NotFoundError('Snapshot');
     }
@@ -87,11 +87,11 @@ export class SnapshotService {
   // Get all copies for a slide (teacher view)
   static async getBySlide(slideId: string): Promise<any[]> {
     // Check if slide exists
-    const slide = SlidesRepository.getById(slideId);
+    const slide = await SlidesRepository.getById(slideId);
     if (!slide) {
       throw new NotFoundError('Slide');
     }
 
-    return StudentCopiesRepository.getBySlide(slideId);
+    return await StudentCopiesRepository.getBySlide(slideId);
   }
 }

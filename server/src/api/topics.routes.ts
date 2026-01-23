@@ -3,6 +3,10 @@ import { body, param } from 'express-validator';
 import { authMiddleware } from '../middleware/auth.middleware';
 import { asyncHandler } from '../middleware/error.middleware';
 import { topicsService } from '../services/topics.service';
+<<<<<<< HEAD
+=======
+import { SlidesRepository } from '../db/repositories';
+>>>>>>> f404e31 (temp commit to switch branches)
 
 const router = Router();
 
@@ -88,8 +92,11 @@ router.get(
 
 /**
  * GET /api/topics/:topicId/slides
+<<<<<<< HEAD
  * Get all slides for a topic
  * Access: All authenticated users
+=======
+>>>>>>> f404e31 (temp commit to switch branches)
  */
 router.get(
   '/topics/:topicId/slides',
@@ -98,6 +105,7 @@ router.get(
   asyncHandler(async (req: any, res: any) => {
     const { topicId } = req.params;
     
+<<<<<<< HEAD
     // Use SlidesRepository to get slides by topic
     const { getDb } = require('../db/database');
     const db = getDb();
@@ -107,6 +115,9 @@ router.get(
       WHERE topic_id = ? 
       ORDER BY slide_number ASC
     `).all(topicId);
+=======
+    const slides = await SlidesRepository.getByTopic(topicId);
+>>>>>>> f404e31 (temp commit to switch branches)
 
     res.status(200).json({
       success: true,

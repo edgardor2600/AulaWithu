@@ -9,7 +9,11 @@ import { UnauthorizedError } from '../utils/AppError';
  * Usage:
  * router.post('/admin-endpoint', authMiddleware, adminMiddleware, handler);
  */
+<<<<<<< HEAD
 export const adminMiddleware = (req: Request, res: Response, next: NextFunction) => {
+=======
+export const adminMiddleware = async (req: Request, res: Response, next: NextFunction) => {
+>>>>>>> f404e31 (temp commit to switch branches)
   try {
     // Check if user is authenticated (set by authMiddleware)
     if (!(req as any).user) {
@@ -19,7 +23,11 @@ export const adminMiddleware = (req: Request, res: Response, next: NextFunction)
     const userId = (req as any).user.userId;
 
     // Get user from database
+<<<<<<< HEAD
     const user = UsersRepository.getById(userId);
+=======
+    const user = await UsersRepository.getById(userId);
+>>>>>>> f404e31 (temp commit to switch branches)
 
     if (!user) {
       throw new UnauthorizedError('User not found');
