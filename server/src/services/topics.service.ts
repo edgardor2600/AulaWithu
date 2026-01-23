@@ -1,8 +1,12 @@
+<<<<<<< HEAD
 import { getDb } from '../db/database';
+=======
+>>>>>>> f404e31 (temp commit to switch branches)
 import { TopicsRepository, ClassesRepository } from '../db/repositories';
 
 /**
  * Topics Service
+<<<<<<< HEAD
  * Handles business logic for topics management
  */
 export class TopicsService {
@@ -16,6 +20,12 @@ export class TopicsService {
   /**
    * Create a new topic
    * Only class owner (teacher/admin) can create topics
+=======
+ */
+export class TopicsService {
+  /**
+   * Create a new topic
+>>>>>>> f404e31 (temp commit to switch branches)
    */
   async createTopic(
     classId: string,
@@ -36,7 +46,11 @@ export class TopicsService {
     }
 
     // Create topic
+<<<<<<< HEAD
     return this.topicsRepo.create(classId, {
+=======
+    return await TopicsRepository.create(classId, {
+>>>>>>> f404e31 (temp commit to switch branches)
       title: data.title.trim(),
       description: data.description?.trim(),
     });
@@ -44,6 +58,7 @@ export class TopicsService {
 
   /**
    * Get all topics for a class
+<<<<<<< HEAD
    * Students can view, teachers/admins get full access
    */
   async getClassTopics(classId: string, userId: string, userRole: string) {
@@ -59,19 +74,36 @@ export class TopicsService {
     }
 
     return this.topicsRepo.getTopicsWithSlideCount(classId);
+=======
+   */
+  async getClassTopics(classId: string, userId: string, userRole: string) {
+    if (userRole === 'teacher') {
+      await this.validateClassPermissions(classId, userId, userRole);
+    }
+
+    return await TopicsRepository.getTopicsWithSlideCount(classId);
+>>>>>>> f404e31 (temp commit to switch branches)
   }
 
   /**
    * Get a single topic
    */
   async getTopic(topicId: string, userId: string, userRole: string) {
+<<<<<<< HEAD
     const topic = this.topicsRepo.getById(topicId);
+=======
+    const topic = await TopicsRepository.getById(topicId);
+>>>>>>> f404e31 (temp commit to switch branches)
     
     if (!topic) {
       throw new Error('Topic not found');
     }
 
+<<<<<<< HEAD
     // Validate permissions for non-students
+=======
+    // Validate permissions: teachers must own the class, students have read access
+>>>>>>> f404e31 (temp commit to switch branches)
     if (userRole === 'teacher') {
       await this.validateClassPermissions(topic.class_id, userId, userRole);
     }
@@ -81,7 +113,10 @@ export class TopicsService {
 
   /**
    * Update a topic
+<<<<<<< HEAD
    * Only class owner can update
+=======
+>>>>>>> f404e31 (temp commit to switch branches)
    */
   async updateTopic(
     topicId: string,
@@ -89,7 +124,11 @@ export class TopicsService {
     userId: string,
     userRole: string
   ) {
+<<<<<<< HEAD
     const topic = this.topicsRepo.getById(topicId);
+=======
+    const topic = await TopicsRepository.getById(topicId);
+>>>>>>> f404e31 (temp commit to switch branches)
     
     if (!topic) {
       throw new Error('Topic not found');
@@ -113,16 +152,26 @@ export class TopicsService {
       data.description = data.description.trim();
     }
 
+<<<<<<< HEAD
     return this.topicsRepo.update(topicId, data);
+=======
+    return await TopicsRepository.update(topicId, data);
+>>>>>>> f404e31 (temp commit to switch branches)
   }
 
   /**
    * Delete a topic
+<<<<<<< HEAD
    * Only class owner can delete
    * Topic must have no slides
    */
   async deleteTopic(topicId: string, userId: string, userRole: string) {
     const topic = this.topicsRepo.getById(topicId);
+=======
+   */
+  async deleteTopic(topicId: string, userId: string, userRole: string) {
+    const topic = await TopicsRepository.getById(topicId);
+>>>>>>> f404e31 (temp commit to switch branches)
     
     if (!topic) {
       throw new Error('Topic not found');
@@ -133,7 +182,11 @@ export class TopicsService {
 
     // Try to delete (will throw if topic has slides)
     try {
+<<<<<<< HEAD
       this.topicsRepo.delete(topicId);
+=======
+      await TopicsRepository.delete(topicId);
+>>>>>>> f404e31 (temp commit to switch branches)
       return { success: true };
     } catch (error: any) {
       throw new Error(error.message || 'Failed to delete topic');
@@ -142,7 +195,10 @@ export class TopicsService {
 
   /**
    * Reorder topics
+<<<<<<< HEAD
    * Only class owner can reorder
+=======
+>>>>>>> f404e31 (temp commit to switch branches)
    */
   async reorderTopics(
     classId: string,
@@ -155,25 +211,40 @@ export class TopicsService {
 
     // Validate all topics belong to this class
     for (const topicId of topicIds) {
+<<<<<<< HEAD
       if (!this.topicsRepo.belongsToClass(topicId, classId)) {
+=======
+      if (!await TopicsRepository.belongsToClass(topicId, classId)) {
+>>>>>>> f404e31 (temp commit to switch branches)
         throw new Error(`Topic ${topicId} does not belong to class ${classId}`);
       }
     }
 
+<<<<<<< HEAD
     this.topicsRepo.reorderTopics(classId, topicIds);
+=======
+    await TopicsRepository.reorderTopics(classId, topicIds);
+>>>>>>> f404e31 (temp commit to switch branches)
     return { success: true };
   }
 
   /**
    * Helper: Validate user has permission to manage class
+<<<<<<< HEAD
    * Admins have full access, teachers only their own classes
+=======
+>>>>>>> f404e31 (temp commit to switch branches)
    */
   private async validateClassPermissions(
     classId: string,
     userId: string,
     userRole: string
   ) {
+<<<<<<< HEAD
     const classData = ClassesRepository.getById(classId);
+=======
+    const classData = await ClassesRepository.getById(classId);
+>>>>>>> f404e31 (temp commit to switch branches)
 
     if (!classData) {
       throw new Error('Class not found');
