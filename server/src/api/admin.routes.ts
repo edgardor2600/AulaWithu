@@ -108,7 +108,11 @@ router.get(
   asyncHandler(async (req: any, res: any) => {
     const role = req.query.role as 'admin' | 'teacher' | 'student' | undefined;
 
+<<<<<<< HEAD
     const users = AdminService.getAllUsers(role);
+=======
+    const users = await AdminService.getAllUsers(role);
+>>>>>>> f404e31 (temp commit to switch branches)
 
     res.status(200).json({
       success: true,
@@ -137,7 +141,11 @@ router.patch(
     const { id } = req.params;
     const adminId = req.user.userId;
 
+<<<<<<< HEAD
     const user = AdminService.deactivateUser(id, adminId);
+=======
+    const user = await AdminService.deactivateUser(id, adminId);
+>>>>>>> f404e31 (temp commit to switch branches)
 
     res.status(200).json({
       success: true,
@@ -162,7 +170,11 @@ router.patch(
     const { id } = req.params;
     const adminId = req.user.userId;
 
+<<<<<<< HEAD
     const user = AdminService.activateUser(id, adminId);
+=======
+    const user = await AdminService.activateUser(id, adminId);
+>>>>>>> f404e31 (temp commit to switch branches)
 
     res.status(200).json({
       success: true,
@@ -187,7 +199,11 @@ router.delete(
     const { id } = req.params;
     const adminId = req.user.userId;
 
+<<<<<<< HEAD
     const deleted = AdminService.deleteUser(id, adminId);
+=======
+    const deleted = await AdminService.deleteUser(id, adminId);
+>>>>>>> f404e31 (temp commit to switch branches)
 
     if (!deleted) {
       return res.status(404).json({
@@ -226,7 +242,11 @@ router.post(
     const { teacherId, studentId, notes } = req.body;
     const adminId = req.user.userId;
 
+<<<<<<< HEAD
     const assignment = AdminService.assignStudentToTeacher(
+=======
+    const assignment = await AdminService.assignStudentToTeacher(
+>>>>>>> f404e31 (temp commit to switch branches)
       { teacherId, studentId, notes },
       adminId
     );
@@ -261,7 +281,11 @@ router.delete(
     const { teacherId, studentId } = req.body;
     const adminId = req.user.userId;
 
+<<<<<<< HEAD
     const unassigned = AdminService.unassignStudentFromTeacher(teacherId, studentId, adminId);
+=======
+    const unassigned = await AdminService.unassignStudentFromTeacher(teacherId, studentId, adminId);
+>>>>>>> f404e31 (temp commit to switch branches)
 
     if (!unassigned) {
       return res.status(404).json({
@@ -289,7 +313,11 @@ router.get(
   asyncHandler(async (req: any, res: any) => {
     const activeOnly = req.query.activeOnly !== 'false'; // Default: true
 
+<<<<<<< HEAD
     const assignments = AdminService.getAllAssignments(activeOnly);
+=======
+    const assignments = await AdminService.getAllAssignments(activeOnly);
+>>>>>>> f404e31 (temp commit to switch branches)
 
     res.status(200).json({
       success: true,
@@ -346,7 +374,11 @@ router.get(
   asyncHandler(async (req: any, res: any) => {
     const { studentId } = req.params;
 
+<<<<<<< HEAD
     const assignments = AdminService.getTeachersByStudent(studentId);
+=======
+    const assignments = await AdminService.getTeachersByStudent(studentId);
+>>>>>>> f404e31 (temp commit to switch branches)
 
     res.status(200).json({
       success: true,
@@ -374,7 +406,11 @@ router.get(
 router.get(
   '/stats',
   asyncHandler(async (req: any, res: any) => {
+<<<<<<< HEAD
     const stats = AdminService.getStats();
+=======
+    const stats = await AdminService.getStats();
+>>>>>>> f404e31 (temp commit to switch branches)
 
     res.status(200).json({
       success: true,

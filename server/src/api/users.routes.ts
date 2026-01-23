@@ -19,6 +19,7 @@ router.get(
     const teacherId = req.user.userId;
 
     // Get assignments
+<<<<<<< HEAD
     const assignments = TeacherStudentsRepository.getStudentsByTeacher(teacherId);
 
     // Get full student details
@@ -27,12 +28,25 @@ router.get(
       return {
         assignment_id: assignment.id,
         student: student ? {
+=======
+    const assignments = await TeacherStudentsRepository.getStudentsByTeacher(teacherId);
+
+    // Get full student details
+    const studentsWithDetails = await Promise.all(assignments.map(async (assignment) => {
+      const student = await UsersRepository.getById(assignment.student_id);
+      if (!student) return null;
+      
+      return {
+        assignment_id: assignment.id,
+        student: {
+>>>>>>> f404e31 (temp commit to switch branches)
           id: student.id,
           name: student.name,
           username: student.username,
           avatar_color: student.avatar_color,
           active: student.active === 1,
           last_login: student.last_login,
+<<<<<<< HEAD
         } : null,
         assigned_at: assignment.assigned_at,
         notes: assignment.notes,
@@ -43,6 +57,20 @@ router.get(
       success: true,
       count: studentsWithDetails.length,
       students: studentsWithDetails,
+=======
+        },
+        assigned_at: assignment.assigned_at,
+        notes: assignment.notes,
+      };
+    }));
+
+    const filteredStudents = studentsWithDetails.filter(item => item !== null);
+
+    res.status(200).json({
+      success: true,
+      count: filteredStudents.length,
+      students: filteredStudents,
+>>>>>>> f404e31 (temp commit to switch branches)
     });
   })
 );
@@ -68,6 +96,7 @@ router.get(
     }
 
     // Get teacher assignments
+<<<<<<< HEAD
     const assignments = TeacherStudentsRepository.getTeachersByStudent(studentId);
 
     // Get full teacher details with classes count
@@ -77,6 +106,17 @@ router.get(
 
       // Count classes for this teacher
       const classes = ClassesRepository.getByTeacher(assignment.teacher_id);
+=======
+    const assignments = await TeacherStudentsRepository.getTeachersByStudent(studentId);
+
+    // Get full teacher details with classes count
+    const teachersWithDetails = await Promise.all(assignments.map(async (assignment) => {
+      const teacher = await UsersRepository.getById(assignment.teacher_id);
+      if (!teacher || !teacher.active) return null;
+
+      // Count classes for this teacher
+      const classes = await ClassesRepository.getByTeacher(assignment.teacher_id);
+>>>>>>> f404e31 (temp commit to switch branches)
 
       return {
         teacher_id: teacher.id,
@@ -85,12 +125,23 @@ router.get(
         assigned_at: assignment.assigned_at,
         classes_count: classes.length,
       };
+<<<<<<< HEAD
     }).filter(item => item !== null);
 
     res.status(200).json({
       success: true,
       count: teachersWithDetails.length,
       teachers: teachersWithDetails,
+=======
+    }));
+
+    const filteredTeachers = teachersWithDetails.filter(item => item !== null);
+
+    res.status(200).json({
+      success: true,
+      count: filteredTeachers.length,
+      teachers: filteredTeachers,
+>>>>>>> f404e31 (temp commit to switch branches)
     });
   })
 );
