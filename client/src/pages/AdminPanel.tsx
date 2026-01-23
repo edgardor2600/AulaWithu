@@ -98,8 +98,8 @@ export const AdminPanel = () => {
               </div>
             </div>
 
-            <div className="flex items-center gap-4">
-              <div className="text-right">
+            <div className="flex items-center gap-4 shrink-0">
+              <div className="text-right hidden sm:block">
                 <p className="text-sm font-medium text-gray-900">{user?.name}</p>
                 <p className="text-xs text-gray-500">Administrador</p>
               </div>
@@ -116,9 +116,9 @@ export const AdminPanel = () => {
       </header>
 
       {/* Tabs */}
-      <div className="bg-white border-b border-gray-200">
+      <div className="bg-white border-b border-gray-200 overflow-x-auto custom-scrollbar">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <nav className="flex gap-8">
+          <nav className="flex gap-8 min-w-max">
             <button
               onClick={() => setActiveTab('stats')}
               className={`py-4 border-b-2 font-medium text-sm transition flex items-center gap-2 ${

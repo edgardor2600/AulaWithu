@@ -199,64 +199,74 @@ export function useYjs(
     
     ySessionPermissions.observe(handlePermissionsChange);
 
-    // ✅ NUEVO: Sincronización de viewport (pan/zoom)
-    let isApplyingViewport = false; // Flag para evitar loops
+    // ✅ NUEVO: Sincronización de viewport RELATIVA (pan/zoom)
+    let isApplyingViewport = false;
     
-    // Listener para cambios de viewport (solo estudiantes)
+    // Listener para cambios de viewport (estudiantes siguen área del profe)
     const handleViewportChange = () => {
-      if (isTeacher || !canvas || isApplyingViewport) return;
+      if (isTeacher || !canvas || isApplyingViewport || !isReadOnly) return;
       
-      const viewportData = yViewport.get('transform');
-      if (viewportData && Array.isArray(viewportData) && viewportData.length === 6) {
+      const teacherArea = yViewport.get('area') as { x1: number, y1: number, x2: number, y2: number } | undefined;
+      if (teacherArea) {
         isApplyingViewport = true;
-        console.log('📺 Applying teacher viewport:', viewportData);
         
-        // Aplicar transformación del viewport
-        canvas.setViewportTransform(viewportData as [number, number, number, number, number, number]);
+        const { x1, y1, x2, y2 } = teacherArea;
+        const width = x2 - x1;
+        const height = y2 - y1;
+        
+        // Calcular escala necesaria para que el área del profe quepa en mi pantalla
+        const scaleX = canvas.getWidth() / width;
+        const scaleY = canvas.getHeight() / height;
+        const newScale = Math.min(scaleX, scaleY); // Mantener aspecto
+        
+        // Centrar mi vista en ese mismo punto
+        canvas.setZoom(newScale);
+        const vpt = canvas.viewportTransform;
+        if (vpt) {
+            // Posicionar para que x1, y1 quede en la esquina (con centrado si sobra espacio)
+            vpt[4] = -x1 * newScale + (canvas.getWidth() - width * newScale) / 2;
+            vpt[5] = -y1 * newScale + (canvas.getHeight() - height * newScale) / 2;
+        }
+        
         canvas.requestRenderAll();
-        
         isApplyingViewport = false;
       }
     };
     
     yViewport.observe(handleViewportChange);
     
-    // Broadcast viewport changes (solo profesor)
+    // Broadcast del área visible (solo profesor)
     let viewportBroadcastTimeout: number | null = null;
     
-    const broadcastViewport = () => {
+    const broadcastViewportArea = () => {
       if (!isTeacher || !canvas || isApplyingViewport) return;
       
-      // Debounce para no saturar la red
-      if (viewportBroadcastTimeout) {
-        clearTimeout(viewportBroadcastTimeout);
-      }
+      if (viewportBroadcastTimeout) clearTimeout(viewportBroadcastTimeout);
       
       viewportBroadcastTimeout = setTimeout(() => {
         const vpt = canvas.viewportTransform;
         if (vpt) {
-          yViewport.set('transform', [...vpt]); // Clonar array
-          console.log('📡 Teacher broadcasting viewport:', vpt);
+          const zoom = canvas.getZoom();
+          // Calcular coordenadas mundo de lo que el profesor está viendo
+          const x1 = -vpt[4] / zoom;
+          const y1 = -vpt[5] / zoom;
+          const x2 = x1 + canvas.getWidth() / zoom;
+          const y2 = y1 + canvas.getHeight() / zoom;
+          
+          yViewport.set('area', { x1, y1, x2, y2 });
         }
-      }, 50) as unknown as number; // 50ms debounce
+      }, 50) as unknown as number;
     };
     
-    // Escuchar eventos de viewport del canvas (solo profesor)
     if (isTeacher) {
-      // Detectar cambios en el viewport (pan/zoom)
-      const handleCanvasMouseWheel = () => broadcastViewport();
-      const handleCanvasMouseMove = () => {
-        // Solo broadcast si se está haciendo pan
-        if ((canvas as any)._isPanning) {
-          broadcastViewport();
-        }
-      };
+      canvas.on('mouse:wheel', broadcastViewportArea);
+      canvas.on('mouse:move', () => {
+        if ((canvas as any)._isPanning) broadcastViewportArea();
+      });
+      canvas.on('mouse:up', broadcastViewportArea);
       
-      canvas.on('mouse:wheel', handleCanvasMouseWheel);
-      canvas.on('mouse:move', handleCanvasMouseMove);
-      
-      // También capturar cuando termine el pan
-      canvas.on('mouse:up', broadcastViewport);
+      // Broadcast inicial
+      broadcastViewportArea();
     }
 
     /**

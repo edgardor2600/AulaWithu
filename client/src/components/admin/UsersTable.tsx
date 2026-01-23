@@ -98,24 +98,24 @@ export const UsersTable = ({ users, onRefresh, onCreateUser }: UsersTableProps) 
   return (
     <div className="space-y-4">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h2 className="text-2xl font-bold text-gray-900">Gestión de Usuarios</h2>
           <p className="text-sm text-gray-500 mt-1">
             {filteredUsers.length} usuario{filteredUsers.length !== 1 ? 's' : ''}
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-col sm:flex-row gap-2">
           <button
             onClick={() => onCreateUser('teacher')}
-            className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition flex items-center gap-2"
+            className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition flex items-center justify-center gap-2"
           >
             <UserPlus className="w-4 h-4" />
             Crear Profesor
           </button>
           <button
             onClick={() => onCreateUser('student')}
-            className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition flex items-center gap-2"
+            className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition flex items-center justify-center gap-2"
           >
             <UserPlus className="w-4 h-4" />
             Crear Estudiante
@@ -141,18 +141,18 @@ export const UsersTable = ({ users, onRefresh, onCreateUser }: UsersTableProps) 
           </div>
 
           {/* Role Filter */}
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             {(['all', 'admin', 'teacher', 'student'] as const).map((role) => (
               <button
                 key={role}
                 onClick={() => setFilter(role)}
-                className={`px-4 py-2 rounded-lg font-medium text-sm transition ${
+                className={`flex-1 sm:flex-none px-4 py-2 rounded-lg font-medium text-sm transition ${
                   filter === role
                     ? 'bg-blue-600 text-white'
                     : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                 }`}
               >
-                {role === 'all' ? 'Todos' : role === 'admin' ? 'Admins' : role === 'teacher' ? 'Profesores' : 'Estudiantes'}
+                {role === 'all' ? 'Todos' : role === 'admin' ? 'Admins' : role === 'teacher' ? 'Prof.' : 'Est.'}
               </button>
             ))}
           </div>
