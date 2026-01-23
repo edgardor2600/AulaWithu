@@ -1,4 +1,10 @@
-import { ClassesRepository, SlidesRepository, SessionsRepository, StudentCopiesRepository } from '../db/repositories';
+import { 
+  ClassesRepository, 
+  SlidesRepository, 
+  SessionsRepository, 
+  StudentCopiesRepository,
+  TeacherStudentsRepository
+} from '../db/repositories';
 import { Class } from '../types/database';
 import { NotFoundError, ForbiddenError, ValidationError } from '../utils/AppError';
 
@@ -19,7 +25,7 @@ export class ClassService {
     }
 
     // Create class
-    const newClass = ClassesRepository.create({
+    const newClass = await ClassesRepository.create({
       title: data.title.trim(),
       description: data.description?.trim(),
       teacher_id: data.teacher_id,
@@ -30,17 +36,17 @@ export class ClassService {
 
   // Get class by ID with slides
   static async getById(classId: string): Promise<any> {
-    const classData = ClassesRepository.getById(classId);
+    const classData = await ClassesRepository.getById(classId);
 
     if (!classData) {
       throw new NotFoundError('Class');
     }
 
     // Get slides for this class
-    const slides = SlidesRepository.getByClass(classId);
+    const slides = await SlidesRepository.getByClass(classId);
 
     // Get teacher info
-    const classWithDetails = ClassesRepository.getByIdWithTeacher(classId);
+    const classWithDetails = await ClassesRepository.getByIdWithTeacher(classId);
 
     return {
       ...classWithDetails,
@@ -54,22 +60,37 @@ export class ClassService {
     // ADMIN: Ve todas las clases
     if (userRole === 'admin') {
       if (teacherId) {
+<<<<<<< HEAD
         return ClassesRepository.getByTeacher(teacherId);
       }
       return ClassesRepository.getAll();
+=======
+        return await ClassesRepository.getByTeacher(teacherId);
+      }
+      return await ClassesRepository.getAll();
+>>>>>>> f404e31 (temp commit to switch branches)
     }
 
     // PROFESOR: Solo ve sus propias clases
     if (userRole === 'teacher') {
+<<<<<<< HEAD
       return ClassesRepository.getByTeacher(userId);
+=======
+      return await ClassesRepository.getByTeacher(userId);
+>>>>>>> f404e31 (temp commit to switch branches)
     }
 
     // ESTUDIANTE: Solo ve clases de profesores asignados
     if (userRole === 'student') {
+<<<<<<< HEAD
       const { TeacherStudentsRepository } = require('../db/repositories');
       
       // Obtener los profesores asignados a este estudiante
       const assignments = TeacherStudentsRepository.getTeachersByStudent(userId);
+=======
+      // Obtener los profesores asignados a este estudiante
+      const assignments = await TeacherStudentsRepository.getTeachersByStudent(userId);
+>>>>>>> f404e31 (temp commit to switch branches)
       
       if (assignments.length === 0) {
         return []; // No tiene profesores asignados
@@ -80,7 +101,11 @@ export class ClassService {
       const allClasses: Class[] = [];
 
       for (const teacherId of teacherIds) {
+<<<<<<< HEAD
         const classes = ClassesRepository.getByTeacher(teacherId);
+=======
+        const classes = await ClassesRepository.getByTeacher(teacherId);
+>>>>>>> f404e31 (temp commit to switch branches)
         allClasses.push(...classes);
       }
 
@@ -101,7 +126,7 @@ export class ClassService {
     }
   ): Promise<Class> {
     // Check if class exists
-    const existingClass = ClassesRepository.getById(classId);
+    const existingClass = await ClassesRepository.getById(classId);
     if (!existingClass) {
       throw new NotFoundError('Class');
     }
@@ -122,7 +147,7 @@ export class ClassService {
     }
 
     // Update class
-    const updated = ClassesRepository.update(classId, {
+    const updated = await ClassesRepository.update(classId, {
       title: data.title?.trim(),
       description: data.description?.trim(),
       thumbnail_url: data.thumbnail_url,
@@ -140,7 +165,7 @@ export class ClassService {
     console.log('=== DELETE CLASS START ===', classId);
     
     // Check if class exists
-    const existingClass = ClassesRepository.getById(classId);
+    const existingClass = await ClassesRepository.getById(classId);
     if (!existingClass) {
       throw new NotFoundError('Class');
     }
@@ -153,24 +178,24 @@ export class ClassService {
     try {
       // 1. Borrar Sesiones
       console.log('Deleting sessions...');
-      SessionsRepository.deleteByClass(classId);
+      await SessionsRepository.deleteByClass(classId);
 
       // 2. Borrar copias de estudiantes para cada slide
       console.log('Fetching slides to delete student copies...');
-      const slides = SlidesRepository.getByClass(classId);
+      const slides = await SlidesRepository.getByClass(classId);
       
       for (const slide of slides) {
         console.log(`Deleting student copies for slide ${slide.id}...`);
-        StudentCopiesRepository.deleteBySlide(slide.id);
+        await StudentCopiesRepository.deleteBySlide(slide.id);
       }
 
       // 3. Borrar Slides
       console.log('Deleting slides...');
-      SlidesRepository.deleteByClass(classId);
+      await SlidesRepository.deleteByClass(classId);
 
       // 4. Borrar Clase
       console.log('Deleting class...');
-      const deleted = ClassesRepository.delete(classId);
+      const deleted = await ClassesRepository.delete(classId);
       
       if (!deleted) {
         throw new NotFoundError('Class'); // Should not happen if getById worked
@@ -184,7 +209,7 @@ export class ClassService {
 
   // Check if user owns class
   static async checkOwnership(classId: string, userId: string): Promise<boolean> {
-    const classData = ClassesRepository.getById(classId);
+    const classData = await ClassesRepository.getById(classId);
     if (!classData) {
       throw new NotFoundError('Class');
     }

@@ -35,7 +35,7 @@ export class SessionService {
     allow_student_draw?: boolean;
   }): Promise<Session> {
     // Validate class exists and belongs to teacher
-    const classData = ClassesRepository.getById(data.class_id);
+    const classData = await ClassesRepository.getById(data.class_id);
     if (!classData) {
       throw new NotFoundError('Class');
     }
@@ -45,7 +45,7 @@ export class SessionService {
     }
 
     // Validate slide exists and belongs to class
-    const slide = SlidesRepository.getById(data.slide_id);
+    const slide = await SlidesRepository.getById(data.slide_id);
     if (!slide) {
       throw new NotFoundError('Slide');
     }
@@ -55,7 +55,7 @@ export class SessionService {
     }
 
     // Check if there's already an active session for this slide
-    const existingSession = SessionsRepository.getActiveBySlide(data.slide_id);
+    const existingSession = await SessionsRepository.getActiveBySlide(data.slide_id);
     if (existingSession) {
       throw new ConflictError('There is already an active session for this slide');
     }
@@ -66,7 +66,7 @@ export class SessionService {
     
     while (attempts < maxAttempts) {
       try {
-        const session = SessionsRepository.create({
+        const session = await SessionsRepository.create({
           class_id: data.class_id,
           slide_id: data.slide_id,
           teacher_id: data.teacher_id,
@@ -75,8 +75,8 @@ export class SessionService {
         
         return session;
       } catch (error: any) {
-        // If unique constraint on session_code, retry
-        if (error.code === 'SQLITE_CONSTRAINT_UNIQUE' && attempts < maxAttempts - 1) {
+        // If unique constraint on session_code (Postgres code 23505), retry
+        if (error.code === '23505' && attempts < maxAttempts - 1) {
           attempts++;
           continue;
         }
@@ -94,7 +94,7 @@ export class SessionService {
    * @returns Session data
    */
   static async getById(sessionId: string): Promise<Session> {
-    const session = SessionsRepository.getById(sessionId);
+    const session = await SessionsRepository.getById(sessionId);
     if (!session) {
       throw new NotFoundError('Session');
     }
@@ -115,7 +115,7 @@ export class SessionService {
    */
   static async joinByCode(sessionCode: string, userId: string): Promise<Session> {
     // Find session by code
-    const session = SessionsRepository.getByCode(sessionCode.toUpperCase());
+    const session = await SessionsRepository.getByCode(sessionCode.toUpperCase());
     if (!session) {
       throw new NotFoundError('Session with this code');
     }
@@ -146,7 +146,7 @@ export class SessionService {
     allowStudentDraw: boolean
   ): Promise<Session> {
     // Get session
-    const session = SessionsRepository.getById(sessionId);
+    const session = await SessionsRepository.getById(sessionId);
     if (!session) {
       throw new NotFoundError('Session');
     }
@@ -162,7 +162,7 @@ export class SessionService {
     }
 
     // Update permissions
-    const updated = SessionsRepository.updatePermissions(sessionId, allowStudentDraw);
+    const updated = await SessionsRepository.updatePermissions(sessionId, allowStudentDraw);
     if (!updated) {
       throw new NotFoundError('Session');
     }
@@ -189,7 +189,7 @@ static async updateSlide(
   slideId: string
 ): Promise<Session> {
   // Get session
-  const session = SessionsRepository.getById(sessionId);
+  const session = await SessionsRepository.getById(sessionId);
   if (!session) {
     throw new NotFoundError('Session');
   }
@@ -205,7 +205,7 @@ static async updateSlide(
   }
 
   // Validate slide exists and belongs to same class
-  const slide = SlidesRepository.getById(slideId);
+  const slide = await SlidesRepository.getById(slideId);
   if (!slide) {
     throw new NotFoundError('Slide');
   }
@@ -215,7 +215,7 @@ static async updateSlide(
   }
 
   // Update slide
-  const updated = SessionsRepository.updateSlide(sessionId, slideId);
+  const updated = await SessionsRepository.updateSlide(sessionId, slideId);
   if (!updated) {
     throw new NotFoundError('Session');
   }
@@ -236,7 +236,7 @@ static async updateSlide(
    */
   static async end(sessionId: string, teacherId: string): Promise<Session> {
     // Get session
-    const session = SessionsRepository.getById(sessionId);
+    const session = await SessionsRepository.getById(sessionId);
     if (!session) {
       throw new NotFoundError('Session');
     }
@@ -252,7 +252,7 @@ static async updateSlide(
     }
 
     // End session
-    const ended = SessionsRepository.end(sessionId);
+    const ended = await SessionsRepository.end(sessionId);
     if (!ended) {
       throw new NotFoundError('Session');
     }
@@ -267,7 +267,7 @@ static async updateSlide(
    * @returns List of active sessions
    */
   static async getActiveByTeacher(teacherId: string): Promise<Session[]> {
-    return SessionsRepository.getActiveByTeacher(teacherId);
+    return await SessionsRepository.getActiveByTeacher(teacherId);
   }
 
   /**
@@ -279,7 +279,7 @@ static async updateSlide(
    */
   static async getByClass(classId: string, teacherId: string): Promise<Session[]> {
     // Verify class ownership
-    const classData = ClassesRepository.getById(classId);
+    const classData = await ClassesRepository.getById(classId);
     if (!classData) {
       throw new NotFoundError('Class');
     }
@@ -288,7 +288,7 @@ static async updateSlide(
       throw new ForbiddenError('You can only view sessions for your own classes');
     }
 
-    return SessionsRepository.getByClass(classId);
+    return await SessionsRepository.getByClass(classId);
   }
 
   /**
@@ -302,6 +302,6 @@ static async updateSlide(
     active: number;
     ended: number;
   }> {
-    return SessionsRepository.getStats(teacherId);
+    return await SessionsRepository.getStats(teacherId);
   }
 }

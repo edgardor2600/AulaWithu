@@ -29,7 +29,7 @@ export class AuthService {
     }
 
     // Check if user already exists by name
-    let user = UsersRepository.getByName(data.name.trim());
+    let user = await UsersRepository.getByName(data.name.trim());
 
     if (user) {
       // User exists - verify role matches
@@ -39,7 +39,7 @@ export class AuthService {
       // Return existing user
     } else {
       // Create new user
-      user = UsersRepository.create({
+      user = await UsersRepository.create({
         name: data.name.trim(),
         role: data.role,
       });
@@ -79,7 +79,11 @@ export class AuthService {
     }
 
     // Find user by username (case-insensitive, active users only)
+<<<<<<< HEAD
     const user = UsersRepository.getByUsername(data.username);
+=======
+    const user = await UsersRepository.getByUsername(data.username);
+>>>>>>> f404e31 (temp commit to switch branches)
 
     if (!user) {
       // Generic error message to prevent username enumeration
@@ -99,7 +103,11 @@ export class AuthService {
     }
 
     // Update last login timestamp
+<<<<<<< HEAD
     UsersRepository.updateLastLogin(user.id);
+=======
+    await UsersRepository.updateLastLogin(user.id);
+>>>>>>> f404e31 (temp commit to switch branches)
 
     // Generate JWT token
     const token = generateToken({
@@ -108,6 +116,7 @@ export class AuthService {
     });
 
     return { user, token };
+<<<<<<< HEAD
   }
 
   /**
@@ -275,13 +284,182 @@ export class AuthService {
   }
 
   /**
+=======
+  }
+
+  /**
+   * Register a new teacher with username and password
+   * @param data - Registration data
+   * @returns Newly created user and JWT token
+   * @throws ConflictError if username already exists
+   * @throws ValidationError if validation fails
+   */
+  static async registerTeacher(data: {
+    name: string;
+    username: string;
+    password: string;
+  }): Promise<{ user: User; token: string }> {
+    // Validate input
+    if (!data.name || data.name.trim().length === 0) {
+      throw new ValidationError('Name is required');
+    }
+
+    if (!data.username || data.username.trim().length === 0) {
+      throw new ValidationError('Username is required');
+    }
+
+    if (data.username.trim().length < 3) {
+      throw new ValidationError('Username must be at least 3 characters long');
+    }
+
+    // Validate password strength
+    const passwordValidation = validatePasswordStrength(data.password);
+    if (!passwordValidation.isValid) {
+      throw new ValidationError(passwordValidation.errors.join(', '));
+    }
+
+    // Check if username is already taken
+    if (await UsersRepository.isUsernameTaken(data.username)) {
+      throw new ConflictError('Username is already taken');
+    }
+
+    // Hash password
+    const password_hash = await hashPassword(data.password);
+
+    // Create user with authentication
+    const user = await UsersRepository.createWithAuth({
+      name: data.name.trim(),
+      username: data.username.trim(),
+      password_hash,
+      role: 'teacher',
+    });
+
+    // Generate JWT token
+    const token = generateToken({
+      userId: user.id,
+      role: user.role,
+    });
+
+    return { user, token };
+  }
+
+  /**
+   * Register a new student with username and password
+   * @param data - Registration data
+   * @returns Newly created user and JWT token
+   * @throws ConflictError if username already exists
+   * @throws ValidationError if validation fails
+   */
+  static async registerStudent(data: {
+    name: string;
+    username: string;
+    password: string;
+  }): Promise<{ user: User; token: string }> {
+    // Validate input
+    if (!data.name || data.name.trim().length === 0) {
+      throw new ValidationError('Name is required');
+    }
+
+    if (!data.username || data.username.trim().length === 0) {
+      throw new ValidationError('Username is required');
+    }
+
+    if (data.username.trim().length < 3) {
+      throw new ValidationError('Username must be at least 3 characters long');
+    }
+
+    // Validate password strength
+    const passwordValidation = validatePasswordStrength(data.password);
+    if (!passwordValidation.isValid) {
+      throw new ValidationError(passwordValidation.errors.join(', '));
+    }
+
+    // Check if username is already taken
+    if (await UsersRepository.isUsernameTaken(data.username)) {
+      throw new ConflictError('Username is already taken');
+    }
+
+    // Hash password
+    const password_hash = await hashPassword(data.password);
+
+    // Create user with authentication
+    const user = await UsersRepository.createWithAuth({
+      name: data.name.trim(),
+      username: data.username.trim(),
+      password_hash,
+      role: 'student',
+    });
+
+    // Generate JWT token
+    const token = generateToken({
+      userId: user.id,
+      role: user.role,
+    });
+
+    return { user, token };
+  }
+
+  /**
+   * Change user's password
+   * @param userId - User ID
+   * @param oldPassword - Current password
+   * @param newPassword - New password
+   * @throws ValidationError if current password is incorrect or new password is invalid
+   */
+  static async changePassword(
+    userId: string,
+    oldPassword: string,
+    newPassword: string
+  ): Promise<void> {
+    // Get user
+    const user = await UsersRepository.getById(userId);
+    if (!user) {
+      throw new ValidationError('User not found');
+    }
+
+    // Verify current password if user has one set
+    if (user.password_hash) {
+      const isCurrentPasswordValid = await comparePassword(oldPassword, user.password_hash);
+      if (!isCurrentPasswordValid) {
+        throw new ValidationError('Current password is incorrect');
+      }
+    }
+
+    // Validate new password strength
+    const passwordValidation = validatePasswordStrength(newPassword);
+    if (!passwordValidation.isValid) {
+      throw new ValidationError(passwordValidation.errors.join(', '));
+    }
+
+    // Hash new password
+    const newPasswordHash = await hashPassword(newPassword);
+
+    // Update password in database
+    await UsersRepository.updatePassword(userId, newPasswordHash);
+  }
+
+  // ============================================
+  // UTILITY METHODS (Unchanged)
+  // ============================================
+
+  /**
+   * Get user info by ID
+   * @param userId - User ID
+   * @returns User object or undefined if not found
+   */
+  static async getUserById(userId: string): Promise<User | undefined> {
+    return await UsersRepository.getById(userId);
+  }
+
+  /**
+>>>>>>> f404e31 (temp commit to switch branches)
    * Verify user exists and return user object
    * @param userId - User ID
    * @returns User object
    * @throws ValidationError if user not found
    */
   static async verifyUser(userId: string): Promise<User> {
-    const user = UsersRepository.getById(userId);
+    const user = await UsersRepository.getById(userId);
     if (!user) {
       throw new ValidationError('User not found');
     }
