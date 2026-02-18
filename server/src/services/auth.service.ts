@@ -1,4 +1,5 @@
 import { UsersRepository } from '../db/repositories';
+import { GroupsService } from './groups.service';
 import { User } from '../types/database';
 import { generateToken } from '../utils/jwt';
 import { ValidationError, ConflictError } from '../utils/AppError';
@@ -29,7 +30,7 @@ export class AuthService {
     }
 
     // Check if user already exists by name
-    let user = UsersRepository.getByName(data.name.trim());
+    let user = await UsersRepository.getByName(data.name.trim());
 
     if (user) {
       // User exists - verify role matches
@@ -39,7 +40,7 @@ export class AuthService {
       // Return existing user
     } else {
       // Create new user
-      user = UsersRepository.create({
+      user = await UsersRepository.create({
         name: data.name.trim(),
         role: data.role,
       });
@@ -79,7 +80,7 @@ export class AuthService {
     }
 
     // Find user by username (case-insensitive, active users only)
-    const user = UsersRepository.getByUsername(data.username);
+    const user = await UsersRepository.getByUsername(data.username);
 
     if (!user) {
       // Generic error message to prevent username enumeration
@@ -99,7 +100,7 @@ export class AuthService {
     }
 
     // Update last login timestamp
-    UsersRepository.updateLastLogin(user.id);
+    await UsersRepository.updateLastLogin(user.id);
 
     // Generate JWT token
     const token = generateToken({
@@ -142,7 +143,7 @@ export class AuthService {
     }
 
     // Check if username is already taken
-    if (UsersRepository.isUsernameTaken(data.username)) {
+    if (await UsersRepository.isUsernameTaken(data.username)) {
       throw new ConflictError('Username is already taken');
     }
 
@@ -150,7 +151,7 @@ export class AuthService {
     const password_hash = await hashPassword(data.password);
 
     // Create user with authentication
-    const user = UsersRepository.createWithAuth({
+    const user = await UsersRepository.createWithAuth({
       name: data.name.trim(),
       username: data.username.trim(),
       password_hash,
@@ -198,7 +199,7 @@ export class AuthService {
     }
 
     // Check if username is already taken
-    if (UsersRepository.isUsernameTaken(data.username)) {
+    if (await UsersRepository.isUsernameTaken(data.username)) {
       throw new ConflictError('Username is already taken');
     }
 
@@ -206,7 +207,7 @@ export class AuthService {
     const password_hash = await hashPassword(data.password);
 
     // Create user with authentication
-    const user = UsersRepository.createWithAuth({
+    const user = await UsersRepository.createWithAuth({
       name: data.name.trim(),
       username: data.username.trim(),
       password_hash,
@@ -235,7 +236,7 @@ export class AuthService {
     newPassword: string
   ): Promise<void> {
     // Get user
-    const user = UsersRepository.getById(userId);
+    const user = await UsersRepository.getById(userId);
     if (!user) {
       throw new ValidationError('User not found');
     }
@@ -258,7 +259,7 @@ export class AuthService {
     const newPasswordHash = await hashPassword(newPassword);
 
     // Update password in database
-    UsersRepository.updatePassword(userId, newPasswordHash);
+    await UsersRepository.updatePassword(userId, newPasswordHash);
   }
 
   // ============================================
@@ -271,7 +272,7 @@ export class AuthService {
    * @returns User object or undefined if not found
    */
   static async getUserById(userId: string): Promise<User | undefined> {
-    return UsersRepository.getById(userId);
+    return await UsersRepository.getById(userId);
   }
 
   /**
@@ -281,11 +282,10 @@ export class AuthService {
    * @throws ValidationError if user not found
    */
   static async verifyUser(userId: string): Promise<User> {
-    const user = UsersRepository.getById(userId);
+    const user = await UsersRepository.getById(userId);
     if (!user) {
       throw new ValidationError('User not found');
     }
     return user;
   }
 }
-

@@ -1,13 +1,19 @@
-import { ClassesRepository, SlidesRepository, SessionsRepository, StudentCopiesRepository } from '../db/repositories';
+import { 
+  ClassesRepository, 
+  SlidesRepository, 
+  SessionsRepository, 
+  StudentCopiesRepository,
+  EnrollmentsRepository
+} from '../db/repositories';
 import { Class } from '../types/database';
 import { NotFoundError, ForbiddenError, ValidationError } from '../utils/AppError';
 
 export class ClassService {
-  // Create a new class (teacher only)
   static async create(data: {
     title: string;
     description?: string;
     teacher_id: string;
+    level_id?: string;
   }): Promise<Class> {
     // Validate input
     if (!data.title || data.title.trim().length === 0) {
@@ -19,10 +25,11 @@ export class ClassService {
     }
 
     // Create class
-    const newClass = ClassesRepository.create({
+    const newClass = await ClassesRepository.create({
       title: data.title.trim(),
       description: data.description?.trim(),
       teacher_id: data.teacher_id,
+      level_id: data.level_id
     });
 
     return newClass;
@@ -30,17 +37,17 @@ export class ClassService {
 
   // Get class by ID with slides
   static async getById(classId: string): Promise<any> {
-    const classData = ClassesRepository.getById(classId);
+    const classData = await ClassesRepository.getById(classId);
 
     if (!classData) {
       throw new NotFoundError('Class');
     }
 
     // Get slides for this class
-    const slides = SlidesRepository.getByClass(classId);
+    const slides = await SlidesRepository.getByClass(classId);
 
     // Get teacher info
-    const classWithDetails = ClassesRepository.getByIdWithTeacher(classId);
+    const classWithDetails = await ClassesRepository.getByIdWithTeacher(classId);
 
     return {
       ...classWithDetails,
@@ -54,34 +61,30 @@ export class ClassService {
     // ADMIN: Ve todas las clases
     if (userRole === 'admin') {
       if (teacherId) {
-        return ClassesRepository.getByTeacher(teacherId);
+        return await ClassesRepository.getByTeacher(teacherId);
       }
-      return ClassesRepository.getAll();
+      return await ClassesRepository.getAll();
     }
 
     // PROFESOR: Solo ve sus propias clases
     if (userRole === 'teacher') {
-      return ClassesRepository.getByTeacher(userId);
+      return await ClassesRepository.getByTeacher(userId);
     }
 
-    // ESTUDIANTE: Solo ve clases de profesores asignados
+    // ESTUDIANTE: Solo ve clases donde está matriculado
     if (userRole === 'student') {
-      const { TeacherStudentsRepository } = require('../db/repositories');
+      const classIds = await EnrollmentsRepository.getStudentClasses(userId);
       
-      // Obtener los profesores asignados a este estudiante
-      const assignments = TeacherStudentsRepository.getTeachersByStudent(userId);
-      
-      if (assignments.length === 0) {
-        return []; // No tiene profesores asignados
+      if (classIds.length === 0) {
+        return [];
       }
 
-      // Obtener clases de todos los profesores asignados
-      const teacherIds = assignments.map((a: any) => a.teacher_id);
       const allClasses: Class[] = [];
-
-      for (const teacherId of teacherIds) {
-        const classes = ClassesRepository.getByTeacher(teacherId);
-        allClasses.push(...classes);
+      for (const classId of classIds) {
+        const classObj = await ClassesRepository.getById(classId);
+        if (classObj) {
+          allClasses.push(classObj);
+        }
       }
 
       return allClasses;
@@ -98,10 +101,11 @@ export class ClassService {
       title?: string;
       description?: string;
       thumbnail_url?: string;
+      level_id?: string;
     }
   ): Promise<Class> {
     // Check if class exists
-    const existingClass = ClassesRepository.getById(classId);
+    const existingClass = await ClassesRepository.getById(classId);
     if (!existingClass) {
       throw new NotFoundError('Class');
     }
@@ -122,10 +126,11 @@ export class ClassService {
     }
 
     // Update class
-    const updated = ClassesRepository.update(classId, {
+    const updated = await ClassesRepository.update(classId, {
       title: data.title?.trim(),
       description: data.description?.trim(),
       thumbnail_url: data.thumbnail_url,
+      level_id: data.level_id
     });
 
     if (!updated) {
@@ -140,7 +145,7 @@ export class ClassService {
     console.log('=== DELETE CLASS START ===', classId);
     
     // Check if class exists
-    const existingClass = ClassesRepository.getById(classId);
+    const existingClass = await ClassesRepository.getById(classId);
     if (!existingClass) {
       throw new NotFoundError('Class');
     }
@@ -153,24 +158,24 @@ export class ClassService {
     try {
       // 1. Borrar Sesiones
       console.log('Deleting sessions...');
-      SessionsRepository.deleteByClass(classId);
+      await SessionsRepository.deleteByClass(classId);
 
       // 2. Borrar copias de estudiantes para cada slide
       console.log('Fetching slides to delete student copies...');
-      const slides = SlidesRepository.getByClass(classId);
+      const slides = await SlidesRepository.getByClass(classId);
       
       for (const slide of slides) {
         console.log(`Deleting student copies for slide ${slide.id}...`);
-        StudentCopiesRepository.deleteBySlide(slide.id);
+        await StudentCopiesRepository.deleteBySlide(slide.id);
       }
 
       // 3. Borrar Slides
       console.log('Deleting slides...');
-      SlidesRepository.deleteByClass(classId);
+      await SlidesRepository.deleteByClass(classId);
 
       // 4. Borrar Clase
       console.log('Deleting class...');
-      const deleted = ClassesRepository.delete(classId);
+      const deleted = await ClassesRepository.delete(classId);
       
       if (!deleted) {
         throw new NotFoundError('Class'); // Should not happen if getById worked
@@ -184,7 +189,7 @@ export class ClassService {
 
   // Check if user owns class
   static async checkOwnership(classId: string, userId: string): Promise<boolean> {
-    const classData = ClassesRepository.getById(classId);
+    const classData = await ClassesRepository.getById(classId);
     if (!classData) {
       throw new NotFoundError('Class');
     }
