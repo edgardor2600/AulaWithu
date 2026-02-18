@@ -15,14 +15,6 @@ logs/
 *.log
 npm-debug.log*
 yarn-debug.log*
-yarn-error.log*
-
-# Exclude plans
-plan_*.md
-plan_Accion_aula.md
-plan_accion.md
-DEV_NOTES.md
-
 # Exclude agent internal files
 .gemini/
 .temp_*.md
@@ -30,3 +22,27 @@ DEV_NOTES.md
 # Exclude debug outputs
 server/check_db_output.txt
 server/db_init_output.txt
+
+# Exclude temporary migration & utility scripts
+server/scripts/add-schedule-column.ts
+server/scripts/auto-detect-supabase.ts
+server/scripts/check-groups-table.js
+server/scripts/check-schema.ts
+server/scripts/check-sessions.js
+server/scripts/convert-repositories.ts
+server/scripts/convert-routes.ts
+server/scripts/convert-services.ts
+server/scripts/emergency-users.ts
+server/scripts/fix-and-seed.js
+server/scripts/fix-and-seed.ts
+server/scripts/fix-await-errors.ts
+server/scripts/fix-levels.js
+server/scripts/migration-complete.ts
+server/scripts/run-all-migrations.js
+server/scripts/run-migration-009.js
+server/scripts/seed-db.js
+server/scripts/test-postgres-connection.ts
+server/scripts/test-postgres-simple.ts
+server/scripts/update-levels.ts
+server/src/db/add_group_columns.ts
+server/src/db/refactor_academic_structure.ts
