@@ -3,6 +3,7 @@ import { body, param } from 'express-validator';
 import { authMiddleware } from '../middleware/auth.middleware';
 import { asyncHandler } from '../middleware/error.middleware';
 import { topicsService } from '../services/topics.service';
+import { SlidesRepository } from '../db/repositories';
 
 const router = Router();
 
@@ -88,8 +89,6 @@ router.get(
 
 /**
  * GET /api/topics/:topicId/slides
- * Get all slides for a topic
- * Access: All authenticated users
  */
 router.get(
   '/topics/:topicId/slides',
@@ -98,15 +97,7 @@ router.get(
   asyncHandler(async (req: any, res: any) => {
     const { topicId } = req.params;
     
-    // Use SlidesRepository to get slides by topic
-    const { getDb } = require('../db/database');
-    const db = getDb();
-    
-    const slides = db.prepare(`
-      SELECT * FROM slides 
-      WHERE topic_id = ? 
-      ORDER BY slide_number ASC
-    `).all(topicId);
+    const slides = await SlidesRepository.getByTopic(topicId);
 
     res.status(200).json({
       success: true,

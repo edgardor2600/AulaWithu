@@ -5,33 +5,83 @@ import { authMiddleware } from '../middleware/auth.middleware';
 import { teacherOnly } from '../middleware/role.middleware';
 import { validate } from '../middleware/validation.middleware';
 import { asyncHandler } from '../middleware/error.middleware';
+import { LevelsRepository } from '../db/repositories';
 
 const router = Router();
 
-// POST /api/classes - Create new class (teacher only)
+// GET /api/classes/levels - Get all academic levels
+router.get(
+  '/levels',
+  authMiddleware,
+  asyncHandler(async (req: any, res: any) => {
+    const levels = await LevelsRepository.getAll();
+    res.status(200).json({
+      success: true,
+      levels,
+    });
+  })
+);
+
+// POST /api/classes - Create new class (teacher or admin)
 router.post(
   '/',
   authMiddleware,
-  teacherOnly,
   [
     body('title')
       .trim()
       .notEmpty().withMessage('Title is required')
-      .isLength({ min: 3, max: 200 }).withMessage('Title must be between 3 and 200 characters'),
+      .isLength({ min: 2, max: 200 }).withMessage('Title must be between 2 and 200 characters'),
     body('description')
       .optional()
       .trim()
       .isLength({ max: 1000 }).withMessage('Description must be less than 1000 characters'),
+    body('levelId')
+      .optional()
+      .isString().withMessage('Level ID must be a string'),
+    body('teacherId')
+      .optional()
+      .isString().withMessage('Teacher ID must be a string'),
   ],
   validate,
   asyncHandler(async (req: any, res: any) => {
-    const { title, description } = req.body;
-    const teacher_id = req.user.userId;
+    const { title, description, levelId, teacherId } = req.body;
+    const userRole = req.user.role;
+    const userId = req.user.userId;
+
+    // DEBUG: Log what we received
+    console.log('📥 POST /api/classes - Received:');
+    console.log('  Body:', req.body);
+    console.log('  User:', { userId, userRole });
+    console.log('  teacherId from body:', teacherId);
+
+    // Determine the teacher_id based on role
+    let teacher_id: string;
+    
+    if (userRole === 'admin') {
+      // Admin must provide teacherId
+      if (!teacherId) {
+        console.log('❌ Admin did not provide teacherId');
+        return res.status(400).json({
+          success: false,
+          message: 'Admin must provide teacherId when creating a class',
+        });
+      }
+      teacher_id = teacherId;
+    } else if (userRole === 'teacher') {
+      // Teacher creates for themselves
+      teacher_id = userId;
+    } else {
+      return res.status(403).json({
+        success: false,
+        message: 'Only teachers and admins can create classes',
+      });
+    }
 
     const newClass = await ClassService.create({
       title,
       description,
       teacher_id,
+      level_id: levelId
     });
 
     res.status(201).json({
@@ -106,17 +156,21 @@ router.put(
     body('thumbnail_url')
       .optional()
       .isURL().withMessage('Thumbnail URL must be a valid URL'),
+    body('levelId')
+      .optional()
+      .isString().withMessage('Level ID must be a string'),
   ],
   validate,
   asyncHandler(async (req: any, res: any) => {
     const { id } = req.params;
-    const { title, description, thumbnail_url } = req.body;
+    const { title, description, thumbnail_url, levelId } = req.body;
     const userId = req.user.userId;
 
     const updated = await ClassService.update(id, userId, {
       title,
       description,
       thumbnail_url,
+      level_id: levelId
     });
 
     res.status(200).json({

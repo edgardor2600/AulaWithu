@@ -36,17 +36,30 @@ router.post(
     body('maxStudents')
       .optional()
       .isInt({ min: 1, max: 100 }).withMessage('Max students must be between 1 and 100'),
+    body('scheduleTime')
+      .optional()
+      .trim()
+      .matches(/^(08|09|10|11|14|15|16|17|18|19|20|21):00-(09|10|11|12|15|16|17|18|19|20|21|22):00$/)
+      .withMessage('Invalid schedule time format'),
   ],
   validate,
   asyncHandler(async (req: any, res: any) => {
     const { classId } = req.params;
-    const { name, description, maxStudents } = req.body;
-    const teacherId = req.user!.userId;
+    const { name, description, maxStudents, scheduleTime } = req.body;
+    const userId = req.user!.userId;
+    const userRole = req.user!.role;
+
+    // DEBUG: Log what we received
+    console.log('📥 POST /api/classes/:classId/groups - Received:');
+    console.log('  classId:', classId);
+    console.log('  Body:', req.body);
+    console.log('  User:', { userId, role: userRole });
 
     const group = await GroupsService.createGroup(
       classId,
-      { name, description, maxStudents },
-      teacherId
+      { name, description, maxStudents, scheduleTime },
+      userId,
+      userRole
     );
 
     res.status(201).json({
@@ -57,6 +70,7 @@ router.post(
         name: group.name,
         description: group.description,
         max_students: group.max_students,
+        schedule_time: group.schedule_time,
         active: group.active === 1,
         created_at: group.created_at,
         updated_at: group.updated_at,
@@ -91,6 +105,7 @@ router.get(
         description: group.description,
         max_students: group.max_students,
         student_count: group.student_count,
+        schedule_time: group.schedule_time,
         active: group.active === 1,
         created_at: group.created_at,
         updated_at: group.updated_at,
@@ -120,16 +135,21 @@ router.put(
     body('maxStudents')
       .optional()
       .isInt({ min: 1, max: 100 }).withMessage('Max students must be between 1 and 100'),
+    body('scheduleTime')
+      .optional()
+      .trim()
+      .matches(/^(08|09|10|11|14|15|16|17|18|19|20|21):00-(09|10|11|12|15|16|17|18|19|20|21|22):00$/)
+      .withMessage('Invalid schedule time format'),
   ],
   validate,
   asyncHandler(async (req: any, res: any) => {
     const { groupId } = req.params;
-    const { name, description, maxStudents } = req.body;
+    const { name, description, maxStudents, scheduleTime } = req.body;
     const teacherId = req.user!.userId;
 
     const group = await GroupsService.updateGroup(
       groupId,
-      { name, description, maxStudents },
+      { name, description, maxStudents, scheduleTime },
       teacherId
     );
 
@@ -141,6 +161,7 @@ router.put(
         name: group.name,
         description: group.description,
         max_students: group.max_students,
+        schedule_time: group.schedule_time,
         active: group.active === 1,
         created_at: group.created_at,
         updated_at: group.updated_at,
