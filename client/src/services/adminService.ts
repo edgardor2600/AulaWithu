@@ -13,12 +13,28 @@ export interface User {
   active: boolean;
   created_at: string;
   last_login?: string;
+  level_id?: string;
+  level?: {
+    id: string;
+    name: string;
+    description: string | null;
+  };
+}
+
+export interface AcademicLevel {
+  id: string;
+  name: string;
+  description: string | null;
+  created_at: string;
 }
 
 export interface CreateUserRequest {
   name: string;
   username: string;
   password: string;
+  groupId?: string;
+  enrollmentNotes?: string;
+  levelId?: string;
 }
 
 export interface Assignment {
@@ -50,7 +66,7 @@ export interface SystemStats {
   teachers: number;
   students: number;
   admins: number;
-  assignments: number;
+  enrollments: number;
 }
 
 // ============================================
@@ -108,61 +124,42 @@ export const adminService = {
     await api.delete(`/admin/users/${userId}`);
   },
 
-  // ============================================
-  // TEACHER-STUDENT ASSIGNMENTS
-  // ============================================
-
   /**
-   * Assign a student to a teacher
+   * Update user's academic level
    */
-  async assignStudent(teacherId: string, studentId: string, notes?: string): Promise<Assignment> {
-    const response = await api.post<{ success: boolean; assignment: Assignment }>('/admin/assignments', {
-      teacherId,
-      studentId,
-      notes,
+  async updateUserLevel(userId: string, levelId: string | null): Promise<User> {
+    const response = await api.patch<{ success: boolean; user: User }>(`/admin/users/${userId}/level`, {
+      levelId,
     });
-    return response.data.assignment;
-  },
-
-  /**
-   * Unassign a student from a teacher
-   */
-  async unassignStudent(teacherId: string, studentId: string): Promise<void> {
-    await api.delete('/admin/assignments', {
-      data: { teacherId, studentId },
-    });
-  },
-
-  /**
-   * Get all assignments
-   */
-  async getAssignments(activeOnly: boolean = true): Promise<Assignment[]> {
-    const response = await api.get<{ success: boolean; assignments: Assignment[]; count: number }>(
-      '/admin/assignments',
-      { params: { activeOnly } }
-    );
-    return response.data.assignments;
-  },
-
-  /**
-   * Get students assigned to a specific teacher
-   */
-  async getTeacherStudents(teacherId: string): Promise<TeacherStudents[]> {
-    const response = await api.get<{ success: boolean; students: TeacherStudents[]; count: number }>(
-      `/admin/teachers/${teacherId}/students`
-    );
-    return response.data.students;
+    return response.data.user;
   },
 
   // ============================================
   // STATISTICS
   // ============================================
 
-  /**
-   * Get system statistics
-   */
   async getStats(): Promise<SystemStats> {
     const response = await api.get<{ success: boolean; stats: SystemStats }>('/admin/stats');
     return response.data.stats;
+  },
+
+  /**
+   * Unified Enrollment: Enroll student in a group and automatically assign to teacher
+   */
+  async enrollStudentUnified(groupId: string, studentId: string, notes?: string): Promise<any> {
+    const response = await api.post('/admin/enrollments/unified', {
+      groupId,
+      studentId,
+      notes,
+    });
+    return response.data.data;
+  },
+
+  /**
+   * Get academic levels
+   */
+  async getLevels(): Promise<AcademicLevel[]> {
+    const response = await api.get<{ success: boolean; levels: AcademicLevel[] }>('/classes/levels');
+    return response.data.levels;
   },
 };

@@ -11,7 +11,9 @@ import {
   XCircle,
   Trash2,
   Search,
+  Edit3,
 } from 'lucide-react';
+import { EditLevelModal } from './EditLevelModal';
 
 interface UsersTableProps {
   users: User[];
@@ -23,6 +25,7 @@ export const UsersTable = ({ users, onRefresh, onCreateUser }: UsersTableProps) 
   const [filter, setFilter] = useState<'all' | 'admin' | 'teacher' | 'student'>('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [activeMenu, setActiveMenu] = useState<string | null>(null);
+  const [editingUser, setEditingUser] = useState<User | null>(null);
 
   const handleToggleActive = async (user: User) => {
     try {
@@ -98,24 +101,24 @@ export const UsersTable = ({ users, onRefresh, onCreateUser }: UsersTableProps) 
   return (
     <div className="space-y-4">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h2 className="text-2xl font-bold text-gray-900">Gestión de Usuarios</h2>
           <p className="text-sm text-gray-500 mt-1">
             {filteredUsers.length} usuario{filteredUsers.length !== 1 ? 's' : ''}
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-col sm:flex-row gap-2">
           <button
             onClick={() => onCreateUser('teacher')}
-            className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition flex items-center gap-2"
+            className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition flex items-center justify-center gap-2"
           >
             <UserPlus className="w-4 h-4" />
             Crear Profesor
           </button>
           <button
             onClick={() => onCreateUser('student')}
-            className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition flex items-center gap-2"
+            className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition flex items-center justify-center gap-2"
           >
             <UserPlus className="w-4 h-4" />
             Crear Estudiante
@@ -141,18 +144,18 @@ export const UsersTable = ({ users, onRefresh, onCreateUser }: UsersTableProps) 
           </div>
 
           {/* Role Filter */}
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             {(['all', 'admin', 'teacher', 'student'] as const).map((role) => (
               <button
                 key={role}
                 onClick={() => setFilter(role)}
-                className={`px-4 py-2 rounded-lg font-medium text-sm transition ${
+                className={`flex-1 sm:flex-none px-4 py-2 rounded-lg font-medium text-sm transition ${
                   filter === role
                     ? 'bg-blue-600 text-white'
                     : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                 }`}
               >
-                {role === 'all' ? 'Todos' : role === 'admin' ? 'Admins' : role === 'teacher' ? 'Profesores' : 'Estudiantes'}
+                {role === 'all' ? 'Todos' : role === 'admin' ? 'Admins' : role === 'teacher' ? 'Prof.' : 'Est.'}
               </button>
             ))}
           </div>
@@ -172,6 +175,9 @@ export const UsersTable = ({ users, onRefresh, onCreateUser }: UsersTableProps) 
                   Rol
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Nivel Académico
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Estado
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -185,7 +191,7 @@ export const UsersTable = ({ users, onRefresh, onCreateUser }: UsersTableProps) 
             <tbody className="divide-y divide-gray-200">
               {filteredUsers.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="px-6 py-8 text-center text-gray-500">
+                  <td colSpan={6} className="px-6 py-8 text-center text-gray-500">
                     No se encontraron usuarios
                   </td>
                 </tr>
@@ -211,6 +217,19 @@ export const UsersTable = ({ users, onRefresh, onCreateUser }: UsersTableProps) 
                         {getRoleIcon(user.role)}
                         {getRoleBadge(user.role)}
                       </div>
+                    </td>
+                    <td className="px-6 py-4">
+                      {user.role === 'student' ? (
+                        user.level ? (
+                          <span className="inline-flex items-center px-2.5 py-1 bg-blue-100 text-blue-800 rounded-full text-xs font-semibold">
+                            📚 {user.level.name}
+                          </span>
+                        ) : (
+                          <span className="text-xs text-gray-400 italic">Sin nivel asignado</span>
+                        )
+                      ) : (
+                        <span className="text-xs text-gray-400">-</span>
+                      )}
                     </td>
                     <td className="px-6 py-4">
                       {user.active ? (
@@ -250,6 +269,20 @@ export const UsersTable = ({ users, onRefresh, onCreateUser }: UsersTableProps) 
                               onClick={() => setActiveMenu(null)}
                             />
                             <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-20">
+                              {/* Edit Level - Only for students */}
+                              {user.role === 'student' && (
+                                <button
+                                  onClick={() => {
+                                    setEditingUser(user);
+                                    setActiveMenu(null);
+                                  }}
+                                  className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-2"
+                                >
+                                  <Edit3 className="w-4 h-4 text-blue-500" />
+                                  Editar Nivel
+                                </button>
+                              )}
+                              
                               <button
                                 onClick={() => handleToggleActive(user)}
                                 className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-2"
@@ -287,6 +320,18 @@ export const UsersTable = ({ users, onRefresh, onCreateUser }: UsersTableProps) 
           </table>
         </div>
       </div>
+
+      {/* Edit Level Modal */}
+      {editingUser && (
+        <EditLevelModal
+          user={editingUser}
+          onClose={() => setEditingUser(null)}
+          onSuccess={() => {
+            setEditingUser(null);
+            onRefresh();
+          }}
+        />
+      )}
     </div>
   );
 };
