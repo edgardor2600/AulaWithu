@@ -1,305 +1,208 @@
-# Aula Colaborativa MVP
+# 🎓 AulaWithu - Plataforma Educativa Colaborativa
 
-Plataforma educativa en tiempo real donde profesores y estudiantes colaboran en una pizarra compartida.
+![Status](https://img.shields.io/badge/Status-Active-success)
+![Version](https://img.shields.io/badge/Version-2.0.0-blue)
+![License](https://img.shields.io/badge/License-Private-red)
 
-## 🚀 Características
+**AulaWithu** es una plataforma educativa de próxima generación diseñada para facilitar la enseñanza de idiomas y materias en tiempo real. Combina la potencia de una pizarra colaborativa en vivo con una gestión administrativa robusta de estudiantes, niveles académicos y grupos.
 
-- **Pizarra Colaborativa**: Canvas compartido en tiempo real con Fabric.js
-- **Editor de Texto**: Texto enriquecido colaborativo con TipTap
-- **Sincronización en Tiempo Real**: Yjs CRDT para colaboración sin conflictos
-- **Gestión de Clases**: Profesores crean y administran clases con múltiples slides
-- **Sesiones en Vivo**: Estudiantes se unen a sesiones activas y colaboran
-- **Copias Personales**: Estudiantes guardan snapshots de slides para trabajar offline
-- **Export**: Exportar slides a PNG/PDF
+![Tech Stack](https://img.shields.io/badge/Stack-PERN-7d5afc)
+![Frontend](https://img.shields.io/badge/Frontend-React%20%2B%20Vite-61DAFB)
+![Backend](https://img.shields.io/badge/Backend-Node.js%20%2B%20Express-339933)
+![Database](https://img.shields.io/badge/Database-PostgreSQL-336791)
+![Styling](https://img.shields.io/badge/Styling-TailwindCSS-06B6D4)
 
-## 📋 Requisitos Previos
+---
 
-- **Node.js** 20+ (recomendado 20.19+ o 22.12+)
-- **npm** 10+
-- **Git**
-- **Docker** (opcional, para deployment con contenedores)
+## ✨ Características Principales
 
-## 🛠️ Instalación Local
+### 🏫 Gestión Académica Avanzada
+
+- **Niveles CEFR**: Soporte completo para niveles académicos (A1, A2, B1, B2, C1, C2).
+- **Grupos y Horarios**: Organización de estudiantes en grupos con horarios asignados.
+- **Sistema de Inscripciones**: Matriculación flexible de estudiantes en grupos y clases.
+- **Panel de Administración**: Control total sobre usuarios, roles, y asignaciones académicas.
+
+### 🎨 Aula Virtual en Tiempo Real
+
+- **Pizarra Colaborativa**: Canvas compartido sincronizado en tiempo real (Yjs).
+- **Herramientas de Dibujo**: Lápiz, formas, texto, y puntero láser para profesores.
+- **Sincronización Instantánea**: Lo que el profesor escribe, el estudiante lo ve al instante (< 50ms).
+- **Modo Presentación**: Control de diapositivas y navegación guiada por el profesor.
+
+### 👥 Roles y Permisos
+
+- **Administrador**: Gestión total de la plataforma, creación de usuarios y asignación de niveles.
+- **Profesor**: Gestión de sus clases, creación de contenido y control del aula en vivo.
+- **Estudiante**: Acceso a clases asignadas, participación en vivo y visualización de material.
+
+---
+
+## 🛠️ Tecnologías
+
+El proyecto utiliza una arquitectura moderna y escalable:
+
+### Frontend (`/client`)
+
+- **Framework**: React 18 + TypeScript
+- **Build Tool**: Vite
+- **Estilos**: TailwindCSS
+- **Estado Global**: Zustand
+- **Colaboración**: Yjs + WebSocket
+- **UI Components**: Lucide React, React Hot Toast
+
+### Backend (`/server`)
+
+- **Runtime**: Node.js
+- **Framework**: Express
+- **Base de Datos**: PostgreSQL
+- **ORM/Query Builder**: pg (node-postgres)
+- **Real-time**: Yjs Websocket Server
+- **Validación**: express-validator
+
+---
+
+## 🚀 Guía de Instalación
+
+### Requisitos Previos
+
+- **Node.js** v18+
+- **PostgreSQL** v14+ (Local o Cloud como Supabase/Neon)
 
 ### 1. Clonar el repositorio
 
 ```bash
-git clone <repository-url>
-cd aula-colaborativa
+git clone https://github.com/edgardor2600/AulaWithu.git
+cd AulaWithu
 ```
 
-### 2. Instalar dependencias
+### 2. Configuración de Variables de Entorno
 
-**Backend:**
-
-```bash
-cd server
-npm install
-```
-
-**Frontend:**
-
-```bash
-cd ../client
-npm install
-```
-
-### 3. Configurar variables de entorno
-
-**Server** (`server/.env`):
+**Backend** (`server/.env`):
 
 ```env
 PORT=3002
 YJS_PORT=1234
-DATABASE_PATH=./database/aula.db
-UPLOADS_DIR=../uploads
-JWT_SECRET=your_secret_key_here
+# Conexión a PostgreSQL
+DATABASE_URL=postgresql://postgres:password@localhost:5432/app_aula
+# JWT Secret para autenticación
+JWT_SECRET=tu_secreto_super_seguro_aqui
 ALLOWED_ORIGINS=http://localhost:5173
 ```
 
-**Client** (`client/.env`):
+**Frontend** (`client/.env`):
 
 ```env
 VITE_API_URL=http://localhost:3002
 VITE_WS_URL=ws://localhost:1234
 ```
 
-### 4. Inicializar base de datos
+### 3. Instalación de Dependencias
+
+```bash
+# Instalar dependencias del servidor
+cd server
+npm install
+
+# Instalar dependencias del cliente
+cd ../client
+npm install
+```
+
+### 4. Inicialización de Base de Datos
+
+El proyecto incluye scripts para configurar PostgreSQL automáticamente:
 
 ```bash
 cd server
-npm run db:init
+
+# Ejecutar migraciones (crea tablas y esquema)
+npm run db:migrate
+
+# (Opcional) Poblar con datos de prueba
+npm run db:seed
 ```
 
-Esto creará la base de datos SQLite y la poblará con datos de prueba.
+### 5. Ejecutar la Aplicación
 
-## 🎮 Ejecución
+Para desarrollo, puedes correr ambos servicios simultáneamente:
 
-### Opción 1: Manual (2 terminales)
-
-**Terminal 1 - Backend:**
+**Terminal 1 (Backend):**
 
 ```bash
 cd server
 npm run dev
 ```
 
-Verás: `Server running on port 3002` y `Yjs WebSocket server running on port 1234`
-
-**Terminal 2 - Frontend:**
+**Terminal 2 (Frontend):**
 
 ```bash
 cd client
 npm run dev
 ```
 
-Verás: `Local: http://localhost:5173/`
-
-### Opción 2: Script Automático
-
-**Windows:**
-
-```bash
-scripts\dev-full.bat
-```
-
-**Linux/Mac:**
-
-```bash
-chmod +x scripts/dev-full.sh
-./scripts/dev-full.sh
-```
-
-### Opción 3: Docker Compose
-
-**Desarrollo (con hot-reload):**
-
-```bash
-docker-compose -f docker-compose.dev.yml up
-```
-
-**Producción:**
-
-```bash
-docker-compose up -d
-```
-
-## 🌐 URLs de Acceso
-
-- **Frontend**: http://localhost:5173
-- **API REST**: http://localhost:3002
-- **API Docs**: http://localhost:3002/health
-- **WebSocket**: ws://localhost:1234
-
-## 📚 Documentación
-
-- **[Arquitectura](docs/ARCHITECTURE.md)** - Diagrama del sistema y componentes
-- **[API Contracts](docs/API_CONTRACTS.md)** - Endpoints REST completos
-- **[Notas de Desarrollo](DEV_NOTES.md)** - Estado actual y progreso
-
-## 🧪 Testing
-
-### Usuarios de Prueba (Seed Data)
-
-**Profesor:**
-
-- ID: `teacher-001`
-- Nombre: Prof. García
-
-**Estudiantes:**
-
-- Ana Martínez (`student-001`)
-- Carlos López (`student-002`)
-- María Rodríguez (`student-003`)
-- Juan Pérez (`student-004`)
-- Laura Gómez (`student-005`)
-
-**Clase de Ejemplo:**
-
-- Título: "English Level A1 - Unit 1"
-- 3 slides predefinidos
-
-### Flujo de Prueba
-
-1. **Abrir Frontend**: http://localhost:5173
-2. **Login como Profesor**: Nombre "Prof. García", Rol "teacher"
-3. **Ver Clases**: Deberías ver "English Level A1 - Unit 1"
-4. **Iniciar Sesión**: Click en la clase → "Iniciar Sesión"
-5. **Compartir URL**: Copiar URL generada
-6. **Abrir en Incógnito**: Pegar URL, login como "Ana Martínez", rol "student"
-7. **Colaborar**: Dibujar en el canvas, ver cambios en tiempo real
-
-## 🔧 Scripts Útiles
-
-### Backup de Base de Datos
-
-```bash
-# Windows
-scripts\backup-db.bat
-
-# Linux/Mac
-./scripts/backup-db.sh
-```
-
-### Túnel Público (Cloudflare)
-
-Para compartir con usuarios externos (requiere [cloudflared](https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/install-and-setup/installation/)):
-
-```bash
-# Windows
-scripts\tunnel-start.bat
-
-# Linux/Mac
-./scripts/tunnel-start.sh
-```
-
-Esto generará una URL pública tipo `https://random-name.trycloudflare.com` que puedes compartir.
-
-## 📦 Estructura del Proyecto
-
-```
-aula-colaborativa/
-├── client/              # Frontend (React + Vite)
-│   ├── src/
-│   │   ├── components/  # Componentes reutilizables
-│   │   ├── pages/       # Vistas principales
-│   │   ├── hooks/       # Custom hooks
-│   │   ├── services/    # API calls
-│   │   ├── store/       # Zustand stores
-│   │   ├── lib/         # Configuraciones (Yjs, Fabric)
-│   │   └── types/       # TypeScript types
-│   └── Dockerfile
-├── server/              # Backend (Node.js + Express)
-│   ├── src/
-│   │   ├── api/         # REST routes
-│   │   ├── db/          # Database access
-│   │   ├── middleware/  # Auth, validation
-│   │   ├── services/    # Business logic
-│   │   ├── websocket/   # Yjs server
-│   │   └── types/       # TypeScript types
-│   ├── scripts/         # DB initialization
-│   └── Dockerfile
-├── database/            # SQLite database
-│   ├── migrations/      # SQL migration files
-│   ├── seeds/           # Seed data
-│   └── backups/         # DB backups
-├── docs/                # Documentation
-├── scripts/             # Utility scripts
-├── uploads/             # File uploads
-├── docker-compose.yml   # Production compose
-└── docker-compose.dev.yml  # Development compose
-```
-
-## 🛡️ Seguridad
-
-- **JWT Authentication**: Tokens en header `Authorization: Bearer <token>`
-- **CORS**: Configurado para orígenes permitidos
-- **Input Validation**: express-validator en todos los endpoints
-- **File Upload Limits**: Max 5MB por archivo
-- **SQL Injection Protection**: Prepared statements con better-sqlite3
-
-## 🚢 Deployment
-
-### Desarrollo
-
-Ya cubierto arriba (npm run dev o docker-compose.dev.yml)
-
-### Producción
-
-1. **Build Docker Images:**
-
-```bash
-docker-compose build
-```
-
-2. **Start Services:**
-
-```bash
-docker-compose up -d
-```
-
-3. **Check Health:**
-
-```bash
-curl http://localhost:3002/health
-```
-
-4. **View Logs:**
-
-```bash
-docker-compose logs -f
-```
-
-### Variables de Entorno (Producción)
-
-Crear archivo `.env` en raíz:
-
-```env
-JWT_SECRET=your_production_secret_here_min_32_chars
-```
-
-## 🤝 Contribuir
-
-1. Fork el proyecto
-2. Crea tu feature branch (`git checkout -b feat/amazing-feature`)
-3. Commit tus cambios (`git commit -m 'feat: add amazing feature'`)
-4. Push al branch (`git push origin feat/amazing-feature`)
-5. Abre un Pull Request
-
-## 📝 Licencia
-
-Este proyecto es privado y confidencial.
-
-## 👥 Equipo
-
-- **Desarrollador Principal**: [Tu Nombre]
-- **Arquitecto**: [Tu Nombre]
-
-## 📞 Soporte
-
-Para reportar bugs o solicitar features, abre un issue en el repositorio.
+Accede a la aplicación en: `http://localhost:5173`
 
 ---
 
-**Versión**: 1.0.0 (MVP)  
-**Última Actualización**: 2025-12-12
+## 🧪 Usuarios de Prueba (Seed Data)
+
+Si ejecutaste `npm run db:seed`, puedes usar estos credenciales:
+
+| Rol            | Usuario      | Contraseña      |
+| -------------- | ------------ | --------------- |
+| **Admin**      | `admin`      | `admin123`      |
+| **Profesor**   | `profesor`   | `profesor123`   |
+| **Estudiante** | `estudiante` | `estudiante123` |
+
+---
+
+## 📂 Estructura del Proyecto
+
+```
+AulaWithu/
+├── client/                 # SPA React
+│   ├── src/
+│   │   ├── components/     # UI & Business Components
+│   │   │   ├── admin/      # Componentes del Panel Admin
+│   │   │   ├── groups/     # Gestión de Grupos
+│   │   │   └── ...
+│   │   ├── pages/          # Rutas de la aplicación
+│   │   ├── services/       # Conexión con API
+│   │   └── store/          # Estado global (Auth, UI)
+│
+├── server/                 # API REST + WebSocket
+│   ├── src/
+│   │   ├── api/            # Rutas Express
+│   │   ├── db/             # Repositorios PostgreSQL
+│   │   ├── services/       # Lógica de Negocio
+│   │   └── websocket/      # Servidor Yjs
+│   ├── scripts/            # Scripts de Mantenimiento y DB
+│
+└── database/               # Recursos de Base de Datos
+    ├── migrations/         # Esquemas SQL versionados
+    └── seeds/              # Datos iniciales
+```
+
+---
+
+## 🔒 Seguridad y Arquitectura
+
+- **Autenticación**: JWT (JSON Web Tokens) con rotación.
+- **Autorización**: Middleware basado en roles (RBAC).
+- **Persistencia**: Datos críticos en PostgreSQL, estado efímero de sesión en memoria/Yjs.
+- **Validación**: Datos de entrada sanitizados en backend.
+
+---
+
+## 🤝 Contribución
+
+1.  Crea un fork del repositorio.
+2.  Crea una rama para tu feature (`git checkout -b feature/nueva-funcionalidad`).
+3.  Haz commit de tus cambios.
+4.  Haz push a la rama.
+5.  Abre un Pull Request.
+
+---
+
+**Desarrollado con ❤️ por el equipo de AulaWithu.**
