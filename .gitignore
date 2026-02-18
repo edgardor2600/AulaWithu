@@ -15,6 +15,15 @@ logs/
 *.log
 npm-debug.log*
 yarn-debug.log*
+yarn-error.log*
+
+# Exclude plans
+plan_*.md
+plan_Accion_aula.md
+plan_accion.md
+DEV_NOTES.md
+PLAN_MIGRACION_POSTGRESQL.md
+
 # Exclude agent internal files
 .gemini/
 .temp_*.md
