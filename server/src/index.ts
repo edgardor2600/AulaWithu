@@ -16,7 +16,7 @@ import messagesRoutes from './api/messages.routes';
 import groupsRoutes from './api/groups.routes';
 import topicsRoutes from './api/topics.routes';
 import { errorHandler } from './middleware/error.middleware';
-import { logDatabaseSize } from './db/monitoring';
+import { testConnection } from './db/database';
 
 dotenv.config();
 
@@ -29,7 +29,7 @@ const YJS_PORT = process.env.YJS_PORT || 1234;
 app.use(cors({
   origin: true, // Allow all origins in development
   credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
 }));
 
@@ -69,12 +69,11 @@ app.get('/health', (req, res) => {
 const server = http.createServer(app);
 
 // Start HTTP server
-server.listen(PORT, () => {
+server.listen(PORT, async () => {
   console.log(`Server running on port ${PORT}`);
   
-  // Log database size for monitoring
-  const dbPath = path.join(__dirname, '../../database/aula.db');
-  logDatabaseSize(dbPath);
+  // Test PostgreSQL connection
+  await testConnection();
 });
 
 // Setup Yjs WebSocket

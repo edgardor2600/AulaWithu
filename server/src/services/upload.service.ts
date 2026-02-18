@@ -14,13 +14,13 @@ export class UploadService {
     uploaded_by: string;
     file_path: string;
   }): Promise<Upload> {
-    const upload = UploadsRepository.create(data);
+    const upload = await UploadsRepository.create(data);
     return upload;
   }
 
   // Get upload by ID
   static async getById(uploadId: string): Promise<Upload> {
-    const upload = UploadsRepository.getById(uploadId);
+    const upload = await UploadsRepository.getById(uploadId);
     if (!upload) {
       throw new NotFoundError('Upload');
     }
@@ -29,7 +29,7 @@ export class UploadService {
 
   // Get upload by filename
   static async getByFilename(filename: string): Promise<Upload> {
-    const upload = UploadsRepository.getByFilename(filename);
+    const upload = await UploadsRepository.getByFilename(filename);
     if (!upload) {
       throw new NotFoundError('Upload');
     }
@@ -38,18 +38,18 @@ export class UploadService {
 
   // Get all uploads
   static async getAll(): Promise<Upload[]> {
-    return UploadsRepository.getAll();
+    return await UploadsRepository.getAll();
   }
 
   // Get uploads by user
   static async getByUser(userId: string): Promise<Upload[]> {
-    return UploadsRepository.getByUser(userId);
+    return await UploadsRepository.getByUser(userId);
   }
 
   // Delete upload (only uploader or admin)
   static async delete(uploadId: string, userId: string, userRole: string): Promise<void> {
     // Get upload
-    const upload = UploadsRepository.getById(uploadId);
+    const upload = await UploadsRepository.getById(uploadId);
     if (!upload) {
       throw new NotFoundError('Upload');
     }
@@ -73,7 +73,7 @@ export class UploadService {
     }
 
     // Delete from database
-    const deleted = UploadsRepository.delete(uploadId);
+    const deleted = await UploadsRepository.delete(uploadId);
     if (!deleted) {
       throw new NotFoundError('Upload');
     }
@@ -81,11 +81,11 @@ export class UploadService {
 
   // Get total storage used
   static async getTotalStorage(): Promise<number> {
-    return UploadsRepository.getTotalSize();
+    return await UploadsRepository.getTotalSize();
   }
 
   // Get storage used by user
   static async getUserStorage(userId: string): Promise<number> {
-    return UploadsRepository.getTotalSizeByUser(userId);
+    return await UploadsRepository.getTotalSizeByUser(userId);
   }
 }

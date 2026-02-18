@@ -11,6 +11,7 @@ export interface User {
   password_hash: string | null;
   active: number; // SQLite boolean (0 or 1)
   last_login: string | null;
+  level_id: string | null; // Student current level
 }
 
 export interface Class {
@@ -19,6 +20,7 @@ export interface Class {
   description: string | null;
   teacher_id: string;
   thumbnail_url: string | null;
+  level_id: string | null; // Required level for this class
   created_at: string;
   updated_at: string;
 }
@@ -42,6 +44,7 @@ export interface Session {
   session_code: string;
   is_active: number; // SQLite boolean (0 or 1)
   allow_student_draw: number; // SQLite boolean (0 or 1)
+  group_id: string | null; // Link session to a specific group
   created_at: string;
   ended_at: string | null;
 }
@@ -111,6 +114,7 @@ export interface Group {
   description: string | null;
   max_students: number;
   active: number; // SQLite boolean (0 or 1)
+  schedule_time: string | null; // Format: "HH:00-HH:00" (e.g., "08:00-09:00")
   created_at: string;
   updated_at: string;
 }
@@ -139,4 +143,11 @@ export interface Topic {
 
 export interface TopicWithSlideCount extends Topic {
   slides_count: number;
+}
+
+export interface AcademicLevel {
+  id: string;
+  name: string;
+  description: string | null;
+  created_at: string;
 }

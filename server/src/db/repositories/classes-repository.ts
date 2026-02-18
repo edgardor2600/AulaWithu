@@ -4,96 +4,105 @@ import { generateId } from '../../utils/id-generator';
 
 export class ClassesRepository {
   // Create a new class
-  static create(data: { 
+  static async create(data: { 
     title: string; 
     description?: string; 
     teacher_id: string;
     thumbnail_url?: string;
-  }): Class {
+    level_id?: string | null;
+  }): Promise<Class> {
     const id = generateId();
     
-    runQuery(
-      `INSERT INTO classes (id, title, description, teacher_id, thumbnail_url) 
-       VALUES (?, ?, ?, ?, ?)`,
-      [id, data.title, data.description || null, data.teacher_id, data.thumbnail_url || null]
+    await runQuery(
+      `INSERT INTO classes (id, title, description, teacher_id, thumbnail_url, level_id) 
+       VALUES ($1, $2, $3, $4, $5, $6)`,
+      [id, data.title, data.description || null, data.teacher_id, data.thumbnail_url || null, data.level_id || null]
     );
     
-    return this.getById(id)!;
+    const cls = await this.getById(id);
+    if (!cls) throw new Error('Failed to create class');
+    return cls;
   }
 
   // Get class by ID
-  static getById(id: string): Class | undefined {
-    return getOne<Class>(`SELECT * FROM classes WHERE id = ?`, [id]);
+  static async getById(id: string): Promise<Class | undefined> {
+    return await getOne<Class>(`SELECT * FROM classes WHERE id = $1`, [id]);
   }
 
   // Get class with teacher info
-  static getByIdWithTeacher(id: string): any {
-    return getOne(`
+  static async getByIdWithTeacher(id: string): Promise<any> {
+    return await getOne(`
       SELECT c.*, u.name as teacher_name, u.avatar_color as teacher_color
       FROM classes c
       JOIN users u ON c.teacher_id = u.id
-      WHERE c.id = ?
+      WHERE c.id = $1
     `, [id]);
   }
 
   // Get all classes
-  static getAll(): Class[] {
-    return getAll<Class>(`SELECT * FROM classes ORDER BY created_at DESC`);
+  static async getAll(): Promise<Class[]> {
+    return await getAll<Class>(`SELECT * FROM classes ORDER BY created_at DESC`);
   }
 
   // Get classes by teacher
-  static getByTeacher(teacherId: string): Class[] {
-    return getAll<Class>(
-      `SELECT * FROM classes WHERE teacher_id = ? ORDER BY created_at DESC`,
+  static async getByTeacher(teacherId: string): Promise<Class[]> {
+    return await getAll<Class>(
+      `SELECT * FROM classes WHERE teacher_id = $1 ORDER BY created_at DESC`,
       [teacherId]
     );
   }
 
   // Update class
-  static update(id: string, data: { 
+  static async update(id: string, data: { 
     title?: string; 
     description?: string;
     thumbnail_url?: string;
-  }): Class | undefined {
+    level_id?: string | null;
+  }): Promise<Class | undefined> {
     const updates: string[] = ['updated_at = CURRENT_TIMESTAMP'];
     const params: any[] = [];
+    let paramIndex = 1;
 
     if (data.title) {
-      updates.push('title = ?');
+      updates.push(`title = $${paramIndex++}`);
       params.push(data.title);
     }
     if (data.description !== undefined) {
-      updates.push('description = ?');
+      updates.push(`description = $${paramIndex++}`);
       params.push(data.description);
     }
     if (data.thumbnail_url !== undefined) {
-      updates.push('thumbnail_url = ?');
+      updates.push(`thumbnail_url = $${paramIndex++}`);
       params.push(data.thumbnail_url);
+    }
+    if (data.level_id !== undefined) {
+      updates.push(`level_id = $${paramIndex++}`);
+      params.push(data.level_id);
     }
 
     if (updates.length === 1) { // Only updated_at
-      return this.getById(id);
+      return await this.getById(id);
     }
 
     params.push(id);
-    runQuery(`UPDATE classes SET ${updates.join(', ')} WHERE id = ?`, params);
+    await runQuery(`UPDATE classes SET ${updates.join(', ')} WHERE id = $${paramIndex}`, params);
     
-    return this.getById(id);
+    return await this.getById(id);
   }
 
   // Delete class (CASCADE will delete slides)
-  static delete(id: string): boolean {
-    const result = runQuery(`DELETE FROM classes WHERE id = ?`, [id]);
-    return result.changes > 0;
+  static async delete(id: string): Promise<boolean> {
+    const result = await runQuery(`DELETE FROM classes WHERE id = $1`, [id]);
+    return (result.rowCount ?? 0) > 0;
   }
 
   // Get class with slides count
-  static getWithSlidesCount(id: string): any {
-    return getOne(`
+  static async getWithSlidesCount(id: string): Promise<any> {
+    return await getOne(`
       SELECT c.*, COUNT(s.id) as slides_count
       FROM classes c
       LEFT JOIN slides s ON c.id = s.class_id
-      WHERE c.id = ?
+      WHERE c.id = $1
       GROUP BY c.id
     `, [id]);
   }

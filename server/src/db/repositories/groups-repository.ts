@@ -4,186 +4,192 @@ import { generateId } from '../../utils/id-generator';
 
 /**
  * Repository for managing class groups
- * A group is a subdivision within a class to organize students
- * Example: "English A1" class might have "Group Morning" and "Group Evening"
  */
 export class GroupsRepository {
   /**
    * Create a new group for a class
-   * @param data - Group data
-   * @returns Created group
    */
-  static create(data: {
+  static async create(data: {
     classId: string;
     name: string;
     description?: string;
     maxStudents?: number;
-  }): Group {
+    scheduleTime?: string;
+  }): Promise<Group> {
     const id = generateId();
     const maxStudents = data.maxStudents || 30;
 
-    runQuery(
-      `INSERT INTO groups (id, class_id, name, description, max_students, active)
-       VALUES (?, ?, ?, ?, ?, 1)`,
-      [id, data.classId, data.name, data.description || null, maxStudents]
+    await runQuery(
+      `INSERT INTO groups (id, class_id, name, description, max_students, active, schedule_time)
+       VALUES ($1, $2, $3, $4, $5, 1, $6)`,
+      [
+        id, 
+        data.classId, 
+        data.name, 
+        data.description || null, 
+        maxStudents,
+        data.scheduleTime || null
+      ]
     );
 
-    return this.getById(id)!;
+    const group = await this.getById(id);
+    if (!group) throw new Error('Failed to create group');
+    return group;
   }
 
   /**
    * Get group by ID
    */
-  static getById(id: string): Group | undefined {
-    return getOne<Group>(
-      `SELECT * FROM groups WHERE id = ?`,
+  static async getById(id: string): Promise<Group | undefined> {
+    return await getOne<Group>(
+      `SELECT * FROM groups WHERE id = $1`,
       [id]
     );
   }
 
   /**
    * Get all groups for a specific class
-   * @param classId - Class ID
-   * @param activeOnly - Only return active groups (default: true)
    */
-  static getByClass(classId: string, activeOnly: boolean = true): Group[] {
+  static async getByClass(classId: string, activeOnly: boolean = true): Promise<Group[]> {
     const query = activeOnly
-      ? `SELECT * FROM groups WHERE class_id = ? AND active = 1 ORDER BY name`
-      : `SELECT * FROM groups WHERE class_id = ? ORDER BY name`;
+      ? `SELECT * FROM groups WHERE class_id = $1 AND active = 1 ORDER BY name`
+      : `SELECT * FROM groups WHERE class_id = $1 ORDER BY name`;
 
-    return getAll<Group>(query, [classId]);
+    return await getAll<Group>(query, [classId]);
   }
 
   /**
    * Get all groups in the system
-   * @param activeOnly - Only return active groups (default: true)
    */
-  static getAll(activeOnly: boolean = true): Group[] {
+  static async getAll(activeOnly: boolean = true): Promise<Group[]> {
     const query = activeOnly
       ? `SELECT * FROM groups WHERE active = 1 ORDER BY created_at DESC`
       : `SELECT * FROM groups ORDER BY created_at DESC`;
 
-    return getAll<Group>(query);
+    return await getAll<Group>(query);
   }
 
   /**
    * Update group information
-   * @param id - Group ID
-   * @param data - Update data
    */
-  static update(
+  static async update(
     id: string,
     data: {
       name?: string;
       description?: string;
       maxStudents?: number;
+      scheduleTime?: string;
     }
-  ): Group | undefined {
+  ): Promise<Group | undefined> {
     const updates: string[] = [];
     const params: any[] = [];
+    let paramIndex = 1;
 
     if (data.name !== undefined) {
-      updates.push('name = ?');
+      updates.push(`name = $${paramIndex++}`);
       params.push(data.name);
     }
     if (data.description !== undefined) {
-      updates.push('description = ?');
+      updates.push(`description = $${paramIndex++}`);
       params.push(data.description);
     }
     if (data.maxStudents !== undefined) {
-      updates.push('max_students = ?');
+      updates.push(`max_students = $${paramIndex++}`);
       params.push(data.maxStudents);
+    }
+    if (data.scheduleTime !== undefined) {
+      updates.push(`schedule_time = $${paramIndex++}`);
+      params.push(data.scheduleTime);
     }
 
     if (updates.length === 0) {
-      return this.getById(id);
+      return await this.getById(id);
     }
 
-    updates.push('updated_at = CURRENT_TIMESTAMP');
+    updates.push(`updated_at = CURRENT_TIMESTAMP`);
     params.push(id);
 
-    runQuery(
-      `UPDATE groups SET ${updates.join(', ')} WHERE id = ?`,
+    await runQuery(
+      `UPDATE groups SET ${updates.join(', ')} WHERE id = $${paramIndex}`,
       params
     );
 
-    return this.getById(id);
+    return await this.getById(id);
   }
 
   /**
-   * Deactivate a group (soft delete)
-   * Note: This does not affect existing enrollments
+   * Deactivate a group
    */
-  static deactivate(id: string): boolean {
-    const result = runQuery(
-      `UPDATE groups SET active = 0, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+  static async deactivate(id: string): Promise<boolean> {
+    const result = await runQuery(
+      `UPDATE groups SET active = 0, updated_at = CURRENT_TIMESTAMP WHERE id = $1`,
       [id]
     );
-    return result.changes > 0;
+    return (result.rowCount ?? 0) > 0;
   }
 
   /**
    * Activate a group
    */
-  static activate(id: string): boolean {
-    const result = runQuery(
-      `UPDATE groups SET active = 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+  static async activate(id: string): Promise<boolean> {
+    const result = await runQuery(
+      `UPDATE groups SET active = 1, updated_at = CURRENT_TIMESTAMP WHERE id = $1`,
       [id]
     );
-    return result.changes > 0;
+    return (result.rowCount ?? 0) > 0;
   }
 
   /**
    * Permanently delete a group
-   * WARNING: This will cascade delete all enrollments
    */
-  static delete(id: string): boolean {
-    const result = runQuery(
-      `DELETE FROM groups WHERE id = ?`,
+  static async delete(id: string): Promise<boolean> {
+    const result = await runQuery(
+      `DELETE FROM groups WHERE id = $1`,
       [id]
     );
-    return result.changes > 0;
+    return (result.rowCount ?? 0) > 0;
   }
 
   /**
    * Get student count for a group
-   * @param groupId - Group ID
-   * @param activeOnly - Only count active enrollments (default: true)
    */
-  static getStudentCount(groupId: string, activeOnly: boolean = true): number {
+  static async getStudentCount(groupId: string, activeOnly: boolean = true): Promise<number> {
     const query = activeOnly
-      ? `SELECT COUNT(*) as count FROM enrollments WHERE group_id = ? AND status = 'active'`
-      : `SELECT COUNT(*) as count FROM enrollments WHERE group_id = ?`;
+      ? `SELECT COUNT(*) as count FROM enrollments WHERE group_id = $1 AND status = 'active'`
+      : `SELECT COUNT(*) as count FROM enrollments WHERE group_id = $1`;
 
-    const result = getOne<{ count: number }>(query, [groupId]);
-    return result?.count || 0;
+    const result = await getOne<{ count: string | number }>(query, [groupId]);
+    return Number(result?.count) || 0;
   }
 
   /**
    * Check if group is full
-   * @param groupId - Group ID
    */
-  static isFull(groupId: string): boolean {
-    const group = this.getById(groupId);
+  static async isFull(groupId: string): Promise<boolean> {
+    const group = await this.getById(groupId);
     if (!group) return true;
 
-    const currentCount = this.getStudentCount(groupId);
+    const currentCount = await this.getStudentCount(groupId);
     return currentCount >= group.max_students;
   }
 
   /**
    * Get groups with student count
-   * @param classId - Class ID
    */
-  static getByClassWithCount(classId: string): Array<Group & { student_count: number }> {
-    return getAll<Group & { student_count: number }>(
+  static async getByClassWithCount(classId: string): Promise<Array<Group & { student_count: number }>> {
+    const rows = await getAll<any>(
       `SELECT g.*, 
               COALESCE((SELECT COUNT(*) FROM enrollments e 
                         WHERE e.group_id = g.id AND e.status = 'active'), 0) as student_count
        FROM groups g
-       WHERE g.class_id = ? AND g.active = 1
+       WHERE g.class_id = $1 AND g.active = 1
        ORDER BY g.name`,
       [classId]
     );
+
+    return rows.map(row => ({
+      ...row,
+      student_count: Number(row.student_count)
+    }));
   }
 }

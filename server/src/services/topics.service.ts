@@ -1,21 +1,11 @@
-import { getDb } from '../db/database';
 import { TopicsRepository, ClassesRepository } from '../db/repositories';
 
 /**
  * Topics Service
- * Handles business logic for topics management
  */
 export class TopicsService {
-  private topicsRepo: TopicsRepository;
-
-  constructor() {
-    const db = getDb();
-    this.topicsRepo = new TopicsRepository(db);
-  }
-
   /**
    * Create a new topic
-   * Only class owner (teacher/admin) can create topics
    */
   async createTopic(
     classId: string,
@@ -36,7 +26,7 @@ export class TopicsService {
     }
 
     // Create topic
-    return this.topicsRepo.create(classId, {
+    return await TopicsRepository.create(classId, {
       title: data.title.trim(),
       description: data.description?.trim(),
     });
@@ -44,34 +34,26 @@ export class TopicsService {
 
   /**
    * Get all topics for a class
-   * Students can view, teachers/admins get full access
    */
   async getClassTopics(classId: string, userId: string, userRole: string) {
-    // For students, verify they have access through groups
-    if (userRole === 'student') {
-      // Students can view topics of any class (for now)
-      // TODO: Add group-based access control if needed
-    } else {
-      // Teachers can only see topics of their classes
-      if (userRole === 'teacher') {
-        await this.validateClassPermissions(classId, userId, userRole);
-      }
+    if (userRole === 'teacher') {
+      await this.validateClassPermissions(classId, userId, userRole);
     }
 
-    return this.topicsRepo.getTopicsWithSlideCount(classId);
+    return await TopicsRepository.getTopicsWithSlideCount(classId);
   }
 
   /**
    * Get a single topic
    */
   async getTopic(topicId: string, userId: string, userRole: string) {
-    const topic = this.topicsRepo.getById(topicId);
+    const topic = await TopicsRepository.getById(topicId);
     
     if (!topic) {
       throw new Error('Topic not found');
     }
 
-    // Validate permissions for non-students
+    // Validate permissions: teachers must own the class, students have read access
     if (userRole === 'teacher') {
       await this.validateClassPermissions(topic.class_id, userId, userRole);
     }
@@ -81,7 +63,6 @@ export class TopicsService {
 
   /**
    * Update a topic
-   * Only class owner can update
    */
   async updateTopic(
     topicId: string,
@@ -89,7 +70,7 @@ export class TopicsService {
     userId: string,
     userRole: string
   ) {
-    const topic = this.topicsRepo.getById(topicId);
+    const topic = await TopicsRepository.getById(topicId);
     
     if (!topic) {
       throw new Error('Topic not found');
@@ -113,16 +94,14 @@ export class TopicsService {
       data.description = data.description.trim();
     }
 
-    return this.topicsRepo.update(topicId, data);
+    return await TopicsRepository.update(topicId, data);
   }
 
   /**
    * Delete a topic
-   * Only class owner can delete
-   * Topic must have no slides
    */
   async deleteTopic(topicId: string, userId: string, userRole: string) {
-    const topic = this.topicsRepo.getById(topicId);
+    const topic = await TopicsRepository.getById(topicId);
     
     if (!topic) {
       throw new Error('Topic not found');
@@ -133,7 +112,7 @@ export class TopicsService {
 
     // Try to delete (will throw if topic has slides)
     try {
-      this.topicsRepo.delete(topicId);
+      await TopicsRepository.delete(topicId);
       return { success: true };
     } catch (error: any) {
       throw new Error(error.message || 'Failed to delete topic');
@@ -142,7 +121,6 @@ export class TopicsService {
 
   /**
    * Reorder topics
-   * Only class owner can reorder
    */
   async reorderTopics(
     classId: string,
@@ -155,25 +133,24 @@ export class TopicsService {
 
     // Validate all topics belong to this class
     for (const topicId of topicIds) {
-      if (!this.topicsRepo.belongsToClass(topicId, classId)) {
+      if (!await TopicsRepository.belongsToClass(topicId, classId)) {
         throw new Error(`Topic ${topicId} does not belong to class ${classId}`);
       }
     }
 
-    this.topicsRepo.reorderTopics(classId, topicIds);
+    await TopicsRepository.reorderTopics(classId, topicIds);
     return { success: true };
   }
 
   /**
    * Helper: Validate user has permission to manage class
-   * Admins have full access, teachers only their own classes
    */
   private async validateClassPermissions(
     classId: string,
     userId: string,
     userRole: string
   ) {
-    const classData = ClassesRepository.getById(classId);
+    const classData = await ClassesRepository.getById(classId);
 
     if (!classData) {
       throw new Error('Class not found');

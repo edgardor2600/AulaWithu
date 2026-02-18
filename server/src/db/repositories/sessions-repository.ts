@@ -4,21 +4,11 @@ import { generateId } from '../../utils/id-generator';
 
 /**
  * SessionsRepository
- * 
- * Data access layer for live collaboration sessions.
- * Follows repository pattern for clean architecture and testability.
- * 
- * Responsibilities:
- * - CRUD operations for sessions
- * - Session code generation
- * - Active session queries
- * - No business logic (that belongs in SessionService)
  */
 export class SessionsRepository {
   
   /**
    * Generate a unique 6-character session code (e.g., "ABC123")
-   * Format: 3 uppercase letters + 3 digits
    */
   private static generateSessionCode(): string {
     const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
@@ -37,66 +27,65 @@ export class SessionsRepository {
 
   /**
    * Create a new live session
-   * 
-   * @param data Session creation data
-   * @returns Created session with generated code
-   * @throws Error if session_code collision (retry in service layer)
    */
-  static create(data: {
+  static async create(data: {
     class_id: string;
     slide_id: string;
     teacher_id: string;
     allow_student_draw?: boolean;
-  }): Session {
+    group_id?: string | null;
+  }): Promise<Session> {
     const id = generateId();
     const sessionCode = this.generateSessionCode();
     
-    runQuery(
+    await runQuery(
       `INSERT INTO sessions (
-        id, class_id, slide_id, teacher_id, session_code, allow_student_draw
-      ) VALUES (?, ?, ?, ?, ?, ?)`,
+        id, class_id, slide_id, teacher_id, session_code, allow_student_draw, is_active, group_id
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
       [
         id,
         data.class_id,
         data.slide_id,
         data.teacher_id,
         sessionCode,
-        data.allow_student_draw ? 1 : 0
+        data.allow_student_draw ? 1 : 0,
+        1, // is_active
+        data.group_id || null
       ]
     );
     
-    return this.getById(id)!;
+    const sess = await this.getById(id);
+    if (!sess) throw new Error('Failed to create session');
+    return sess;
   }
 
   /**
    * Get session by ID
    */
-  static getById(id: string): Session | undefined {
-    return getOne<Session>(
-      `SELECT * FROM sessions WHERE id = ?`,
+  static async getById(id: string): Promise<Session | undefined> {
+    return await getOne<Session>(
+      `SELECT * FROM sessions WHERE id = $1`,
       [id]
     );
   }
 
   /**
    * Get session by session code
-   * Used when students join with a code
    */
-  static getByCode(sessionCode: string): Session | undefined {
-    return getOne<Session>(
-      `SELECT * FROM sessions WHERE session_code = ?`,
+  static async getByCode(sessionCode: string): Promise<Session | undefined> {
+    return await getOne<Session>(
+      `SELECT * FROM sessions WHERE session_code = $1`,
       [sessionCode]
     );
   }
 
   /**
    * Get active session for a specific slide
-   * Returns the most recent active session
    */
-  static getActiveBySlide(slideId: string): Session | undefined {
-    return getOne<Session>(
+  static async getActiveBySlide(slideId: string): Promise<Session | undefined> {
+    return await getOne<Session>(
       `SELECT * FROM sessions 
-       WHERE slide_id = ? AND is_active = 1 
+       WHERE slide_id = $1 AND is_active = 1 
        ORDER BY created_at DESC 
        LIMIT 1`,
       [slideId]
@@ -105,25 +94,23 @@ export class SessionsRepository {
 
   /**
    * Get all active sessions for a teacher
-   * Useful for dashboard view
    */
-  static getActiveByTeacher(teacherId: string): Session[] {
-    return getAll<Session>(
+  static async getActiveByTeacher(teacherId: string): Promise<Session[]> {
+    return await getAll<Session>(
       `SELECT * FROM sessions 
-       WHERE teacher_id = ? AND is_active = 1 
+       WHERE teacher_id = $1 AND is_active = 1 
        ORDER BY created_at DESC`,
       [teacherId]
     );
   }
 
   /**
-   * Get all sessions for a class (active and ended)
-   * Useful for history view
+   * Get all sessions for a class
    */
-  static getByClass(classId: string): Session[] {
-    return getAll<Session>(
+  static async getByClass(classId: string): Promise<Session[]> {
+    return await getAll<Session>(
       `SELECT * FROM sessions 
-       WHERE class_id = ? 
+       WHERE class_id = $1 
        ORDER BY created_at DESC`,
       [classId]
     );
@@ -131,111 +118,109 @@ export class SessionsRepository {
 
   /**
    * Update session permissions
-   * Allows teacher to toggle student drawing permission
    */
-  static updatePermissions(id: string, allowStudentDraw: boolean): Session | undefined {
-    runQuery(
+  static async updatePermissions(id: string, allowStudentDraw: boolean): Promise<Session | undefined> {
+    await runQuery(
       `UPDATE sessions 
-       SET allow_student_draw = ? 
-       WHERE id = ?`,
+       SET allow_student_draw = $1 
+       WHERE id = $2`,
       [allowStudentDraw ? 1 : 0, id]
     );
     
-    return this.getById(id);
+    return await this.getById(id);
   }
 
   /**
    * Update current slide
-   * Allows teacher to change the active slide during session
    */
-  static updateSlide(id: string, slideId: string): Session | undefined {
-    runQuery(
+  static async updateSlide(id: string, slideId: string): Promise<Session | undefined> {
+    await runQuery(
       `UPDATE sessions 
-       SET slide_id = ? 
-       WHERE id = ?`,
+       SET slide_id = $1 
+       WHERE id = $2`,
       [slideId, id]
     );
     
-    return this.getById(id);
+    return await this.getById(id);
   }
 
   /**
    * End a session
-   * Sets is_active to 0 and records ended_at timestamp
    */
-  static end(id: string): Session | undefined {
-    runQuery(
+  static async end(id: string): Promise<Session | undefined> {
+    await runQuery(
       `UPDATE sessions 
        SET is_active = 0, ended_at = CURRENT_TIMESTAMP 
-       WHERE id = ?`,
+       WHERE id = $1`,
       [id]
     );
     
-    return this.getById(id);
+    return await this.getById(id);
   }
 
   /**
-   * Delete a session (hard delete)
-   * Use with caution - prefer soft delete (end) instead
+   * Delete a session
    */
-  static delete(id: string): boolean {
-    const result = runQuery(
-      `DELETE FROM sessions WHERE id = ?`,
+  static async delete(id: string): Promise<boolean> {
+    const result = await runQuery(
+      `DELETE FROM sessions WHERE id = $1`,
       [id]
     );
     
-    return result.changes > 0;
+    return (result.rowCount ?? 0) > 0;
   }
 
-  // ✅ NUEVO: Delete sessions by class (for cascade delete)
-  static deleteByClass(classId: string): number {
-    const result = runQuery(
-      `DELETE FROM sessions WHERE class_id = ?`,
+  /**
+   * Delete sessions by class
+   */
+  static async deleteByClass(classId: string): Promise<number> {
+    const result = await runQuery(
+      `DELETE FROM sessions WHERE class_id = $1`,
       [classId]
     );
     
-    return result.changes;
+    return (result.rowCount ?? 0);
   }
 
-  // ✅ NUEVO: Delete sessions by slide (for cascade delete)
-  static deleteBySlide(slideId: string): number {
-    const result = runQuery(
-      `DELETE FROM sessions WHERE slide_id = ?`,
+  /**
+   * Delete sessions by slide
+   */
+  static async deleteBySlide(slideId: string): Promise<number> {
+    const result = await runQuery(
+      `DELETE FROM sessions WHERE slide_id = $1`,
       [slideId]
     );
     
-    return result.changes;
+    return (result.rowCount ?? 0);
   }
 
   /**
    * Check if a session code already exists
-   * Used for validation before creating session
    */
-  static codeExists(sessionCode: string): boolean {
-    const result = getOne<{ count: number }>(
-      `SELECT COUNT(*) as count FROM sessions WHERE session_code = ?`,
+  static async codeExists(sessionCode: string): Promise<boolean> {
+    const result = await getOne<{ count: string | number }>(
+      `SELECT COUNT(*) as count FROM sessions WHERE session_code = $1`,
       [sessionCode]
     );
     
-    return (result?.count || 0) > 0;
+    return (Number(result?.count) || 0) > 0;
   }
 
   /**
-   * Get session statistics for analytics
-   * Returns count of active vs ended sessions
+   * Get session statistics
    */
-  static getStats(teacherId?: string): {
+  static async getStats(teacherId?: string): Promise<{
     total: number;
     active: number;
     ended: number;
-  } {
+  }> {
     const query = teacherId
       ? `SELECT 
           COUNT(*) as total,
           SUM(CASE WHEN is_active = 1 THEN 1 ELSE 0 END) as active,
           SUM(CASE WHEN is_active = 0 THEN 1 ELSE 0 END) as ended
          FROM sessions 
-         WHERE teacher_id = ?`
+         WHERE teacher_id = $1`
       : `SELECT 
           COUNT(*) as total,
           SUM(CASE WHEN is_active = 1 THEN 1 ELSE 0 END) as active,
@@ -243,8 +228,14 @@ export class SessionsRepository {
          FROM sessions`;
     
     const params = teacherId ? [teacherId] : [];
-    const result = getOne<{ total: number; active: number; ended: number }>(query, params);
+    const result = await getOne<{ total: string | number; active: string | number; ended: string | number }>(query, params);
     
-    return result || { total: 0, active: 0, ended: 0 };
+    if (!result) return { total: 0, active: 0, ended: 0 };
+
+    return {
+      total: Number(result.total) || 0,
+      active: Number(result.active) || 0,
+      ended: Number(result.ended) || 0
+    };
   }
 }

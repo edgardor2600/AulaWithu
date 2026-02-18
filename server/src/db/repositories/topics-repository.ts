@@ -1,170 +1,158 @@
-import Database from 'better-sqlite3';
+import { runQuery, getOne, getAll } from '../database';
 import { generateId } from '../../utils/id-generator';
 import type { Topic, TopicWithSlideCount } from '../../types/database';
 
 export class TopicsRepository {
-  constructor(private db: Database.Database) {}
-
   /**
    * Create a new topic
    */
-  create(classId: string, data: { title: string; description?: string }): Topic {
+  static async create(classId: string, data: { title: string; description?: string }): Promise<Topic> {
     const id = generateId();
-    const topicNumber = this.getNextTopicNumber(classId);
-    const now = new Date().toISOString();
+    const topicNumber = await this.getNextTopicNumber(classId);
 
-    const stmt = this.db.prepare(`
+    await runQuery(`
       INSERT INTO topics (id, class_id, title, description, topic_number, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-    `);
-
-    stmt.run(
+      VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+    `, [
       id,
       classId,
       data.title,
       data.description || null,
-      topicNumber,
-      now,
-      now
-    );
+      topicNumber
+    ]);
 
-    return this.getById(id)!;
+    const topic = await this.getById(id);
+    if (!topic) throw new Error('Failed to create topic');
+    return topic;
   }
 
   /**
    * Get topic by ID
    */
-  getById(id: string): Topic | null {
-    const stmt = this.db.prepare('SELECT * FROM topics WHERE id = ?');
-    return stmt.get(id) as Topic | null;
+  static async getById(id: string): Promise<Topic | undefined> {
+    return await getOne<Topic>('SELECT * FROM topics WHERE id = $1', [id]);
   }
 
   /**
    * Get all topics for a class
    */
-  getByClass(classId: string, activeOnly: boolean = true): Topic[] {
-    let query = 'SELECT * FROM topics WHERE class_id = ?';
+  static async getByClass(classId: string, activeOnly: boolean = true): Promise<Topic[]> {
+    let query = 'SELECT * FROM topics WHERE class_id = $1';
     if (activeOnly) {
       query += ' AND active = 1';
     }
     query += ' ORDER BY topic_number ASC';
 
-    const stmt = this.db.prepare(query);
-    return stmt.all(classId) as Topic[];
+    return await getAll<Topic>(query, [classId]);
   }
 
   /**
    * Get topics with slide count
    */
-  getTopicsWithSlideCount(classId: string): TopicWithSlideCount[] {
-    const stmt = this.db.prepare(`
+  static async getTopicsWithSlideCount(classId: string): Promise<TopicWithSlideCount[]> {
+    const rows = await getAll<any>(`
       SELECT 
         t.*,
         COUNT(s.id) as slides_count
       FROM topics t
       LEFT JOIN slides s ON s.topic_id = t.id
-      WHERE t.class_id = ? AND t.active = 1
+      WHERE t.class_id = $1 AND t.active = 1
       GROUP BY t.id
       ORDER BY t.topic_number ASC
-    `);
+    `, [classId]);
 
-    return stmt.all(classId) as TopicWithSlideCount[];
+    return rows.map(row => ({
+      ...row,
+      slides_count: Number(row.slides_count)
+    }));
   }
 
   /**
    * Update a topic
    */
-  update(id: string, data: { title?: string; description?: string }): Topic {
+  static async update(id: string, data: { title?: string; description?: string }): Promise<Topic | undefined> {
     const updates: string[] = [];
-    const values: any[] = [];
+    const params: any[] = [];
+    let paramIndex = 1;
 
     if (data.title !== undefined) {
-      updates.push('title = ?');
-      values.push(data.title);
+      updates.push(`title = $${paramIndex++}`);
+      params.push(data.title);
     }
 
     if (data.description !== undefined) {
-      updates.push('description = ?');
-      values.push(data.description);
+      updates.push(`description = $${paramIndex++}`);
+      params.push(data.description);
     }
 
     if (updates.length === 0) {
-      return this.getById(id)!;
+      return await this.getById(id);
     }
 
-    updates.push('updated_at = ?');
-    values.push(new Date().toISOString());
-    values.push(id);
+    updates.push(`updated_at = CURRENT_TIMESTAMP`);
+    params.push(id);
 
-    const stmt = this.db.prepare(`
+    await runQuery(`
       UPDATE topics
       SET ${updates.join(', ')}
-      WHERE id = ?
-    `);
+      WHERE id = $${paramIndex}
+    `, params);
 
-    stmt.run(...values);
-    return this.getById(id)!;
+    return await this.getById(id);
   }
 
   /**
-   * Soft delete a topic
-   * Only allows deletion if topic has no slides
+   * Delete a topic
    */
-  delete(id: string): boolean {
+  static async delete(id: string): Promise<boolean> {
     // Check if topic has slides
-    const slideCountStmt = this.db.prepare('SELECT COUNT(*) as count FROM slides WHERE topic_id = ?');
-    const result = slideCountStmt.get(id) as { count: number };
+    const result = await getOne<{ count: string | number }>('SELECT COUNT(*) as count FROM slides WHERE topic_id = $1', [id]);
+    const count = Number(result?.count) || 0;
 
-    if (result.count > 0) {
+    if (count > 0) {
       throw new Error('Cannot delete topic with existing slides');
     }
 
-    const stmt = this.db.prepare('DELETE FROM topics WHERE id = ?');
-    const info = stmt.run(id);
-    return info.changes > 0;
+    const deleteResult = await runQuery('DELETE FROM topics WHERE id = $1', [id]);
+    return (deleteResult.rowCount ?? 0) > 0;
   }
 
   /**
    * Reorder topics
    */
-  reorderTopics(classId: string, topicIds: string[]): void {
-    const updateStmt = this.db.prepare(`
-      UPDATE topics
-      SET topic_number = ?, updated_at = ?
-      WHERE id = ? AND class_id = ?
-    `);
-
-    const now = new Date().toISOString();
-
+  static async reorderTopics(classId: string, topicIds: string[]): Promise<void> {
     // Update each topic with its new number
-    topicIds.forEach((topicId, index) => {
-      updateStmt.run(index + 1, now, topicId, classId);
-    });
+    for (let i = 0; i < topicIds.length; i++) {
+        await runQuery(`
+          UPDATE topics
+          SET topic_number = $1, updated_at = CURRENT_TIMESTAMP
+          WHERE id = $2 AND class_id = $3
+        `, [i + 1, topicIds[i], classId]);
+    }
   }
 
   /**
    * Get next available topic number for a class
    */
-  getNextTopicNumber(classId: string): number {
-    const stmt = this.db.prepare(`
+  static async getNextTopicNumber(classId: string): Promise<number> {
+    const result = await getOne<{ max_number: string | number | null }>(`
       SELECT MAX(topic_number) as max_number
       FROM topics
-      WHERE class_id = ?
-    `);
+      WHERE class_id = $1
+    `, [classId]);
 
-    const result = stmt.get(classId) as { max_number: number | null };
-    return (result.max_number || 0) + 1;
+    return (Number(result?.max_number) || 0) + 1;
   }
 
   /**
    * Check if a topic belongs to a specific class
    */
-  belongsToClass(topicId: string, classId: string): boolean {
-    const stmt = this.db.prepare(`
+  static async belongsToClass(topicId: string, classId: string): Promise<boolean> {
+    const result = await getOne(`
       SELECT id FROM topics
-      WHERE id = ? AND class_id = ?
-    `);
+      WHERE id = $1 AND class_id = $2
+    `, [topicId, classId]);
 
-    return !!stmt.get(topicId, classId);
+    return result !== undefined;
   }
 }

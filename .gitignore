@@ -22,3 +22,11 @@ plan_*.md
 plan_Accion_aula.md
 plan_accion.md
 DEV_NOTES.md
+
+# Exclude agent internal files
+.gemini/
+.temp_*.md
+
+# Exclude debug outputs
+server/check_db_output.txt
+server/db_init_output.txt
