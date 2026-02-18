@@ -33,13 +33,14 @@ export class SessionsRepository {
     slide_id: string;
     teacher_id: string;
     allow_student_draw?: boolean;
+    group_id?: string | null;
   }): Promise<Session> {
     const id = generateId();
     const sessionCode = this.generateSessionCode();
     
     await runQuery(
       `INSERT INTO sessions (
-        id, class_id, slide_id, teacher_id, session_code, allow_student_draw, status, yjs_room_name
+        id, class_id, slide_id, teacher_id, session_code, allow_student_draw, is_active, group_id
       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
       [
         id,
@@ -48,8 +49,8 @@ export class SessionsRepository {
         data.teacher_id,
         sessionCode,
         data.allow_student_draw ? 1 : 0,
-        'active',
-        `session-${sessionCode}`
+        1, // is_active
+        data.group_id || null
       ]
     );
     

@@ -5,6 +5,7 @@ import { authMiddleware } from '../middleware/auth.middleware';
 import { adminMiddleware } from '../middleware/admin.middleware';
 import { validate } from '../middleware/validation.middleware';
 import { asyncHandler } from '../middleware/error.middleware';
+import { UsersRepository } from '../db/repositories/users-repository';
 
 const router = Router();
 
@@ -76,13 +77,19 @@ router.post(
     body('password')
       .notEmpty().withMessage('Password is required')
       .isLength({ min: 6 }).withMessage('Password must be at least 6 characters'),
+    body('groupId').optional().isString(),
+    body('levelId').optional().isString(),
+    body('enrollmentNotes').optional().isString(),
   ],
   validate,
   asyncHandler(async (req: any, res: any) => {
-    const { name, username, password } = req.body;
+    const { name, username, password, groupId, levelId, enrollmentNotes } = req.body;
     const adminId = req.user.userId;
 
-    const student = await AdminService.createStudent({ name, username, password }, adminId);
+    const student = await AdminService.createStudent(
+      { name, username, password, groupId, levelId, enrollmentNotes }, 
+      adminId
+    );
 
     res.status(201).json({
       success: true,
@@ -108,16 +115,12 @@ router.get(
   asyncHandler(async (req: any, res: any) => {
     const role = req.query.role as 'admin' | 'teacher' | 'student' | undefined;
 
-<<<<<<< HEAD
-    const users = AdminService.getAllUsers(role);
-=======
     const users = await AdminService.getAllUsers(role);
->>>>>>> f404e31 (temp commit to switch branches)
 
     res.status(200).json({
       success: true,
       count: users.length,
-      users: users.map(u => ({
+      users: users.map((u: any) => ({
         id: u.id,
         name: u.name,
         username: u.username,
@@ -126,6 +129,8 @@ router.get(
         active: u.active === 1,
         created_at: u.created_at,
         last_login: u.last_login,
+        level_id: u.level_id || null,
+        level: u.level || null,
       })),
     });
   })
@@ -141,11 +146,7 @@ router.patch(
     const { id } = req.params;
     const adminId = req.user.userId;
 
-<<<<<<< HEAD
-    const user = AdminService.deactivateUser(id, adminId);
-=======
     const user = await AdminService.deactivateUser(id, adminId);
->>>>>>> f404e31 (temp commit to switch branches)
 
     res.status(200).json({
       success: true,
@@ -170,11 +171,7 @@ router.patch(
     const { id } = req.params;
     const adminId = req.user.userId;
 
-<<<<<<< HEAD
-    const user = AdminService.activateUser(id, adminId);
-=======
     const user = await AdminService.activateUser(id, adminId);
->>>>>>> f404e31 (temp commit to switch branches)
 
     res.status(200).json({
       success: true,
@@ -199,11 +196,7 @@ router.delete(
     const { id } = req.params;
     const adminId = req.user.userId;
 
-<<<<<<< HEAD
-    const deleted = AdminService.deleteUser(id, adminId);
-=======
     const deleted = await AdminService.deleteUser(id, adminId);
->>>>>>> f404e31 (temp commit to switch branches)
 
     if (!deleted) {
       return res.status(404).json({
@@ -222,175 +215,94 @@ router.delete(
   })
 );
 
+/**
+ * PATCH /api/admin/users/:id/level
+ * Update user's academic level (students only)
+ */
+router.patch(
+  '/users/:id/level',
+  [
+    body('levelId').optional().isString().withMessage('Level ID must be a string'),
+  ],
+  validate,
+  asyncHandler(async (req: any, res: any) => {
+    const { id } = req.params;
+    const { levelId } = req.body;
+
+    console.log('📝 [UPDATE LEVEL] Request:', { userId: id, levelId, body: req.body });
+
+    // Get user to verify it's a student
+    const user = await UsersRepository.getById(id);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        error: {
+          message: 'User not found',
+          code: 'USER_NOT_FOUND',
+        },
+      });
+    }
+
+    console.log('📝 [UPDATE LEVEL] Current user:', { name: user.name, level_id: user.level_id });
+
+    if (user.role !== 'student') {
+      return res.status(400).json({
+        success: false,
+        error: {
+          message: 'Only students can have academic levels',
+          code: 'INVALID_USER_ROLE',
+        },
+      });
+    }
+
+    // Update level
+    const valueToSave = levelId || null;
+    console.log('📝 [UPDATE LEVEL] Saving level_id:', valueToSave);
+    const updatedUser = await UsersRepository.update(id, { level_id: valueToSave });
+    console.log('📝 [UPDATE LEVEL] After update - level_id:', updatedUser?.level_id);
+
+    // Get updated user with level info (includes JOIN for level name)
+    const allUsers = await UsersRepository.getAll();
+    const userWithLevel = allUsers.find((u: any) => u.id === id);
+    console.log('📝 [UPDATE LEVEL] Final user with level:', { level_id: userWithLevel?.level_id, level: userWithLevel?.level });
+
+    res.status(200).json({
+      success: true,
+      message: 'Level updated successfully',
+      user: userWithLevel,
+    });
+  })
+);
+
 // ============================================
-// TEACHER-STUDENT ASSIGNMENT ENDPOINTS
+// UNIFIED ENROLLMENT ENDPOINT
 // ============================================
 
+
 /**
- * POST /api/admin/assignments
- * Assign a student to a teacher
+ * POST /api/admin/enrollments/unified
+ * Enroll student in a group and automatically assign to teacher
  */
 router.post(
-  '/assignments',
+  '/enrollments/unified',
   [
-    body('teacherId').notEmpty().withMessage('Teacher ID is required'),
+    body('groupId').notEmpty().withMessage('Group ID is required'),
     body('studentId').notEmpty().withMessage('Student ID is required'),
     body('notes').optional().isString(),
   ],
   validate,
   asyncHandler(async (req: any, res: any) => {
-    const { teacherId, studentId, notes } = req.body;
+    const { groupId, studentId, notes } = req.body;
     const adminId = req.user.userId;
 
-<<<<<<< HEAD
-    const assignment = AdminService.assignStudentToTeacher(
-=======
-    const assignment = await AdminService.assignStudentToTeacher(
->>>>>>> f404e31 (temp commit to switch branches)
-      { teacherId, studentId, notes },
+    const result = await AdminService.enrollStudentToGroupUnified(
+      { groupId, studentId, notes },
       adminId
     );
 
     res.status(201).json({
       success: true,
-      assignment: {
-        id: assignment.id,
-        teacher_id: assignment.teacher_id,
-        student_id: assignment.student_id,
-        assigned_at: assignment.assigned_at,
-        assigned_by: assignment.assigned_by,
-        notes: assignment.notes,
-        active: assignment.active === 1,
-      },
-    });
-  })
-);
-
-/**
- * DELETE /api/admin/assignments
- * Unassign a student from a teacher
- */
-router.delete(
-  '/assignments',
-  [
-    body('teacherId').notEmpty().withMessage('Teacher ID is required'),
-    body('studentId').notEmpty().withMessage('Student ID is required'),
-  ],
-  validate,
-  asyncHandler(async (req: any, res: any) => {
-    const { teacherId, studentId } = req.body;
-    const adminId = req.user.userId;
-
-<<<<<<< HEAD
-    const unassigned = AdminService.unassignStudentFromTeacher(teacherId, studentId, adminId);
-=======
-    const unassigned = await AdminService.unassignStudentFromTeacher(teacherId, studentId, adminId);
->>>>>>> f404e31 (temp commit to switch branches)
-
-    if (!unassigned) {
-      return res.status(404).json({
-        success: false,
-        error: {
-          message: 'Assignment not found',
-          code: 'ASSIGNMENT_NOT_FOUND',
-        },
-      });
-    }
-
-    res.status(200).json({
-      success: true,
-      message: 'Student unassigned from teacher successfully',
-    });
-  })
-);
-
-/**
- * GET /api/admin/assignments
- * Get all assignments
- */
-router.get(
-  '/assignments',
-  asyncHandler(async (req: any, res: any) => {
-    const activeOnly = req.query.activeOnly !== 'false'; // Default: true
-
-<<<<<<< HEAD
-    const assignments = AdminService.getAllAssignments(activeOnly);
-=======
-    const assignments = await AdminService.getAllAssignments(activeOnly);
->>>>>>> f404e31 (temp commit to switch branches)
-
-    res.status(200).json({
-      success: true,
-      count: assignments.length,
-      assignments: assignments.map(a => ({
-        id: a.id,
-        teacher_id: a.teacher_id,
-        student_id: a.student_id,
-        assigned_at: a.assigned_at,
-        assigned_by: a.assigned_by,
-        notes: a.notes,
-        active: a.active === 1,
-      })),
-    });
-  })
-);
-
-/**
- * GET /api/admin/teachers/:teacherId/students
- * Get students assigned to a specific teacher
- */
-router.get(
-  '/teachers/:teacherId/students',
-  asyncHandler(async (req: any, res: any) => {
-    const { teacherId } = req.params;
-
-    const studentsWithDetails = await AdminService.getTeacherStudentsWithDetails(teacherId);
-
-    res.status(200).json({
-      success: true,
-      count: studentsWithDetails.length,
-      students: studentsWithDetails.map(item => ({
-        assignment_id: item.assignment.id,
-        student: {
-          id: item.student.id,
-          name: item.student.name,
-          username: item.student.username,
-          avatar_color: item.student.avatar_color,
-          active: item.student.active === 1,
-        },
-        assigned_at: item.assignment.assigned_at,
-        notes: item.assignment.notes,
-      })),
-    });
-  })
-);
-
-/**
- * GET /api/admin/students/:studentId/teachers
- * Get teachers assigned to a specific student
- */
-router.get(
-  '/students/:studentId/teachers',
-  asyncHandler(async (req: any, res: any) => {
-    const { studentId } = req.params;
-
-<<<<<<< HEAD
-    const assignments = AdminService.getTeachersByStudent(studentId);
-=======
-    const assignments = await AdminService.getTeachersByStudent(studentId);
->>>>>>> f404e31 (temp commit to switch branches)
-
-    res.status(200).json({
-      success: true,
-      count: assignments.length,
-      assignments: assignments.map(a => ({
-        id: a.id,
-        teacher_id: a.teacher_id,
-        assigned_at: a.assigned_at,
-        assigned_by: a.assigned_by,
-        notes: a.notes,
-        active: a.active === 1,
-      })),
+      data: result,
     });
   })
 );
@@ -406,11 +318,7 @@ router.get(
 router.get(
   '/stats',
   asyncHandler(async (req: any, res: any) => {
-<<<<<<< HEAD
-    const stats = AdminService.getStats();
-=======
     const stats = await AdminService.getStats();
->>>>>>> f404e31 (temp commit to switch branches)
 
     res.status(200).json({
       success: true,

@@ -65,7 +65,7 @@ export const DashboardPage = () => {
     setIsModalOpen(true);
   };
 
-  const handleSubmitClass = async (data: { title: string; description: string }) => {
+  const handleSubmitClass = async (data: { title: string; description: string; levelId?: string }) => {
     try {
       if (modalMode === 'create') {
         await classService.create(data);

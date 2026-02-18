@@ -3,17 +3,17 @@ import {
   SlidesRepository, 
   SessionsRepository, 
   StudentCopiesRepository,
-  TeacherStudentsRepository
+  EnrollmentsRepository
 } from '../db/repositories';
 import { Class } from '../types/database';
 import { NotFoundError, ForbiddenError, ValidationError } from '../utils/AppError';
 
 export class ClassService {
-  // Create a new class (teacher only)
   static async create(data: {
     title: string;
     description?: string;
     teacher_id: string;
+    level_id?: string;
   }): Promise<Class> {
     // Validate input
     if (!data.title || data.title.trim().length === 0) {
@@ -29,6 +29,7 @@ export class ClassService {
       title: data.title.trim(),
       description: data.description?.trim(),
       teacher_id: data.teacher_id,
+      level_id: data.level_id
     });
 
     return newClass;
@@ -60,53 +61,30 @@ export class ClassService {
     // ADMIN: Ve todas las clases
     if (userRole === 'admin') {
       if (teacherId) {
-<<<<<<< HEAD
-        return ClassesRepository.getByTeacher(teacherId);
-      }
-      return ClassesRepository.getAll();
-=======
         return await ClassesRepository.getByTeacher(teacherId);
       }
       return await ClassesRepository.getAll();
->>>>>>> f404e31 (temp commit to switch branches)
     }
 
     // PROFESOR: Solo ve sus propias clases
     if (userRole === 'teacher') {
-<<<<<<< HEAD
-      return ClassesRepository.getByTeacher(userId);
-=======
       return await ClassesRepository.getByTeacher(userId);
->>>>>>> f404e31 (temp commit to switch branches)
     }
 
-    // ESTUDIANTE: Solo ve clases de profesores asignados
+    // ESTUDIANTE: Solo ve clases donde está matriculado
     if (userRole === 'student') {
-<<<<<<< HEAD
-      const { TeacherStudentsRepository } = require('../db/repositories');
+      const classIds = await EnrollmentsRepository.getStudentClasses(userId);
       
-      // Obtener los profesores asignados a este estudiante
-      const assignments = TeacherStudentsRepository.getTeachersByStudent(userId);
-=======
-      // Obtener los profesores asignados a este estudiante
-      const assignments = await TeacherStudentsRepository.getTeachersByStudent(userId);
->>>>>>> f404e31 (temp commit to switch branches)
-      
-      if (assignments.length === 0) {
-        return []; // No tiene profesores asignados
+      if (classIds.length === 0) {
+        return [];
       }
 
-      // Obtener clases de todos los profesores asignados
-      const teacherIds = assignments.map((a: any) => a.teacher_id);
       const allClasses: Class[] = [];
-
-      for (const teacherId of teacherIds) {
-<<<<<<< HEAD
-        const classes = ClassesRepository.getByTeacher(teacherId);
-=======
-        const classes = await ClassesRepository.getByTeacher(teacherId);
->>>>>>> f404e31 (temp commit to switch branches)
-        allClasses.push(...classes);
+      for (const classId of classIds) {
+        const classObj = await ClassesRepository.getById(classId);
+        if (classObj) {
+          allClasses.push(classObj);
+        }
       }
 
       return allClasses;
@@ -123,6 +101,7 @@ export class ClassService {
       title?: string;
       description?: string;
       thumbnail_url?: string;
+      level_id?: string;
     }
   ): Promise<Class> {
     // Check if class exists
@@ -151,6 +130,7 @@ export class ClassService {
       title: data.title?.trim(),
       description: data.description?.trim(),
       thumbnail_url: data.thumbnail_url,
+      level_id: data.level_id
     });
 
     if (!updated) {

@@ -11,7 +11,8 @@ export class GroupsService {
    * Create a new group for a class
    * @param classId - Class ID
    * @param data - Group data
-   * @param teacherId - Teacher ID creating the group
+   * @param userId - User ID creating the group (teacher or admin)
+   * @param userRole - User role (teacher or admin)
    * @returns Created group
    */
   static async createGroup(
@@ -20,20 +21,19 @@ export class GroupsService {
       name: string;
       description?: string;
       maxStudents?: number;
+      scheduleTime?: string;
     },
-    teacherId: string
+    userId: string,
+    userRole: string
   ): Promise<Group> {
-    // Verify class exists and teacher owns it
-<<<<<<< HEAD
-    const classObj = ClassesRepository.getById(classId);
-=======
+    // Verify class exists
     const classObj = await ClassesRepository.getById(classId);
->>>>>>> f404e31 (temp commit to switch branches)
     if (!classObj) {
       throw new NotFoundError('Class not found');
     }
 
-    if (classObj.teacher_id !== teacherId) {
+    // Verify ownership: teachers can only create for their own classes, admins can create for any class
+    if (userRole === 'teacher' && classObj.teacher_id !== userId) {
       throw new ValidationError('You can only create groups for your own classes');
     }
 
@@ -54,11 +54,7 @@ export class GroupsService {
     }
 
     // Check for duplicate group name in the same class
-<<<<<<< HEAD
-    const existingGroups = GroupsRepository.getByClass(classId);
-=======
     const existingGroups = await GroupsRepository.getByClass(classId);
->>>>>>> f404e31 (temp commit to switch branches)
     const duplicate = existingGroups.find(
       (g) => g.name.toLowerCase() === data.name.trim().toLowerCase()
     );
@@ -67,15 +63,25 @@ export class GroupsService {
       throw new ConflictError(`Group "${data.name}" already exists in this class`);
     }
 
-<<<<<<< HEAD
-    return GroupsRepository.create({
-=======
+    // Validate schedule time format if provided
+    if (data.scheduleTime) {
+      const validTimeSlots = [
+        '08:00-09:00', '09:00-10:00', '10:00-11:00', '11:00-12:00',
+        '14:00-15:00', '15:00-16:00', '16:00-17:00', '17:00-18:00',
+        '18:00-19:00', '19:00-20:00', '20:00-21:00', '21:00-22:00'
+      ];
+      
+      if (!validTimeSlots.includes(data.scheduleTime)) {
+        throw new ValidationError('Invalid schedule time. Must be one of: ' + validTimeSlots.join(', '));
+      }
+    }
+
     return await GroupsRepository.create({
->>>>>>> f404e31 (temp commit to switch branches)
       classId,
       name: data.name.trim(),
       description: data.description?.trim(),
       maxStudents: data.maxStudents,
+      scheduleTime: data.scheduleTime,
     });
   }
 
@@ -86,21 +92,13 @@ export class GroupsService {
    */
   static async getClassGroups(classId: string, userId: string): Promise<Array<Group & { student_count: number }>> {
     // Verify class exists
-<<<<<<< HEAD
-    const classObj = ClassesRepository.getById(classId);
-=======
     const classObj = await ClassesRepository.getById(classId);
->>>>>>> f404e31 (temp commit to switch branches)
     if (!classObj) {
       throw new NotFoundError('Class not found');
     }
 
     // Get user to check permissions
-<<<<<<< HEAD
-    const user = UsersRepository.getById(userId);
-=======
     const user = await UsersRepository.getById(userId);
->>>>>>> f404e31 (temp commit to switch branches)
     if (!user) {
       throw new NotFoundError('User not found');
     }
@@ -112,11 +110,7 @@ export class GroupsService {
       throw new ValidationError('You can only view groups for your own classes');
     }
 
-<<<<<<< HEAD
-    return GroupsRepository.getByClassWithCount(classId);
-=======
     return await GroupsRepository.getByClassWithCount(classId);
->>>>>>> f404e31 (temp commit to switch branches)
   }
 
   /**
@@ -131,24 +125,17 @@ export class GroupsService {
       name?: string;
       description?: string;
       maxStudents?: number;
+      scheduleTime?: string;
     },
     teacherId: string
   ): Promise<Group> {
-<<<<<<< HEAD
-    const group = GroupsRepository.getById(groupId);
-=======
     const group = await GroupsRepository.getById(groupId);
->>>>>>> f404e31 (temp commit to switch branches)
     if (!group) {
       throw new NotFoundError('Group not found');
     }
 
     // Verify teacher owns the class
-<<<<<<< HEAD
-    const classObj = ClassesRepository.getById(group.class_id);
-=======
     const classObj = await ClassesRepository.getById(group.class_id);
->>>>>>> f404e31 (temp commit to switch branches)
     if (!classObj || classObj.teacher_id !== teacherId) {
       throw new ValidationError('You can only update groups for your own classes');
     }
@@ -160,11 +147,7 @@ export class GroupsService {
       }
 
       // Check for duplicate name
-<<<<<<< HEAD
-      const existingGroups = GroupsRepository.getByClass(group.class_id);
-=======
       const existingGroups = await GroupsRepository.getByClass(group.class_id);
->>>>>>> f404e31 (temp commit to switch branches)
       const duplicate = existingGroups.find(
         (g) => g.id !== groupId && g.name.toLowerCase() === data.name!.trim().toLowerCase()
       );
@@ -181,11 +164,7 @@ export class GroupsService {
       }
 
       // Check if new max is less than current enrollment count
-<<<<<<< HEAD
-      const currentCount = GroupsRepository.getStudentCount(groupId);
-=======
       const currentCount = await GroupsRepository.getStudentCount(groupId);
->>>>>>> f404e31 (temp commit to switch branches)
       if (data.maxStudents < currentCount) {
         throw new ValidationError(
           `Cannot set max students to ${data.maxStudents}. Group currently has ${currentCount} students enrolled.`
@@ -193,14 +172,24 @@ export class GroupsService {
       }
     }
 
-<<<<<<< HEAD
-    const updated = GroupsRepository.update(groupId, {
-=======
+    // Validate schedule time format if provided
+    if (data.scheduleTime !== undefined) {
+      const validTimeSlots = [
+        '08:00-09:00', '09:00-10:00', '10:00-11:00', '11:00-12:00',
+        '14:00-15:00', '15:00-16:00', '16:00-17:00', '17:00-18:00',
+        '18:00-19:00', '19:00-20:00', '20:00-21:00', '21:00-22:00'
+      ];
+      
+      if (data.scheduleTime && !validTimeSlots.includes(data.scheduleTime)) {
+        throw new ValidationError('Invalid schedule time. Must be one of: ' + validTimeSlots.join(', '));
+      }
+    }
+
     const updated = await GroupsRepository.update(groupId, {
->>>>>>> f404e31 (temp commit to switch branches)
       name: data.name?.trim(),
       description: data.description?.trim(),
       maxStudents: data.maxStudents,
+      scheduleTime: data.scheduleTime,
     });
 
     if (!updated) {
@@ -216,42 +205,26 @@ export class GroupsService {
    * @param teacherId - Teacher ID deleting the group
    */
   static async deleteGroup(groupId: string, teacherId: string): Promise<boolean> {
-<<<<<<< HEAD
-    const group = GroupsRepository.getById(groupId);
-=======
     const group = await GroupsRepository.getById(groupId);
->>>>>>> f404e31 (temp commit to switch branches)
     if (!group) {
       throw new NotFoundError('Group not found');
     }
 
     // Verify teacher owns the class
-<<<<<<< HEAD
-    const classObj = ClassesRepository.getById(group.class_id);
-=======
     const classObj = await ClassesRepository.getById(group.class_id);
->>>>>>> f404e31 (temp commit to switch branches)
     if (!classObj || classObj.teacher_id !== teacherId) {
       throw new ValidationError('You can only delete groups for your own classes');
     }
 
     // Check if group has enrollments
-<<<<<<< HEAD
-    const studentCount = GroupsRepository.getStudentCount(groupId);
-=======
     const studentCount = await GroupsRepository.getStudentCount(groupId);
->>>>>>> f404e31 (temp commit to switch branches)
     if (studentCount > 0) {
       throw new ValidationError(
         `Cannot delete group with ${studentCount} enrolled students. Unenroll students first or deactivate the group.`
       );
     }
 
-<<<<<<< HEAD
-    return GroupsRepository.delete(groupId);
-=======
     return await GroupsRepository.delete(groupId);
->>>>>>> f404e31 (temp commit to switch branches)
   }
 
   /**
@@ -267,11 +240,7 @@ export class GroupsService {
     notes?: string
   ): Promise<Enrollment> {
     // Verify group exists
-<<<<<<< HEAD
-    const group = GroupsRepository.getById(groupId);
-=======
     const group = await GroupsRepository.getById(groupId);
->>>>>>> f404e31 (temp commit to switch branches)
     if (!group) {
       throw new NotFoundError('Group not found');
     }
@@ -281,11 +250,7 @@ export class GroupsService {
     }
 
     // Verify student exists and has student role
-<<<<<<< HEAD
-    const student = UsersRepository.getById(studentId);
-=======
     const student = await UsersRepository.getById(studentId);
->>>>>>> f404e31 (temp commit to switch branches)
     if (!student) {
       throw new NotFoundError('Student not found');
     }
@@ -299,20 +264,12 @@ export class GroupsService {
     }
 
     // Verify enrolling user has permission
-<<<<<<< HEAD
-    const enrollingUser = UsersRepository.getById(enrolledBy);
-=======
     const enrollingUser = await UsersRepository.getById(enrolledBy);
->>>>>>> f404e31 (temp commit to switch branches)
     if (!enrollingUser) {
       throw new NotFoundError('Enrolling user not found');
     }
 
-<<<<<<< HEAD
-    const classObj = ClassesRepository.getById(group.class_id);
-=======
     const classObj = await ClassesRepository.getById(group.class_id);
->>>>>>> f404e31 (temp commit to switch branches)
     if (!classObj) {
       throw new NotFoundError('Class not found');
     }
@@ -323,33 +280,31 @@ export class GroupsService {
     }
 
     // Check if already enrolled
-<<<<<<< HEAD
-    if (EnrollmentsRepository.isEnrolled(groupId, studentId)) {
-=======
     if (await EnrollmentsRepository.isEnrolled(groupId, studentId)) {
->>>>>>> f404e31 (temp commit to switch branches)
       throw new ConflictError('Student is already enrolled in this group');
     }
 
-    // Check if group is full
-<<<<<<< HEAD
-    if (GroupsRepository.isFull(groupId)) {
-      throw new ValidationError('Group is full. Cannot enroll more students.');
+    // --- NEW: Level Validation ---
+    if (classObj.level_id && student.level_id) {
+      if (classObj.level_id !== student.level_id) {
+        console.warn(`⚠️ Student level (${student.level_id}) does not match class level (${classObj.level_id})`);
+        // We allow it but could block it if requested. For now, just logging or we could pass a flag.
+      }
     }
 
-    return EnrollmentsRepository.enroll({
-=======
+    // Check if group is full
     if (await GroupsRepository.isFull(groupId)) {
       throw new ValidationError('Group is full. Cannot enroll more students.');
     }
 
-    return await EnrollmentsRepository.enroll({
->>>>>>> f404e31 (temp commit to switch branches)
+    const enrollment = await EnrollmentsRepository.enroll({
       groupId,
       studentId,
       enrolledBy,
       notes,
     });
+
+    return enrollment;
   }
 
   /**
@@ -364,39 +319,23 @@ export class GroupsService {
     userId: string
   ): Promise<boolean> {
     // Verify group exists
-<<<<<<< HEAD
-    const group = GroupsRepository.getById(groupId);
-=======
     const group = await GroupsRepository.getById(groupId);
->>>>>>> f404e31 (temp commit to switch branches)
     if (!group) {
       throw new NotFoundError('Group not found');
     }
 
     // Verify enrollment exists
-<<<<<<< HEAD
-    if (!EnrollmentsRepository.isEnrolled(groupId, studentId)) {
-=======
     if (!await EnrollmentsRepository.isEnrolled(groupId, studentId)) {
->>>>>>> f404e31 (temp commit to switch branches)
       throw new NotFoundError('Student is not enrolled in this group');
     }
 
     // Verify user has permission
-<<<<<<< HEAD
-    const user = UsersRepository.getById(userId);
-=======
     const user = await UsersRepository.getById(userId);
->>>>>>> f404e31 (temp commit to switch branches)
     if (!user) {
       throw new NotFoundError('User not found');
     }
 
-<<<<<<< HEAD
-    const classObj = ClassesRepository.getById(group.class_id);
-=======
     const classObj = await ClassesRepository.getById(group.class_id);
->>>>>>> f404e31 (temp commit to switch branches)
     if (!classObj) {
       throw new NotFoundError('Class not found');
     }
@@ -406,11 +345,7 @@ export class GroupsService {
       throw new ValidationError('Only the class teacher or admin can unenroll students');
     }
 
-<<<<<<< HEAD
-    return EnrollmentsRepository.unenroll(groupId, studentId);
-=======
     return await EnrollmentsRepository.unenroll(groupId, studentId);
->>>>>>> f404e31 (temp commit to switch branches)
   }
 
   /**
@@ -420,30 +355,18 @@ export class GroupsService {
    */
   static async getGroupStudents(groupId: string, userId: string) {
     // Verify group exists
-<<<<<<< HEAD
-    const group = GroupsRepository.getById(groupId);
-=======
     const group = await GroupsRepository.getById(groupId);
->>>>>>> f404e31 (temp commit to switch branches)
     if (!group) {
       throw new NotFoundError('Group not found');
     }
 
     // Verify user has permission
-<<<<<<< HEAD
-    const user = UsersRepository.getById(userId);
-=======
     const user = await UsersRepository.getById(userId);
->>>>>>> f404e31 (temp commit to switch branches)
     if (!user) {
       throw new NotFoundError('User not found');
     }
 
-<<<<<<< HEAD
-    const classObj = ClassesRepository.getById(group.class_id);
-=======
     const classObj = await ClassesRepository.getById(group.class_id);
->>>>>>> f404e31 (temp commit to switch branches)
     if (!classObj) {
       throw new NotFoundError('Class not found');
     }
@@ -455,20 +378,12 @@ export class GroupsService {
 
     if (user.role === 'student') {
       // Students can only view if they're enrolled
-<<<<<<< HEAD
-      if (!EnrollmentsRepository.isEnrolled(groupId, userId)) {
-=======
       if (!await EnrollmentsRepository.isEnrolled(groupId, userId)) {
->>>>>>> f404e31 (temp commit to switch branches)
         throw new ValidationError('You can only view groups you are enrolled in');
       }
     }
 
-<<<<<<< HEAD
-    return EnrollmentsRepository.getStudentsWithInfo(groupId);
-=======
     return await EnrollmentsRepository.getStudentsWithInfo(groupId);
->>>>>>> f404e31 (temp commit to switch branches)
   }
 
   /**
@@ -477,11 +392,7 @@ export class GroupsService {
    */
   static async getStudentGroups(studentId: string) {
     // Verify student exists
-<<<<<<< HEAD
-    const student = UsersRepository.getById(studentId);
-=======
     const student = await UsersRepository.getById(studentId);
->>>>>>> f404e31 (temp commit to switch branches)
     if (!student) {
       throw new NotFoundError('Student not found');
     }
@@ -491,31 +402,19 @@ export class GroupsService {
     }
 
     // Get enrollments with group and class info
-<<<<<<< HEAD
-    const enrollments = EnrollmentsRepository.getByStudent(studentId);
-    
-    return enrollments.map((enrollment) => {
-      const group = GroupsRepository.getById(enrollment.group_id);
-      const classObj = group ? ClassesRepository.getById(group.class_id) : null;
-=======
     const enrollments = await EnrollmentsRepository.getByStudent(studentId);
     
     const results = await Promise.all(enrollments.map(async (enrollment) => {
       const group = await GroupsRepository.getById(enrollment.group_id);
       const classObj = group ? await ClassesRepository.getById(group.class_id) : null;
->>>>>>> f404e31 (temp commit to switch branches)
 
       return {
         enrollment,
         group,
         class: classObj,
       };
-<<<<<<< HEAD
-    }).filter((item) => item.group && item.class); // Filter out any null groups/classes
-=======
     }));
 
     return results.filter((item) => item.group && item.class);
->>>>>>> f404e31 (temp commit to switch branches)
   }
 }

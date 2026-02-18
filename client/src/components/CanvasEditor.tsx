@@ -990,6 +990,7 @@ export const CanvasEditor = ({
       width: 1200,
       height: 675,
       backgroundColor: '#ffffff',
+      selection: !isReadOnly, // Disable selection box in read-only mode
     });
 
     fabricCanvasRef.current = canvas;
@@ -1011,6 +1012,22 @@ export const CanvasEditor = ({
             try {
               const enlivenedObjects = await fabric.util.enlivenObjects(data.objects);
               enlivenedObjects.forEach((obj: any) => {
+                // ✅ ENFORCE READ-ONLY: Lock objects if in read-only mode
+                if (isReadOnlyRef.current) {
+                  obj.selectable = false;
+                  obj.evented = false;
+                  obj.hasControls = false;
+                  obj.hasBorders = false;
+                  obj.lockMovementX = true;
+                  obj.lockMovementY = true;
+                  obj.lockRotation = true;
+                  obj.lockScalingX = true;
+                  obj.lockScalingY = true;
+                  
+                  if (obj instanceof fabric.IText) {
+                    obj.editable = false;
+                  }
+                }
                 canvas.add(obj);
               });
               
@@ -1121,7 +1138,15 @@ export const CanvasEditor = ({
   // Update tool - Handle drawing modes and shape drawing
   useEffect(() => {
     const canvas = fabricCanvasRef.current;
-    if (!canvas || !isReady || isReadOnly) return;
+    if (!canvas || !isReady) return;
+
+    if (isReadOnly) {
+      canvas.selection = false;
+      canvas.isDrawingMode = false;
+      canvas.discardActiveObject();
+      canvas.requestRenderAll();
+      return;
+    }
 
     // Reset modes
     canvas.isDrawingMode = false;

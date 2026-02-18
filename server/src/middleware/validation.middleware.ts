@@ -12,6 +12,11 @@ export const validate = (req: Request, res: Response, next: NextFunction) => {
       message: err.msg,
     }));
     
+    // DEBUG: Log validation errors
+    console.log('❌ Validation failed:');
+    console.log('  Errors:', formattedErrors);
+    console.log('  Request body:', req.body);
+    
     throw new ValidationError('Validation failed', formattedErrors);
   }
   

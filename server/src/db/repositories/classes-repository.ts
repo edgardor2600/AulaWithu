@@ -9,13 +9,14 @@ export class ClassesRepository {
     description?: string; 
     teacher_id: string;
     thumbnail_url?: string;
+    level_id?: string | null;
   }): Promise<Class> {
     const id = generateId();
     
     await runQuery(
-      `INSERT INTO classes (id, title, description, teacher_id, thumbnail_url) 
-       VALUES ($1, $2, $3, $4, $5)`,
-      [id, data.title, data.description || null, data.teacher_id, data.thumbnail_url || null]
+      `INSERT INTO classes (id, title, description, teacher_id, thumbnail_url, level_id) 
+       VALUES ($1, $2, $3, $4, $5, $6)`,
+      [id, data.title, data.description || null, data.teacher_id, data.thumbnail_url || null, data.level_id || null]
     );
     
     const cls = await this.getById(id);
@@ -56,6 +57,7 @@ export class ClassesRepository {
     title?: string; 
     description?: string;
     thumbnail_url?: string;
+    level_id?: string | null;
   }): Promise<Class | undefined> {
     const updates: string[] = ['updated_at = CURRENT_TIMESTAMP'];
     const params: any[] = [];
@@ -72,6 +74,10 @@ export class ClassesRepository {
     if (data.thumbnail_url !== undefined) {
       updates.push(`thumbnail_url = $${paramIndex++}`);
       params.push(data.thumbnail_url);
+    }
+    if (data.level_id !== undefined) {
+      updates.push(`level_id = $${paramIndex++}`);
+      params.push(data.level_id);
     }
 
     if (updates.length === 1) { // Only updated_at

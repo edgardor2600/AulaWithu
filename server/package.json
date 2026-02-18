@@ -27,10 +27,7 @@
   },
   "dependencies": {
     "@types/bcrypt": "^6.0.0",
-<<<<<<< HEAD
-=======
     "@types/pg": "^8.16.0",
->>>>>>> f404e31 (temp commit to switch branches)
     "bcrypt": "^6.0.0",
     "better-sqlite3": "^12.5.0",
     "cors": "^2.8.5",

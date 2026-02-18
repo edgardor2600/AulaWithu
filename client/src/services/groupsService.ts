@@ -7,6 +7,7 @@ export interface Group {
   description: string | null;
   max_students: number;
   student_count?: number;
+  schedule_time: string | null;
   active: boolean;
   created_at: string;
   updated_at: string;
@@ -69,6 +70,7 @@ export const groupsService = {
     name: string;
     description?: string;
     maxStudents?: number;
+    scheduleTime?: string;
   }): Promise<Group> {
     const response = await api.post(`/classes/${classId}/groups`, data);
     return response.data.group;
@@ -79,6 +81,7 @@ export const groupsService = {
     name?: string;
     description?: string;
     maxStudents?: number;
+    scheduleTime?: string;
   }): Promise<Group> {
     const response = await api.put(`/groups/${groupId}`, data);
     return response.data.group;

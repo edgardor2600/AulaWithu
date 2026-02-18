@@ -11,7 +11,9 @@ import {
   XCircle,
   Trash2,
   Search,
+  Edit3,
 } from 'lucide-react';
+import { EditLevelModal } from './EditLevelModal';
 
 interface UsersTableProps {
   users: User[];
@@ -23,6 +25,7 @@ export const UsersTable = ({ users, onRefresh, onCreateUser }: UsersTableProps) 
   const [filter, setFilter] = useState<'all' | 'admin' | 'teacher' | 'student'>('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [activeMenu, setActiveMenu] = useState<string | null>(null);
+  const [editingUser, setEditingUser] = useState<User | null>(null);
 
   const handleToggleActive = async (user: User) => {
     try {
@@ -172,6 +175,9 @@ export const UsersTable = ({ users, onRefresh, onCreateUser }: UsersTableProps) 
                   Rol
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Nivel Académico
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Estado
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -185,7 +191,7 @@ export const UsersTable = ({ users, onRefresh, onCreateUser }: UsersTableProps) 
             <tbody className="divide-y divide-gray-200">
               {filteredUsers.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="px-6 py-8 text-center text-gray-500">
+                  <td colSpan={6} className="px-6 py-8 text-center text-gray-500">
                     No se encontraron usuarios
                   </td>
                 </tr>
@@ -211,6 +217,19 @@ export const UsersTable = ({ users, onRefresh, onCreateUser }: UsersTableProps) 
                         {getRoleIcon(user.role)}
                         {getRoleBadge(user.role)}
                       </div>
+                    </td>
+                    <td className="px-6 py-4">
+                      {user.role === 'student' ? (
+                        user.level ? (
+                          <span className="inline-flex items-center px-2.5 py-1 bg-blue-100 text-blue-800 rounded-full text-xs font-semibold">
+                            📚 {user.level.name}
+                          </span>
+                        ) : (
+                          <span className="text-xs text-gray-400 italic">Sin nivel asignado</span>
+                        )
+                      ) : (
+                        <span className="text-xs text-gray-400">-</span>
+                      )}
                     </td>
                     <td className="px-6 py-4">
                       {user.active ? (
@@ -250,6 +269,20 @@ export const UsersTable = ({ users, onRefresh, onCreateUser }: UsersTableProps) 
                               onClick={() => setActiveMenu(null)}
                             />
                             <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-20">
+                              {/* Edit Level - Only for students */}
+                              {user.role === 'student' && (
+                                <button
+                                  onClick={() => {
+                                    setEditingUser(user);
+                                    setActiveMenu(null);
+                                  }}
+                                  className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-2"
+                                >
+                                  <Edit3 className="w-4 h-4 text-blue-500" />
+                                  Editar Nivel
+                                </button>
+                              )}
+                              
                               <button
                                 onClick={() => handleToggleActive(user)}
                                 className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-2"
@@ -287,6 +320,18 @@ export const UsersTable = ({ users, onRefresh, onCreateUser }: UsersTableProps) 
           </table>
         </div>
       </div>
+
+      {/* Edit Level Modal */}
+      {editingUser && (
+        <EditLevelModal
+          user={editingUser}
+          onClose={() => setEditingUser(null)}
+          onSuccess={() => {
+            setEditingUser(null);
+            onRefresh();
+          }}
+        />
+      )}
     </div>
   );
 };

@@ -7,7 +7,7 @@ import {
   Users, 
   LogOut, 
   Home,
-  BookOpen,
+  MessageCircle,
   Menu,
   X
 } from 'lucide-react';
@@ -70,8 +70,8 @@ export const Layout = ({ children }: LayoutProps) => {
     { path: '/dashboard', icon: Home, label: 'Dashboard' },
     { 
       path: '/classes', 
-      icon: BookOpen, 
-      label: 'Classes',
+      icon: MessageCircle, 
+      label: 'Mensajes',
       badge: unreadCount > 0 ? unreadCount : undefined
     },
   ];

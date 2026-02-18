@@ -6,6 +6,7 @@ export interface Class {
   description: string | null;
   teacher_id: string;
   thumbnail_url: string | null;
+  level_id: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -20,12 +21,15 @@ export interface ClassWithDetails extends Class {
 export interface CreateClassData {
   title: string;
   description?: string;
+  levelId?: string;
+  teacherId?: string;
 }
 
 export interface UpdateClassData {
   title?: string;
   description?: string;
   thumbnail_url?: string;
+  levelId?: string;
 }
 
 export const classService = {
@@ -56,5 +60,11 @@ export const classService = {
   // Delete class (owner only)
   async delete(id: string): Promise<void> {
     await api.delete(`/classes/${id}`);
+  },
+
+  // Get academic levels
+  async getLevels(): Promise<any[]> {
+    const response = await api.get<{ success: boolean; levels: any[] }>('/classes/levels');
+    return response.data.levels;
   },
 };

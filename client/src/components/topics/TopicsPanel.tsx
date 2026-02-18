@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { topicsService, type Topic } from '../../services/topicsService';
-import { BookOpen, Plus, Edit2, Trash2, GripVertical } from 'lucide-react';
+import { BookOpen, Plus, Edit2, Trash2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useAuthStore } from '../../store/authStore';
 

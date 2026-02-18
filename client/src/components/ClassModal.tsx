@@ -1,11 +1,11 @@
 import { useState, useEffect } from 'react';
 import { X } from 'lucide-react';
-import type { Class } from '../services/classService';
+import { classService, type Class } from '../services/classService';
 
 interface ClassModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSubmit: (data: { title: string; description: string }) => Promise<void>;
+  onSubmit: (data: { title: string; description: string; levelId?: string }) => Promise<void>;
   initialData?: Class | null;
   mode: 'create' | 'edit';
 }
@@ -13,17 +13,40 @@ interface ClassModalProps {
 export const ClassModal = ({ isOpen, onClose, onSubmit, initialData, mode }: ClassModalProps) => {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
+  const [levelId, setLevelId] = useState('');
+  const [levels, setLevels] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [isLoadingLevels, setIsLoadingLevels] = useState(false);
 
   useEffect(() => {
     if (initialData) {
       setTitle(initialData.title);
       setDescription(initialData.description || '');
+      setLevelId(initialData.level_id || '');
     } else {
       setTitle('');
       setDescription('');
+      setLevelId('');
     }
   }, [initialData, isOpen]);
+
+  useEffect(() => {
+    if (isOpen) {
+      loadLevels();
+    }
+  }, [isOpen]);
+
+  const loadLevels = async () => {
+    setIsLoadingLevels(true);
+    try {
+      const data = await classService.getLevels();
+      setLevels(data);
+    } catch (error) {
+      console.error('Error loading levels:', error);
+    } finally {
+      setIsLoadingLevels(false);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -37,6 +60,7 @@ export const ClassModal = ({ isOpen, onClose, onSubmit, initialData, mode }: Cla
       await onSubmit({
         title: title.trim(),
         description: description.trim(),
+        levelId: levelId || undefined,
       });
       onClose();
     } finally {
@@ -96,6 +120,25 @@ export const ClassModal = ({ isOpen, onClose, onSubmit, initialData, mode }: Cla
               className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition resize-none"
               disabled={isLoading}
             />
+          </div>
+
+          {/* Academic Level */}
+          <div>
+            <label htmlFor="level" className="block text-sm font-medium text-gray-700 mb-2">
+              Academic Level
+            </label>
+            <select
+              id="level"
+              value={levelId}
+              onChange={(e) => setLevelId(e.target.value)}
+              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition appearance-none bg-white"
+              disabled={isLoading || isLoadingLevels}
+            >
+              <option value="">-- No Level Assigned --</option>
+              {levels.map((l) => (
+                <option key={l.id} value={l.id}>{l.name}</option>
+              ))}
+            </select>
           </div>
 
           {/* Actions */}

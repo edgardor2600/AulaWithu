@@ -1,4 +1,4 @@
-import { SessionsRepository, ClassesRepository, SlidesRepository } from '../db/repositories';
+import { SessionsRepository, ClassesRepository, SlidesRepository, EnrollmentsRepository } from '../db/repositories';
 import { Session } from '../types/database';
 import { NotFoundError, ForbiddenError, ValidationError, ConflictError } from '../utils/AppError';
 
@@ -33,6 +33,7 @@ export class SessionService {
     slide_id: string;
     teacher_id: string;
     allow_student_draw?: boolean;
+    group_id?: string | null;
   }): Promise<Session> {
     // Validate class exists and belongs to teacher
     const classData = await ClassesRepository.getById(data.class_id);
@@ -71,6 +72,7 @@ export class SessionService {
           slide_id: data.slide_id,
           teacher_id: data.teacher_id,
           allow_student_draw: data.allow_student_draw || false,
+          group_id: data.group_id || null,
         });
         
         return session;
@@ -123,6 +125,14 @@ export class SessionService {
     // Check if session is active
     if (!session.is_active) {
       throw new ValidationError('This session has ended');
+    }
+
+    // --- NEW: Group Access Control ---
+    if (session.group_id) {
+      const isEnrolled = await EnrollmentsRepository.isEnrolled(session.group_id, userId);
+      if (!isEnrolled) {
+        throw new ForbiddenError('You are not enrolled in the group associated with this session');
+      }
     }
 
     return session;

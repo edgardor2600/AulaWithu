@@ -10,25 +10,15 @@ export class SlidesRepository {
     title?: string;
     canvas_data?: string;
     topic_id?: string;  // Added for topics support
-<<<<<<< HEAD
-  }): Slide {
-=======
   }): Promise<Slide> {
->>>>>>> f404e31 (temp commit to switch branches)
     const id = generateId();
     
     // If slide_number not provided, get next number
     const slideNumber = data.slide_number || await this.getNextSlideNumber(data.class_id);
     
-<<<<<<< HEAD
-    runQuery(
-      `INSERT INTO slides (id, class_id, slide_number, title, canvas_data, topic_id) 
-       VALUES (?, ?, ?, ?, ?, ?)`,
-=======
     await runQuery(
       `INSERT INTO slides (id, class_id, slide_number, title, canvas_data, topic_id) 
        VALUES ($1, $2, $3, $4, $5, $6)`,
->>>>>>> f404e31 (temp commit to switch branches)
       [
         id, 
         data.class_id, 

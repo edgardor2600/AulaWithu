@@ -15,9 +15,8 @@ import {
 } from 'lucide-react';
 import { CreateUserModal } from '../components/admin/CreateUserModal';
 import { UsersTable } from '../components/admin/UsersTable';
-import { AssignmentsPanel } from '../components/admin/AssignmentsPanel';
 
-type TabType = 'stats' | 'users' | 'assignments';
+type TabType = 'stats' | 'users';
 
 export const AdminPanel = () => {
   const [activeTab, setActiveTab] = useState<TabType>('stats');
@@ -141,17 +140,6 @@ export const AdminPanel = () => {
               <Users className="w-5 h-5" />
               Usuarios
             </button>
-            <button
-              onClick={() => setActiveTab('assignments')}
-              className={`py-4 border-b-2 font-medium text-sm transition flex items-center gap-2 ${
-                activeTab === 'assignments'
-                  ? 'border-blue-600 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-              }`}
-            >
-              <BookOpen className="w-5 h-5" />
-              Asignaciones
-            </button>
           </nav>
         </div>
       </div>
@@ -174,7 +162,7 @@ export const AdminPanel = () => {
                       <div>
                         <p className="text-sm font-medium text-gray-600">Total Usuarios</p>
                         <p className="text-3xl font-bold text-gray-900 mt-2">{stats.totalUsers}</p>
-                        <p className="text-sm text-gray-500 mt-1">{stats.activeUsers} activos</p>
+                        <p className="text-sm text-gray-600">Matrículas activas</p>
                       </div>
                       <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
                         <Users className="w-6 h-6 text-blue-600" />
@@ -215,7 +203,7 @@ export const AdminPanel = () => {
                     <div className="flex items-center justify-between">
                       <div>
                         <p className="text-sm font-medium text-gray-600">Asignaciones</p>
-                        <p className="text-3xl font-bold text-gray-900 mt-2">{stats.assignments}</p>
+                        <p className="text-3xl font-bold text-gray-900 mt-2">{stats.enrollments}</p>
                         <p className="text-sm text-gray-500 mt-1">Profesor-Estudiante</p>
                       </div>
                       <div className="w-12 h-12 bg-orange-100 rounded-lg flex items-center justify-center">
@@ -242,7 +230,7 @@ export const AdminPanel = () => {
                 {/* Quick Actions */}
                 <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
                   <h3 className="text-lg font-semibold text-gray-900 mb-4">Acciones Rápidas</h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <button
                       onClick={() => handleCreateUser('teacher')}
                       className="flex items-center gap-3 p-4 border-2 border-dashed border-gray-300 rounded-lg hover:border-purple-400 hover:bg-purple-50 transition group"
@@ -268,6 +256,19 @@ export const AdminPanel = () => {
                         <p className="text-sm text-gray-500">Agregar nuevo estudiante al sistema</p>
                       </div>
                     </button>
+
+                    <button
+                      onClick={() => navigate('/admin/groups')}
+                      className="flex items-center gap-3 p-4 border-2 border-dashed border-gray-300 rounded-lg hover:border-blue-400 hover:bg-blue-50 transition group"
+                    >
+                      <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center group-hover:bg-blue-200 transition">
+                        <Users className="w-5 h-5 text-blue-600" />
+                      </div>
+                      <div className="text-left">
+                        <p className="font-medium text-gray-900">Gestión de Grupos</p>
+                        <p className="text-sm text-gray-500">Organizar estudiantes por grupos</p>
+                      </div>
+                    </button>
                   </div>
                 </div>
               </div>
@@ -280,11 +281,6 @@ export const AdminPanel = () => {
                 onRefresh={loadData}
                 onCreateUser={handleCreateUser}
               />
-            )}
-
-            {/* Assignments Tab */}
-            {activeTab === 'assignments' && (
-              <AssignmentsPanel />
             )}
           </>
         )}

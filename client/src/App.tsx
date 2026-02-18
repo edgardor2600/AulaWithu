@@ -10,6 +10,7 @@ import { SlideViewerPage } from './pages/SlideViewerPage';
 import { JoinSessionPage } from './pages/JoinSessionPage';
 import { SessionViewPage } from './pages/SessionViewPage';
 import { AdminPanel } from './pages/AdminPanel';
+import { GroupManagementPage } from './pages/GroupManagementPage';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { useAuthStore } from './store/authStore';
 
@@ -69,6 +70,15 @@ function App() {
           element={
             <ProtectedRoute requiredRole="admin">
               <AdminPanel />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/admin/groups"
+          element={
+            <ProtectedRoute requiredRole="admin">
+              <GroupManagementPage />
             </ProtectedRoute>
           }
         />
