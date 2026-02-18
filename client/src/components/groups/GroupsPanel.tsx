@@ -36,6 +36,7 @@ export const GroupsPanel = ({ classId, className }: GroupsPanelProps) => {
     name: '',
     description: '',
     maxStudents: 30,
+    scheduleTime: '',
   });
 
   // Enroll Student Modal
@@ -120,7 +121,12 @@ export const GroupsPanel = ({ classId, className }: GroupsPanelProps) => {
 
   const handleCreateGroup = () => {
     setEditingGroup(null);
-    setGroupForm({ name: '', description: '', maxStudents: 30 });
+    setGroupForm({ 
+      name: '', 
+      description: '', 
+      maxStudents: 30,
+      scheduleTime: '',
+    });
     setShowGroupModal(true);
   };
 
@@ -130,6 +136,7 @@ export const GroupsPanel = ({ classId, className }: GroupsPanelProps) => {
       name: group.name,
       description: group.description || '',
       maxStudents: group.max_students,
+      scheduleTime: group.schedule_time || '',
     });
     setShowGroupModal(true);
   };
@@ -187,7 +194,11 @@ export const GroupsPanel = ({ classId, className }: GroupsPanelProps) => {
 
     setIsEnrolling(true);
     try {
-      await groupsService.enrollStudent(selectedGroup, enrollStudentId, enrollNotes);
+      if (user?.role === 'admin') {
+        await adminService.enrollStudentUnified(selectedGroup, enrollStudentId, enrollNotes);
+      } else {
+        await groupsService.enrollStudent(selectedGroup, enrollStudentId, enrollNotes);
+      }
       toast.success('Estudiante inscrito exitosamente');
       setShowEnrollModal(false);
       setEnrollStudentId('');
@@ -310,14 +321,21 @@ export const GroupsPanel = ({ classId, className }: GroupsPanelProps) => {
                     </button>
                   </div>
                 </div>
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-gray-600">
-                    {group.student_count || 0} / {group.max_students} estudiantes
-                  </span>
-                  {(group.student_count || 0) >= group.max_students && (
-                    <span className="text-xs bg-orange-100 text-orange-800 px-2 py-1 rounded">
-                      Lleno
+                <div className="flex flex-col gap-1 text-sm mt-3 pt-3 border-t border-gray-100">
+                  <div className="flex items-center justify-between">
+                    <span className="text-gray-600">
+                      {group.student_count || 0} / {group.max_students} estudiantes
                     </span>
+                    {(group.student_count || 0) >= group.max_students && (
+                      <span className="text-xs bg-orange-100 text-orange-800 px-2 py-1 rounded">
+                        Lleno
+                      </span>
+                    )}
+                  </div>
+                  {group.schedule_time && (
+                    <div className="text-xs text-blue-600 font-medium">
+                      🕐 {group.schedule_time}
+                    </div>
                   )}
                 </div>
               </div>
@@ -455,6 +473,35 @@ export const GroupsPanel = ({ classId, className }: GroupsPanelProps) => {
                   max={100}
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
                 />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Horario de Clase
+                </label>
+                <select
+                  value={groupForm.scheduleTime}
+                  onChange={(e) => setGroupForm({ ...groupForm, scheduleTime: e.target.value })}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none appearance-none bg-white"
+                >
+                  <option value="">-- Seleccionar Horario --</option>
+                  <optgroup label="Horarios de Mañana">
+                    <option value="08:00-09:00">08:00 - 09:00</option>
+                    <option value="09:00-10:00">09:00 - 10:00</option>
+                    <option value="10:00-11:00">10:00 - 11:00</option>
+                    <option value="11:00-12:00">11:00 - 12:00</option>
+                  </optgroup>
+                  <optgroup label="Horarios de Tarde/Noche">
+                    <option value="14:00-15:00">14:00 - 15:00 (2:00 PM - 3:00 PM)</option>
+                    <option value="15:00-16:00">15:00 - 16:00 (3:00 PM - 4:00 PM)</option>
+                    <option value="16:00-17:00">16:00 - 17:00 (4:00 PM - 5:00 PM)</option>
+                    <option value="17:00-18:00">17:00 - 18:00 (5:00 PM - 6:00 PM)</option>
+                    <option value="18:00-19:00">18:00 - 19:00 (6:00 PM - 7:00 PM)</option>
+                    <option value="19:00-20:00">19:00 - 20:00 (7:00 PM - 8:00 PM)</option>
+                    <option value="20:00-21:00">20:00 - 21:00 (8:00 PM - 9:00 PM)</option>
+                    <option value="21:00-22:00">21:00 - 22:00 (9:00 PM - 10:00 PM)</option>
+                  </optgroup>
+                </select>
               </div>
             </div>
 

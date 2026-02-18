@@ -16,6 +16,11 @@ interface StudentInfo {
     avatar_color: string;
     active: boolean;
     last_login: string | null;
+    level?: {
+      id: string;
+      name: string;
+      description: string | null;
+    };
   };
   assigned_at: string;
   notes: string | null;

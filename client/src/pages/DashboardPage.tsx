@@ -65,7 +65,7 @@ export const DashboardPage = () => {
     setIsModalOpen(true);
   };
 
-  const handleSubmitClass = async (data: { title: string; description: string }) => {
+  const handleSubmitClass = async (data: { title: string; description: string; levelId?: string }) => {
     try {
       if (modalMode === 'create') {
         await classService.create(data);
@@ -110,9 +110,9 @@ export const DashboardPage = () => {
       <div className="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50/30 to-purple-50/20">
         <div className="p-8">
           {/* Header */}
-          <div className="mb-8 flex items-center justify-between">
+          <div className="mb-8 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
-              <h1 className="text-4xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent mb-2">
+              <h1 className="text-3xl md:text-4xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent mb-2">
                 {isTeacher ? 'My Classes' : 'Available Classes'}
               </h1>
               <p className="text-gray-600">
@@ -126,7 +126,7 @@ export const DashboardPage = () => {
             {!isTeacher && (
               <button
                 onClick={handleJoinSession}
-                className="flex items-center space-x-2 px-6 py-3 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-xl hover:from-green-600 hover:to-emerald-700 transition-all font-medium shadow-lg hover:shadow-xl transform hover:scale-105"
+                className="flex items-center justify-center space-x-2 px-6 py-3 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-xl hover:from-green-600 hover:to-emerald-700 transition-all font-medium shadow-lg hover:shadow-xl transform hover:scale-105"
               >
                 <Radio className="w-5 h-5" />
                 <span>Join Live Session</span>
