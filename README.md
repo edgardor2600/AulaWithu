@@ -1,64 +1,90 @@
 # 🎓 AulaWithu - Plataforma Educativa Colaborativa
 
-![Status](https://img.shields.io/badge/Status-Active-success)
-![Version](https://img.shields.io/badge/Version-2.0.0-blue)
-![License](https://img.shields.io/badge/License-Private-red)
+[![Status](https://img.shields.io/badge/Status-Version_2.2-7d5afc?style=for-the-badge&logo=statuspage)](https://github.com/edgardor2600/AulaWithu)
+[![Stack](https://img.shields.io/badge/Stack-PERN-blue?style=for-the-badge&logo=postgresql)](https://github.com/edgardor2600/AulaWithu)
+[![License](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)](LICENSE)
 
-**AulaWithu** es una plataforma educativa de próxima generación diseñada para facilitar la enseñanza de idiomas y materias en tiempo real. Combina la potencia de una pizarra colaborativa en vivo con una gestión administrativa robusta de estudiantes, niveles académicos y grupos.
+**AulaWithu** es una solución integral de e-learning diseñada para transformar la enseñanza presencial y virtual en una experiencia interactiva sin precedentes. Combina una **pizarra colaborativa en tiempo real** con un motor administrativo robusto para la gestión de academias de idiomas y otras disciplinas.
 
-![Tech Stack](https://img.shields.io/badge/Stack-PERN-7d5afc)
-![Frontend](https://img.shields.io/badge/Frontend-React%20%2B%20Vite-61DAFB)
-![Backend](https://img.shields.io/badge/Backend-Node.js%20%2B%20Express-339933)
-![Database](https://img.shields.io/badge/Database-PostgreSQL-336791)
-![Styling](https://img.shields.io/badge/Styling-TailwindCSS-06B6D4)
+---
+
+## 🌟 Visión General
+
+AulaWithu no es solo una herramienta de videoconferencia; es un **ecosistema pedagógico** que permite a los profesores guiar a sus estudiantes a través de material interactivo, realizar anotaciones en vivo con latencia mínima y gestionar la progresión académica (Niveles CEFR) de manera centralizada.
+
+### 🚀 Capacidades Diferenciales
+
+- **Sincronización Ultra-Rápida**: Latencia inferior a 50ms mediante WebSockets y CRDTs (Yjs).
+- **Gestión Académica Basada en Roles (RBAC)**: Flujos de trabajo diferenciados para Administradores, Profesores y Estudiantes.
+- **Persistencia Inteligente**: Los cambios en la pizarra se guardan automáticamente y pueden ser consultados por los estudiantes en cualquier momento.
 
 ---
 
 ## ✨ Características Principales
 
-### 🏫 Gestión Académica Avanzada
+### 🏫 Sistema de Gestión Académica (AMS)
 
-- **Niveles CEFR**: Soporte completo para niveles académicos (A1, A2, B1, B2, C1, C2).
-- **Grupos y Horarios**: Organización de estudiantes en grupos con horarios asignados.
-- **Sistema de Inscripciones**: Matriculación flexible de estudiantes en grupos y clases.
-- **Panel de Administración**: Control total sobre usuarios, roles, y asignaciones académicas.
+Diseñado para el control total de una institución educativa:
 
-### 🎨 Aula Virtual en Tiempo Real
+- **Niveles CEFR**: Clasificación de cursos según el Marco Común Europeo (A1, A2, B1, B2, C1, C2).
+- **Estructura de Grupos**: Organización de alumnos en grupos con horarios específicos, cupos máximos y días de clase.
+- **Matriculación Dinámica**: Sistema flexible para inscribir estudiantes en múltiples niveles y grupos.
+- **Panel Administrativo**: Visualización de métricas, gestión de usuarios y control de accesos.
 
-- **Pizarra Colaborativa**: Canvas compartido sincronizado en tiempo real (Yjs).
-- **Herramientas de Dibujo**: Lápiz, formas, texto, y puntero láser para profesores.
-- **Sincronización Instantánea**: Lo que el profesor escribe, el estudiante lo ve al instante (< 50ms).
-- **Modo Presentación**: Control de diapositivas y navegación guiada por el profesor.
+### 🎨 Aula Virtual Interactiva
 
-### 👥 Roles y Permisos
+El corazón de la plataforma, donde ocurre la magia:
 
-- **Administrador**: Gestión total de la plataforma, creación de usuarios y asignación de niveles.
-- **Profesor**: Gestión de sus clases, creación de contenido y control del aula en vivo.
-- **Estudiante**: Acceso a clases asignadas, participación en vivo y visualización de material.
+- **Pizarra Multimodal**: Herramientas profesionales de dibujo (lápiz, formas geométricas, texto enriquecido) impulsadas por **Fabric.js**.
+- **Sistema de Slides & Topics**: El contenido se organiza en temas, cada uno con múltiples diapositivas navegables por el profesor.
+- **Puntero Láser**: Sincronización del cursor del profesor para guiar la atención del alumno.
+- **Snapshots de Alumnos**: Cada estudiante puede guardar su propia copia editada de la slide actual para estudio posterior.
+
+### 💬 Comunicación & Colaboración
+
+- **Chat en Vivo**: Mensajería instantánea dentro de la sesión para resolución de dudas.
+- **Control de Participantes**: El profesor puede ver quién está conectado y gestionar permisos de edición en el canvas.
+- **Modo Presentación**: Bloqueo de navegación para que los alumnos sigan exactamente la página que el profesor visualiza.
 
 ---
 
-## 🛠️ Tecnologías
+## 🛠️ Stack Tecnológico
 
-El proyecto utiliza una arquitectura moderna y escalable:
+El proyecto utiliza una arquitectura moderna separada en frontend y backend para máxima escalabilidad:
 
-### Frontend (`/client`)
+| Componente          | Tecnologías                                          |
+| :------------------ | :--------------------------------------------------- |
+| **Frontend**        | React 18, TypeScript, Vite, Zustand, TailwindCSS     |
+| **Backend**         | Node.js, Express, TypeScript, Express-Validator      |
+| **Real-Time**       | Yjs (CRDT), WebSockets (ws), y-websocket             |
+| **Base de Datos**   | PostgreSQL (Supabase/Local), pg-node                 |
+| **Infraestructura** | Docker, Nginx, GitHub Actions                        |
+| **Seguridad**       | JWT (JSON Web Tokens), bcrypt, Helmet, Rate Limiting |
 
-- **Framework**: React 18 + TypeScript
-- **Build Tool**: Vite
-- **Estilos**: TailwindCSS
-- **Estado Global**: Zustand
-- **Colaboración**: Yjs + WebSocket
-- **UI Components**: Lucide React, React Hot Toast
+---
 
-### Backend (`/server`)
+## 📂 Arquitectura del Proyecto
 
-- **Runtime**: Node.js
-- **Framework**: Express
-- **Base de Datos**: PostgreSQL
-- **ORM/Query Builder**: pg (node-postgres)
-- **Real-time**: Yjs Websocket Server
-- **Validación**: express-validator
+```text
+AulaWithu/
+├── client/                 # SPA React (Frontend)
+│   ├── src/
+│   │   ├── components/     # UI Atómica & Componentes de Negocio
+│   │   ├── pages/          # Vistas (Admin, Editor, Dashboard, etc.)
+│   │   ├── services/       # Clientes de API (Axios/WebSockets)
+│   │   └── store/          # Estado global interactivo (Zustand)
+│
+├── server/                 # API REST + WebSocket (Backend)
+│   ├── src/
+│   │   ├── api/            # Controladores y Rutas Express
+│   │   ├── db/             # Capa de Persistencia y Repositorios
+│   │   ├── services/       # Lógica Transaccional
+│   │   └── websocket/      # Servidor de Sincronización Yjs
+│
+└── database/               # Recursos de Persistencia
+    ├── migrations/         # Esquemas SQL versionados
+    └── seeds/              # Datos de inicialización (Roles, Niveles)
+```
 
 ---
 
@@ -66,143 +92,94 @@ El proyecto utiliza una arquitectura moderna y escalable:
 
 ### Requisitos Previos
 
-- **Node.js** v18+
-- **PostgreSQL** v14+ (Local o Cloud como Supabase/Neon)
+- **Node.js**: v18 o superior
+- **PostgreSQL**: v14 o superior
+- **Git**
 
-### 1. Clonar el repositorio
+### 1. Clonar y Configurar
 
 ```bash
 git clone https://github.com/edgardor2600/AulaWithu.git
 cd AulaWithu
 ```
 
-### 2. Configuración de Variables de Entorno
+### 2. Variables de Entorno
 
-**Backend** (`server/.env`):
+Crea archivos `.env` siguiendo las plantillas proporcionadas:
+
+**Backend (`server/.env`):**
 
 ```env
 PORT=3002
 YJS_PORT=1234
-# Conexión a PostgreSQL
-DATABASE_URL=postgresql://postgres:password@localhost:5432/app_aula
-# JWT Secret para autenticación
-JWT_SECRET=tu_secreto_super_seguro_aqui
+DATABASE_URL=postgresql://user:pass@localhost:5432/aula_db
+JWT_SECRET=tu_clave_secreta_altamente_segura
 ALLOWED_ORIGINS=http://localhost:5173
 ```
 
-**Frontend** (`client/.env`):
+**Frontend (`client/.env`):**
 
 ```env
 VITE_API_URL=http://localhost:3002
 VITE_WS_URL=ws://localhost:1234
 ```
 
-### 3. Instalación de Dependencias
+### 3. Instalación & Inicialización
 
 ```bash
-# Instalar dependencias del servidor
+# Servidor
 cd server
 npm install
+npm run db:migrate  # Crea la estructura en Postgres
+npm run db:seed     # Opcional: Carga datos de prueba
 
-# Instalar dependencias del cliente
+# Cliente
 cd ../client
 npm install
 ```
 
-### 4. Inicialización de Base de Datos
+### 4. Lanzamiento
 
-El proyecto incluye scripts para configurar PostgreSQL automáticamente:
-
-```bash
-cd server
-
-# Ejecutar migraciones (crea tablas y esquema)
-npm run db:migrate
-
-# (Opcional) Poblar con datos de prueba
-npm run db:seed
-```
-
-### 5. Ejecutar la Aplicación
-
-Para desarrollo, puedes correr ambos servicios simultáneamente:
-
-**Terminal 1 (Backend):**
-
-```bash
-cd server
-npm run dev
-```
-
-**Terminal 2 (Frontend):**
-
-```bash
-cd client
-npm run dev
-```
-
-Accede a la aplicación en: `http://localhost:5173`
+- **Modo Desarrollo (Local):** Ejecuta `npm run dev` en ambas carpetas.
+- **Modo Docker (Completo):**
+  ```bash
+  docker-compose up --build -d
+  ```
 
 ---
 
-## 🧪 Usuarios de Prueba (Seed Data)
+## 🧪 Datos de Acceso (Seed Mode)
 
-Si ejecutaste `npm run db:seed`, puedes usar estos credenciales:
+Si utilizaste el script de `db:seed`, puedes ingresar con:
 
-| Rol            | Usuario      | Contraseña      |
-| -------------- | ------------ | --------------- |
-| **Admin**      | `admin`      | `admin123`      |
-| **Profesor**   | `profesor`   | `profesor123`   |
-| **Estudiante** | `estudiante` | `estudiante123` |
-
----
-
-## 📂 Estructura del Proyecto
-
-```
-AulaWithu/
-├── client/                 # SPA React
-│   ├── src/
-│   │   ├── components/     # UI & Business Components
-│   │   │   ├── admin/      # Componentes del Panel Admin
-│   │   │   ├── groups/     # Gestión de Grupos
-│   │   │   └── ...
-│   │   ├── pages/          # Rutas de la aplicación
-│   │   ├── services/       # Conexión con API
-│   │   └── store/          # Estado global (Auth, UI)
-│
-├── server/                 # API REST + WebSocket
-│   ├── src/
-│   │   ├── api/            # Rutas Express
-│   │   ├── db/             # Repositorios PostgreSQL
-│   │   ├── services/       # Lógica de Negocio
-│   │   └── websocket/      # Servidor Yjs
-│   ├── scripts/            # Scripts de Mantenimiento y DB
-│
-└── database/               # Recursos de Base de Datos
-    ├── migrations/         # Esquemas SQL versionados
-    └── seeds/              # Datos iniciales
-```
+| Rol               | Usuario      | Contraseña      |
+| :---------------- | :----------- | :-------------- |
+| **Administrador** | `admin`      | `admin123`      |
+| **Profesor**      | `profesor`   | `profesor123`   |
+| **Estudiante**    | `estudiante` | `estudiante123` |
 
 ---
 
-## 🔒 Seguridad y Arquitectura
+## 🔒 Consideraciones de Seguridad
 
-- **Autenticación**: JWT (JSON Web Tokens) con rotación.
-- **Autorización**: Middleware basado en roles (RBAC).
-- **Persistencia**: Datos críticos en PostgreSQL, estado efímero de sesión en memoria/Yjs.
-- **Validación**: Datos de entrada sanitizados en backend.
+- **RBAC**: Implementado mediante middlewares que verifican el `role` en el payload del JWT.
+- **Sanitización**: Validación estricta de esquemas de datos con `express-validator`.
+- **Protección de API**: Rate-limiting y Helmet configurados para mitigar ataques comunes.
+- **SSL**: Recomendado el uso de un proxy inverso (Nginx) para terminación SSL.
 
 ---
 
 ## 🤝 Contribución
 
-1.  Crea un fork del repositorio.
-2.  Crea una rama para tu feature (`git checkout -b feature/nueva-funcionalidad`).
-3.  Haz commit de tus cambios.
-4.  Haz push a la rama.
-5.  Abre un Pull Request.
+Las contribuciones son las que hacen de la comunidad de código abierto un lugar increíble para aprender, inspirar y crear.
+
+1. Fork el proyecto.
+2. Crea tu Feature Branch (`git checkout -b feature/AmazingFeature`).
+3. Commit tus cambios (`git commit -m 'Add: New Amazing Feature'`).
+4. Push a la rama (`git push origin feature/AmazingFeature`).
+5. Abre un Pull Request.
 
 ---
 
-**Desarrollado con ❤️ por el equipo de AulaWithu.**
+**Desarrollado con pasión para el futuro de la educación.**✨  
+Desarrollado por [Edgardo Rodríguez](https://github.com/edgardor2600).
