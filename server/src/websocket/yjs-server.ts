@@ -1,9 +1,20 @@
 import { WebSocketServer, WebSocket } from 'ws';
 import { URL } from 'url';
+import type { IncomingMessage } from 'http';
 import { verifyToken } from '../utils/jwt';
 import { logger } from '../utils/logger';
-// Typed via src/types/y-websocket.d.ts — the package ships no official types for bin/utils
-import { setupWSConnection } from 'y-websocket/bin/utils';
+
+// y-websocket does not ship official TypeScript types for bin/utils.
+// Using require() with an inline type cast is the correct pattern for
+// CommonJS + ts-node when @types/y-websocket does not exist.
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const { setupWSConnection } = require('y-websocket/bin/utils') as {
+  setupWSConnection: (
+    ws: WebSocket,
+    req: IncomingMessage,
+    options?: { docName?: string; gc?: boolean }
+  ) => void;
+};
 
 /**
  * Setup del servidor WebSocket de Yjs con autenticación JWT.
