@@ -2,20 +2,97 @@ import { Router } from 'express';
 import { body, param } from 'express-validator';
 import { SessionService } from '../services/session.service';
 import { authMiddleware } from '../middleware/auth.middleware';
-import { teacherOnly } from '../middleware/role.middleware';
+import { teacherOnly, roleMiddleware } from '../middleware/role.middleware';
 import { validate } from '../middleware/validation.middleware';
 import { asyncHandler } from '../middleware/error.middleware';
 
 const router = Router();
 
+// ============================================================
+// IMPORTANTE: Rutas específicas SIEMPRE antes que /:id
+// Express evalúa rutas en orden; si /:id va primero,
+// captura "teacher" como id y las rutas /teacher/* nunca se alcanzan.
+// ============================================================
+
+/**
+ * GET /api/sessions/teacher/active
+ * Get all active sessions for the logged-in teacher
+ * ⚠️ DEBE ir antes de GET /:id
+ */
+router.get(
+  '/teacher/active',
+  authMiddleware,
+  roleMiddleware('teacher', 'admin'), // Admin también puede tener sesiones
+  asyncHandler(async (req: any, res: any) => {
+    const teacherId = req.user.userId;
+
+    const sessions = await SessionService.getActiveByTeacher(teacherId);
+
+    res.status(200).json({
+      success: true,
+      sessions,
+      count: sessions.length,
+    });
+  })
+);
+
+/**
+ * GET /api/sessions/teacher/stats
+ * Get session statistics for the logged-in teacher
+ * ⚠️ DEBE ir antes de GET /:id
+ */
+router.get(
+  '/teacher/stats',
+  authMiddleware,
+  roleMiddleware('teacher', 'admin'),
+  asyncHandler(async (req: any, res: any) => {
+    const teacherId = req.user.userId;
+
+    const stats = await SessionService.getStats(teacherId);
+
+    res.status(200).json({
+      success: true,
+      stats,
+    });
+  })
+);
+
+/**
+ * GET /api/sessions/class/:classId
+ * Get session history for a class (teacher only)
+ * ⚠️ DEBE ir antes de GET /:id
+ */
+router.get(
+  '/class/:classId',
+  authMiddleware,
+  roleMiddleware('teacher', 'admin'),
+  [
+    param('classId')
+      .notEmpty().withMessage('Class ID is required'),
+  ],
+  validate,
+  asyncHandler(async (req: any, res: any) => {
+    const { classId } = req.params;
+    const teacherId = req.user.userId;
+
+    const sessions = await SessionService.getByClass(classId, teacherId);
+
+    res.status(200).json({
+      success: true,
+      sessions,
+      count: sessions.length,
+    });
+  })
+);
+
 /**
  * POST /api/sessions
- * Create a new live session (teacher only)
+ * Create a new live session (teacher or admin)
  */
 router.post(
   '/',
   authMiddleware,
-  teacherOnly,
+  roleMiddleware('teacher', 'admin'),
   [
     body('class_id')
       .notEmpty().withMessage('Class ID is required')
@@ -49,7 +126,7 @@ router.post(
 
 /**
  * POST /api/sessions/join
- * Join a session using session code (students)
+ * Join a session using session code (students and teachers can join)
  */
 router.post(
   '/join',
@@ -76,37 +153,13 @@ router.post(
 );
 
 /**
- * GET /api/sessions/:id
- * Get session details
- */
-router.get(
-  '/:id',
-  authMiddleware,
-  [
-    param('id')
-      .notEmpty().withMessage('Session ID is required'),
-  ],
-  validate,
-  asyncHandler(async (req: any, res: any) => {
-    const { id } = req.params;
-
-    const session = await SessionService.getById(id);
-
-    res.status(200).json({
-      success: true,
-      session,
-    });
-  })
-);
-
-/**
  * PUT /api/sessions/:id/permissions
- * Update session permissions (teacher only)
+ * Update session permissions (teacher or admin)
  */
 router.put(
   '/:id/permissions',
   authMiddleware,
-  teacherOnly,
+  roleMiddleware('teacher', 'admin'),
   [
     param('id')
       .notEmpty().withMessage('Session ID is required'),
@@ -136,12 +189,12 @@ router.put(
 
 /**
  * PUT /api/sessions/:id/slide
- * Update current slide (teacher only)
+ * Update current slide (teacher or admin)
  */
 router.put(
   '/:id/slide',
   authMiddleware,
-  teacherOnly,
+  roleMiddleware('teacher', 'admin'),
   [
     param('id')
       .notEmpty().withMessage('Session ID is required'),
@@ -171,12 +224,12 @@ router.put(
 
 /**
  * PUT /api/sessions/:id/end
- * End a session (teacher only)
+ * End a session (teacher or admin)
  */
 router.put(
   '/:id/end',
   authMiddleware,
-  teacherOnly,
+  roleMiddleware('teacher', 'admin'),
   [
     param('id')
       .notEmpty().withMessage('Session ID is required'),
@@ -197,69 +250,26 @@ router.put(
 );
 
 /**
- * GET /api/sessions/teacher/active
- * Get all active sessions for the logged-in teacher
+ * GET /api/sessions/:id
+ * Get session details
+ * ⚠️ DEBE ir al FINAL — es la más genérica y captura todo
  */
 router.get(
-  '/teacher/active',
+  '/:id',
   authMiddleware,
-  teacherOnly,
-  asyncHandler(async (req: any, res: any) => {
-    const teacherId = req.user.userId;
-
-    const sessions = await SessionService.getActiveByTeacher(teacherId);
-
-    res.status(200).json({
-      success: true,
-      sessions,
-      count: sessions.length,
-    });
-  })
-);
-
-/**
- * GET /api/sessions/class/:classId
- * Get session history for a class (teacher only)
- */
-router.get(
-  '/class/:classId',
-  authMiddleware,
-  teacherOnly,
   [
-    param('classId')
-      .notEmpty().withMessage('Class ID is required'),
+    param('id')
+      .notEmpty().withMessage('Session ID is required'),
   ],
   validate,
   asyncHandler(async (req: any, res: any) => {
-    const { classId } = req.params;
-    const teacherId = req.user.userId;
+    const { id } = req.params;
 
-    const sessions = await SessionService.getByClass(classId, teacherId);
-
-    res.status(200).json({
-      success: true,
-      sessions,
-      count: sessions.length,
-    });
-  })
-);
-
-/**
- * GET /api/sessions/teacher/stats
- * Get session statistics for the logged-in teacher
- */
-router.get(
-  '/teacher/stats',
-  authMiddleware,
-  teacherOnly,
-  asyncHandler(async (req: any, res: any) => {
-    const teacherId = req.user.userId;
-
-    const stats = await SessionService.getStats(teacherId);
+    const session = await SessionService.getById(id);
 
     res.status(200).json({
       success: true,
-      stats,
+      session,
     });
   })
 );

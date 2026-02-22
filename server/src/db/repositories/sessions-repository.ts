@@ -40,8 +40,9 @@ export class SessionsRepository {
     
     await runQuery(
       `INSERT INTO sessions (
-        id, class_id, slide_id, teacher_id, session_code, allow_student_draw, is_active, group_id
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+        id, class_id, slide_id, teacher_id, session_code, allow_student_draw, is_active, group_id,
+        status, yjs_room_name
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
       [
         id,
         data.class_id,
@@ -49,8 +50,10 @@ export class SessionsRepository {
         data.teacher_id,
         sessionCode,
         data.allow_student_draw ? 1 : 0,
-        1, // is_active
-        data.group_id || null
+        1,             // is_active
+        data.group_id || null,
+        'active',      // status — requerido por la tabla original (NOT NULL)
+        sessionCode,   // yjs_room_name — usamos el sessionCode, ya es único
       ]
     );
     
@@ -150,7 +153,7 @@ export class SessionsRepository {
   static async end(id: string): Promise<Session | undefined> {
     await runQuery(
       `UPDATE sessions 
-       SET is_active = 0, ended_at = CURRENT_TIMESTAMP 
+       SET is_active = 0, ended_at = CURRENT_TIMESTAMP, status = 'ended'
        WHERE id = $1`,
       [id]
     );

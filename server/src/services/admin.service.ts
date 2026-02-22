@@ -275,14 +275,13 @@ export class AdminService {
    */
   static async getStats() {
     const users = await UsersRepository.getAll();
+    const groups = await GroupsRepository.getAll();
+
     const teachers = users.filter((u: User) => u.role === 'teacher');
     const students = users.filter((u: User) => u.role === 'student');
     const admins = users.filter((u: User) => u.role === 'admin');
-    
-    // Get enrollment count instead of assignments
-    const allEnrollments = await EnrollmentsRepository.getByStudent(''); // This won't work, need to fix
-    const groups = await GroupsRepository.getAll();
-    
+
+    // Contar enrollments correctamente: sumar alumnos por grupo
     let totalEnrollments = 0;
     for (const group of groups) {
       const count = await GroupsRepository.getStudentCount(group.id);
@@ -295,6 +294,7 @@ export class AdminService {
       teachers: teachers.length,
       students: students.length,
       admins: admins.length,
+      groups: groups.length,
       enrollments: totalEnrollments,
     };
   }
