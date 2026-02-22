@@ -109,33 +109,48 @@ router.post(
 
 /**
  * GET /api/admin/users
- * Get all users (with optional role filter)
+ * Get users with pagination support.
+ *
+ * Query params:
+ *   ?page=1          — Page number (1-based, default: 1)
+ *   ?limit=20        — Results per page (max: 100, default: 20)
+ *   ?role=teacher    — Filter by role (admin | teacher | student)
  */
 router.get(
   '/users',
   asyncHandler(async (req: any, res: any) => {
-    const role = req.query.role as 'admin' | 'teacher' | 'student' | undefined;
+    const role   = req.query.role  as 'admin' | 'teacher' | 'student' | undefined;
+    const page   = req.query.page  ? parseInt(req.query.page,  10) : 1;
+    const limit  = req.query.limit ? parseInt(req.query.limit, 10) : 20;
 
-    const users = await AdminService.getAllUsers(role);
+    const result = await UsersRepository.getPaginated({ page, limit, role });
 
     res.status(200).json({
       success: true,
-      count: users.length,
-      users: users.map((u: any) => ({
-        id: u.id,
-        name: u.name,
-        username: u.username,
-        role: u.role,
+      // Pagination metadata
+      pagination: {
+        total:      result.total,
+        page:       result.page,
+        limit:      result.limit,
+        totalPages: result.totalPages,
+      },
+      count: result.users.length,
+      users: result.users.map((u: any) => ({
+        id:         u.id,
+        name:       u.name,
+        username:   u.username,
+        role:       u.role,
         avatar_color: u.avatar_color,
-        active: u.active === 1,
+        active:     u.active === 1,
         created_at: u.created_at,
         last_login: u.last_login,
-        level_id: u.level_id || null,
-        level: u.level || null,
+        level_id:   u.level_id || null,
+        level:      u.level    || null,
       })),
     });
   })
 );
+
 
 /**
  * PATCH /api/admin/users/:id/deactivate

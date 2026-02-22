@@ -60,6 +60,70 @@ export class UsersRepository {
     return await getAll<any>(`${baseQuery} ORDER BY u.created_at DESC`);
   }
 
+  /**
+   * Get paginated users with optional role filter.
+   * Returns users for the requested page + total count for pagination metadata.
+   *
+   * @param options.page   1-based page number (default: 1)
+   * @param options.limit  Results per page, max 100 (default: 20)
+   * @param options.role   Optional role filter
+   */
+  static async getPaginated(options: {
+    page?: number;
+    limit?: number;
+    role?: 'admin' | 'teacher' | 'student';
+  }): Promise<{ users: any[]; total: number; page: number; limit: number; totalPages: number }> {
+    const page  = Math.max(1, options.page  ?? 1);
+    const limit = Math.min(100, Math.max(1, options.limit ?? 20));
+    const offset = (page - 1) * limit;
+
+    const baseSelect = `
+      SELECT 
+        u.*,
+        CASE 
+          WHEN al.id IS NOT NULL THEN json_build_object(
+            'id', al.id,
+            'name', al.name,
+            'description', al.description
+          )
+          ELSE NULL
+        END as level
+      FROM users u
+      LEFT JOIN academic_levels al ON u.level_id = al.id
+    `;
+    const baseCount = `SELECT COUNT(*) as total FROM users u`;
+
+    let usersQuery: string;
+    let countQuery: string;
+    let params: any[];
+
+    if (options.role) {
+      usersQuery = `${baseSelect} WHERE u.role = $1 ORDER BY u.created_at DESC LIMIT $2 OFFSET $3`;
+      countQuery = `${baseCount} WHERE u.role = $1`;
+      params = [options.role, limit, offset];
+    } else {
+      usersQuery = `${baseSelect} ORDER BY u.created_at DESC LIMIT $1 OFFSET $2`;
+      countQuery = baseCount;
+      params = [limit, offset];
+    }
+
+    const [users, countResult] = await Promise.all([
+      getAll<any>(usersQuery, params),
+      getOne<{ total: string }>( countQuery, options.role ? [options.role] : [] ),
+    ]);
+
+    const total = Number(countResult?.total ?? 0);
+
+    return {
+      users,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    };
+  }
+
+
   // Update user
   static async update(id: string, data: { name?: string; avatar_color?: string; level_id?: string | null }): Promise<User | undefined> {
     const updates: string[] = [];

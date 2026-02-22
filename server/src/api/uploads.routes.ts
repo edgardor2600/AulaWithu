@@ -5,7 +5,9 @@ import { authMiddleware } from '../middleware/auth.middleware';
 import { validate } from '../middleware/validation.middleware';
 import { asyncHandler } from '../middleware/error.middleware';
 import { uploadSingle } from '../config/multer.config';
+import { validateMagicNumbers } from '../utils/file-type';
 import path from 'path';
+import fs from 'fs';
 import { ValidationError } from '../utils/AppError';
 
 const router = Router();
@@ -23,6 +25,20 @@ router.post(
 
     const userId = req.user.userId;
     const file = req.file;
+    const uploadsDir = process.env.UPLOADS_DIR || path.join(__dirname, '../../../uploads');
+    const savedPath = path.join(uploadsDir, file.filename);
+
+    // FIX-14: Validate actual file content by magic numbers.
+    // This prevents spoofed Content-Type attacks (e.g. sending an .exe
+    // disguised as image/png). We read the first 12 bytes from disk.
+    const isValidFile = validateMagicNumbers(savedPath, file.mimetype);
+    if (!isValidFile) {
+      // Remove the invalid file before responding
+      try { fs.unlinkSync(savedPath); } catch { /* ignore */ }
+      throw new ValidationError(
+        'File content does not match the declared type. Only real image files are accepted.'
+      );
+    }
 
     // Create upload record
     const upload = await UploadService.create({
@@ -48,6 +64,7 @@ router.post(
     });
   })
 );
+
 
 // GET /api/uploads/:filename - Get file
 router.get(

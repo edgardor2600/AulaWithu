@@ -2,12 +2,8 @@ import { WebSocketServer, WebSocket } from 'ws';
 import { URL } from 'url';
 import { verifyToken } from '../utils/jwt';
 import { logger } from '../utils/logger';
-
-// y-websocket no tiene tipos completos en todas las versiones
-const yjsUtils = require('y-websocket/bin/utils') as {
-  setupWSConnection: (ws: any, req: any, options?: any) => void;
-};
-const { setupWSConnection } = yjsUtils;
+// Typed via src/types/y-websocket.d.ts — the package ships no official types for bin/utils
+import { setupWSConnection } from 'y-websocket/bin/utils';
 
 /**
  * Setup del servidor WebSocket de Yjs con autenticación JWT.
