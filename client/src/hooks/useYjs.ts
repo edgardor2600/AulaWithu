@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import * as Y from 'yjs';
 import { WebsocketProvider } from 'y-websocket';
 import * as fabric from 'fabric';
+import { useAuthStore } from '../store/authStore';
 
 /**
  * useYjs Hook
@@ -62,13 +63,22 @@ export function useYjs(
 
     console.log('🔗 Initializing Yjs connection for room:', roomName);
 
+    // Obtener token JWT del store para autenticarse con el servidor Yjs
+    const token = useAuthStore.getState().token;
+    if (!token) {
+      console.warn('[Yjs] No auth token available — aborting WS connection');
+      return;
+    }
+
     // Create Yjs document
     const ydoc = new Y.Doc();
     ydocRef.current = ydoc;
 
-    // Create WebSocket provider
+    // Create WebSocket provider — el token se pasa como query param para autenticación
     const wsUrl = import.meta.env.VITE_YJS_WS_URL || 'ws://localhost:1234';
-    const provider = new WebsocketProvider(wsUrl, roomName, ydoc);
+    const provider = new WebsocketProvider(wsUrl, roomName, ydoc, {
+      params: { token },
+    });
     providerRef.current = provider;
 
     // Get shared canvas map
