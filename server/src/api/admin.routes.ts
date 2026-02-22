@@ -6,6 +6,7 @@ import { adminMiddleware } from '../middleware/admin.middleware';
 import { validate } from '../middleware/validation.middleware';
 import { asyncHandler } from '../middleware/error.middleware';
 import { UsersRepository } from '../db/repositories/users-repository';
+import { logger } from '../utils/logger';
 
 const router = Router();
 
@@ -243,7 +244,7 @@ router.patch(
       });
     }
 
-    console.log('📝 [UPDATE LEVEL] Current user:', { name: user.name, level_id: user.level_id });
+    logger.debug('[ADMIN] Current user found', { name: user.name, level_id: user.level_id });
 
     if (user.role !== 'student') {
       return res.status(400).json({
@@ -257,14 +258,14 @@ router.patch(
 
     // Update level
     const valueToSave = levelId || null;
-    console.log('📝 [UPDATE LEVEL] Saving level_id:', valueToSave);
+    logger.debug('[ADMIN] Saving level_id', { valueToSave });
     const updatedUser = await UsersRepository.update(id, { level_id: valueToSave });
-    console.log('📝 [UPDATE LEVEL] After update - level_id:', updatedUser?.level_id);
+    logger.debug('[ADMIN] After update', { level_id: updatedUser?.level_id });
 
     // Get updated user with level info (includes JOIN for level name)
     const allUsers = await UsersRepository.getAll();
     const userWithLevel = allUsers.find((u: any) => u.id === id);
-    console.log('📝 [UPDATE LEVEL] Final user with level:', { level_id: userWithLevel?.level_id, level: userWithLevel?.level });
+    logger.debug('[ADMIN] Final user with level', { level_id: userWithLevel?.level_id });
 
     res.status(200).json({
       success: true,

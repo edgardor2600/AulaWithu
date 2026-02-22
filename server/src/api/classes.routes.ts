@@ -6,6 +6,7 @@ import { teacherOnly } from '../middleware/role.middleware';
 import { validate } from '../middleware/validation.middleware';
 import { asyncHandler } from '../middleware/error.middleware';
 import { LevelsRepository } from '../db/repositories';
+import { logger } from '../utils/logger';
 
 const router = Router();
 
@@ -48,11 +49,7 @@ router.post(
     const userRole = req.user.role;
     const userId = req.user.userId;
 
-    // DEBUG: Log what we received
-    console.log('📥 POST /api/classes - Received:');
-    console.log('  Body:', req.body);
-    console.log('  User:', { userId, userRole });
-    console.log('  teacherId from body:', teacherId);
+    logger.debug('[CLASSES] POST /api/classes', { userId, userRole, teacherIdProvided: !!teacherId });
 
     // Determine the teacher_id based on role
     let teacher_id: string;
@@ -60,7 +57,7 @@ router.post(
     if (userRole === 'admin') {
       // Admin must provide teacherId
       if (!teacherId) {
-        console.log('❌ Admin did not provide teacherId');
+        logger.warn('[CLASSES] Admin attempted to create class without teacherId');
         return res.status(400).json({
           success: false,
           message: 'Admin must provide teacherId when creating a class',
