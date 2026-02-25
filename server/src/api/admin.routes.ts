@@ -245,7 +245,7 @@ router.patch(
     const { id } = req.params;
     const { levelId } = req.body;
 
-    console.log('📝 [UPDATE LEVEL] Request:', { userId: id, levelId, body: req.body });
+    logger.debug('[ADMIN] Update level request', { userId: id, levelId, body: req.body });
 
     // Get user to verify it's a student
     const user = await UsersRepository.getById(id);

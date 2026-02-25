@@ -49,12 +49,6 @@ router.post(
     const userId = req.user!.userId;
     const userRole = req.user!.role;
 
-    // DEBUG: Log what we received
-    console.log('📥 POST /api/classes/:classId/groups - Received:');
-    console.log('  classId:', classId);
-    console.log('  Body:', req.body);
-    console.log('  User:', { userId, role: userRole });
-
     const group = await GroupsService.createGroup(
       classId,
       { name, description, maxStudents, scheduleTime },
