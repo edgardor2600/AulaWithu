@@ -235,7 +235,7 @@ export const GroupsPanel = ({ classId, className }: GroupsPanelProps) => {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+        <Loader2 className="w-8 h-8 animate-spin text-blue-600 dark:text-blue-400" />
       </div>
     );
   }
@@ -243,32 +243,32 @@ export const GroupsPanel = ({ classId, className }: GroupsPanelProps) => {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h2 className="text-2xl font-bold text-gray-900">Grupos de {className}</h2>
-          <p className="text-sm text-gray-500 mt-1">
+          <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Grupos de {className}</h2>
+          <p className="text-sm text-gray-500 dark:text-slate-400 mt-1">
             Organiza tus estudiantes en grupos para mejor gestión
           </p>
         </div>
         <button
           onClick={handleCreateGroup}
-          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
+          className="flex flex-none justify-center items-center gap-2 px-4 py-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition font-bold shadow-sm"
         >
-          <Plus className="w-4 h-4" />
+          <Plus className="w-5 h-5" />
           Crear Grupo
         </button>
       </div>
 
       {groups.length === 0 ? (
-        <div className="bg-white rounded-xl shadow-sm p-12 border border-gray-200 text-center">
-          <Users className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-          <h3 className="text-lg font-semibold text-gray-900 mb-2">No hay grupos creados</h3>
-          <p className="text-gray-600 mb-4">Crea tu primer grupo para organizar a tus estudiantes</p>
+        <div className="bg-slate-50 dark:bg-slate-800/20 rounded-2xl p-12 lg:p-16 border-2 border-dashed border-slate-300 dark:border-slate-700/50 text-center">
+          <Users className="w-16 h-16 text-slate-400 dark:text-slate-600 mx-auto mb-4" />
+          <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-2">No hay grupos creados</h3>
+          <p className="text-slate-600 dark:text-slate-400 mb-6">Crea tu primer grupo para organizar a tus estudiantes.</p>
           <button
             onClick={handleCreateGroup}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
+            className="inline-flex items-center gap-2 px-5 py-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition font-bold shadow-sm"
           >
-            <Plus className="w-4 h-4" />
+            <Plus className="w-5 h-5" />
             Crear Primer Grupo
           </button>
         </div>
@@ -276,26 +276,26 @@ export const GroupsPanel = ({ classId, className }: GroupsPanelProps) => {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Left: Groups List */}
           <div className="lg:col-span-1 space-y-3">
-            <h3 className="font-semibold text-gray-900 mb-3">Grupos ({groups.length})</h3>
+            <h3 className="font-bold text-slate-900 dark:text-white mb-3">Tus Grupos ({groups.length})</h3>
             {groups.map((group) => (
               <div
                 key={group.id}
                 onClick={() => setSelectedGroup(group.id)}
-                className={`p-4 rounded-lg border-2 cursor-pointer transition ${
+                className={`p-5 rounded-2xl border-2 cursor-pointer transition-all ${
                   selectedGroup === group.id
-                    ? 'border-blue-500 bg-blue-50'
-                    : 'border-gray-200 hover:border-gray-300 bg-white'
+                    ? 'border-blue-500 dark:border-blue-500 bg-blue-50 dark:bg-blue-500/10'
+                    : 'border-slate-200 dark:border-slate-800/60 hover:border-blue-300 dark:hover:border-blue-500/50 bg-white dark:bg-slate-900'
                 }`}
               >
                 <div className="flex items-start justify-between mb-2">
-                  <div className="flex-1">
-                    <h4 className={`font-medium ${
-                      selectedGroup === group.id ? 'text-blue-900' : 'text-gray-900'
+                  <div className="flex-1 min-w-0">
+                    <h4 className={`font-bold truncate ${
+                      selectedGroup === group.id ? 'text-blue-900 dark:text-blue-400' : 'text-slate-900 dark:text-white'
                     }`}>
                       {group.name}
                     </h4>
                     {group.description && (
-                      <p className="text-sm text-gray-500 mt-1">{group.description}</p>
+                      <p className={`text-sm mt-1 line-clamp-2 ${selectedGroup === group.id ? 'text-blue-700/80 dark:text-blue-400/80' : 'text-slate-500 dark:text-slate-400'}`}>{group.description}</p>
                     )}
                   </div>
                   <div className="flex gap-1">
@@ -304,7 +304,7 @@ export const GroupsPanel = ({ classId, className }: GroupsPanelProps) => {
                         e.stopPropagation();
                         handleEditGroup(group);
                       }}
-                      className="p-1 text-gray-600 hover:text-blue-600 hover:bg-blue-100 rounded transition"
+                      className="p-1.5 text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-500/20 rounded-lg transition"
                       title="Editar grupo"
                     >
                       <Edit2 className="w-4 h-4" />
@@ -314,27 +314,27 @@ export const GroupsPanel = ({ classId, className }: GroupsPanelProps) => {
                         e.stopPropagation();
                         handleDeleteGroup(group);
                       }}
-                      className="p-1 text-gray-600 hover:text-red-600 hover:bg-red-100 rounded transition"
+                      className="p-1.5 text-slate-400 hover:text-red-600 dark:hover:text-rose-400 hover:bg-red-100 dark:hover:bg-rose-500/20 rounded-lg transition"
                       title="Eliminar grupo"
                     >
                       <Trash2 className="w-4 h-4" />
                     </button>
                   </div>
                 </div>
-                <div className="flex flex-col gap-1 text-sm mt-3 pt-3 border-t border-gray-100">
+                <div className={`flex flex-col gap-2 text-sm mt-3 pt-3 border-t ${selectedGroup === group.id ? 'border-blue-200 dark:border-blue-500/20' : 'border-slate-100 dark:border-slate-800'}`}>
                   <div className="flex items-center justify-between">
-                    <span className="text-gray-600">
+                    <span className={`font-medium ${selectedGroup === group.id ? 'text-blue-800 dark:text-blue-300' : 'text-slate-600 dark:text-slate-400'}`}>
                       {group.student_count || 0} / {group.max_students} estudiantes
                     </span>
                     {(group.student_count || 0) >= group.max_students && (
-                      <span className="text-xs bg-orange-100 text-orange-800 px-2 py-1 rounded">
+                      <span className="text-[10px] font-bold uppercase tracking-wider bg-orange-100 dark:bg-orange-500/20 text-orange-700 dark:text-orange-400 px-2 py-0.5 rounded-md">
                         Lleno
                       </span>
                     )}
                   </div>
                   {group.schedule_time && (
-                    <div className="text-xs text-blue-600 font-medium">
-                      🕐 {group.schedule_time}
+                    <div className="text-xs font-bold text-blue-600 dark:text-blue-400 flex items-center gap-1.5">
+                      <span className="opacity-80">🕐</span> {group.schedule_time}
                     </div>
                   )}
                 </div>
@@ -343,23 +343,23 @@ export const GroupsPanel = ({ classId, className }: GroupsPanelProps) => {
           </div>
 
           {/* Right: Group Details */}
-          <div className="lg:col-span-2 bg-white rounded-xl shadow-sm border border-gray-200">
+          <div className="lg:col-span-2 bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-800/60 overflow-hidden self-start sticky top-6">
             {selectedGroupData ? (
               <>
-                <div className="p-6 border-b border-gray-200">
-                  <div className="flex items-center justify-between">
+                <div className="p-6 border-b border-slate-200 dark:border-slate-800/60 bg-slate-50/50 dark:bg-slate-800/20">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                     <div>
-                      <h3 className="text-xl font-semibold text-gray-900">
+                      <h3 className="text-xl font-bold text-slate-900 dark:text-white">
                         {selectedGroupData.name}
                       </h3>
-                      <p className="text-sm text-gray-500 mt-1">
+                      <p className="text-sm text-slate-500 dark:text-slate-400 mt-1 font-medium">
                         {groupStudents.length} estudiante{groupStudents.length !== 1 ? 's' : ''} inscrito{groupStudents.length !== 1 ? 's' : ''}
                       </p>
                     </div>
                     {getUnassignedStudents().length > 0 && (
                       <button
                         onClick={() => setShowEnrollModal(true)}
-                        className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition"
+                        className="flex flex-none justify-center items-center gap-2 px-4 py-2.5 bg-green-600 text-white rounded-xl hover:bg-green-700 transition font-bold shadow-sm"
                       >
                         <UserPlus className="w-4 h-4" />
                         Inscribir Estudiante
@@ -370,44 +370,44 @@ export const GroupsPanel = ({ classId, className }: GroupsPanelProps) => {
 
                 <div className="p-6">
                   {groupStudents.length === 0 ? (
-                    <div className="text-center py-12">
-                      <Users className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-                      <p className="text-gray-500">No hay estudiantes inscritos en este grupo</p>
+                    <div className="text-center py-16">
+                      <Users className="w-16 h-16 text-slate-300 dark:text-slate-700 mx-auto mb-4" />
+                      <p className="text-slate-500 dark:text-slate-400 font-medium text-lg">No hay estudiantes inscritos en este grupo</p>
                       {getUnassignedStudents().length > 0 && (
                         <button
                           onClick={() => setShowEnrollModal(true)}
-                          className="mt-4 inline-flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition"
+                          className="mt-6 inline-flex items-center gap-2 px-5 py-2.5 bg-green-600 text-white rounded-xl hover:bg-green-700 transition font-bold shadow-sm"
                         >
-                          <UserPlus className="w-4 h-4" />
+                          <UserPlus className="w-5 h-5" />
                           Inscribir Primer Estudiante
                         </button>
                       )}
                     </div>
                   ) : (
-                    <div className="space-y-2">
+                    <div className="space-y-3">
                       {groupStudents.map((item) => (
                         <div
                           key={item.enrollment_id}
-                          className="flex items-center justify-between p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition"
+                          className="flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-800/50 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 border border-transparent dark:border-slate-700/50 transition-colors"
                         >
                           <div className="flex items-center gap-3">
                             <div
-                              className="w-10 h-10 rounded-full flex items-center justify-center text-white font-medium"
+                              className="w-10 h-10 rounded-full flex items-center justify-center text-white font-bold"
                               style={{ backgroundColor: item.student.avatar_color }}
                             >
                               {item.student.name.charAt(0).toUpperCase()}
                             </div>
                             <div>
-                              <p className="font-medium text-gray-900">{item.student.name}</p>
-                              <p className="text-sm text-gray-500">@{item.student.username}</p>
+                              <p className="font-bold text-slate-900 dark:text-white">{item.student.name}</p>
+                              <p className="text-sm font-medium text-slate-500 dark:text-slate-400">@{item.student.username}</p>
                             </div>
                           </div>
                           <button
                             onClick={() => handleUnenrollStudent(item.student.id, item.student.name)}
-                            className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition"
+                            className="p-2 text-rose-500 hover:bg-rose-100 dark:hover:bg-rose-500/20 rounded-lg transition"
                             title="Desinscribir"
                           >
-                            <X className="w-4 h-4" />
+                            <X className="w-5 h-5" />
                           </button>
                         </div>
                       ))}
@@ -416,7 +416,7 @@ export const GroupsPanel = ({ classId, className }: GroupsPanelProps) => {
                 </div>
               </>
             ) : (
-              <div className="p-12 text-center text-gray-500">
+              <div className="p-16 text-center text-slate-500 dark:text-slate-400 font-medium">
                 Selecciona un grupo para ver detalles
               </div>
             )}
@@ -426,15 +426,17 @@ export const GroupsPanel = ({ classId, className }: GroupsPanelProps) => {
 
       {/* Create/Edit Group Modal */}
       {showGroupModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6">
-            <h3 className="text-xl font-semibold text-gray-900 mb-4">
-              {editingGroup ? 'Editar Grupo' : 'Crear Nuevo Grupo'}
-            </h3>
+        <div className="fixed inset-0 bg-black/60 dark:bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 transition-all">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-xl max-w-md w-full border border-slate-200 dark:border-slate-800">
+            <div className="px-6 py-5 border-b border-slate-200 dark:border-slate-800/60">
+              <h3 className="text-xl font-bold text-slate-900 dark:text-white">
+                {editingGroup ? 'Editar Grupo' : 'Crear Nuevo Grupo'}
+              </h3>
+            </div>
             
-            <div className="space-y-4">
+            <div className="p-6 space-y-5">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-2">
                   Nombre del Grupo *
                 </label>
                 <input
@@ -442,13 +444,13 @@ export const GroupsPanel = ({ classId, className }: GroupsPanelProps) => {
                   value={groupForm.name}
                   onChange={(e) => setGroupForm({ ...groupForm, name: e.target.value })}
                   placeholder="Ej: Grupo Mañana"
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+                  className="w-full px-4 py-3 bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition"
                   maxLength={100}
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-2">
                   Descripción
                 </label>
                 <textarea
@@ -456,13 +458,13 @@ export const GroupsPanel = ({ classId, className }: GroupsPanelProps) => {
                   onChange={(e) => setGroupForm({ ...groupForm, description: e.target.value })}
                   placeholder="Descripción opcional del grupo"
                   rows={3}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none resize-none"
+                  className="w-full px-4 py-3 bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition resize-none"
                   maxLength={500}
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-2">
                   Máximo de Estudiantes
                 </label>
                 <input
@@ -471,27 +473,27 @@ export const GroupsPanel = ({ classId, className }: GroupsPanelProps) => {
                   onChange={(e) => setGroupForm({ ...groupForm, maxStudents: parseInt(e.target.value) || 30 })}
                   min={1}
                   max={100}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+                  className="w-full px-4 py-3 bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition"
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-2">
                   Horario de Clase
                 </label>
                 <select
                   value={groupForm.scheduleTime}
                   onChange={(e) => setGroupForm({ ...groupForm, scheduleTime: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none appearance-none bg-white"
+                  className="w-full px-4 py-3 bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition appearance-none"
                 >
                   <option value="">-- Seleccionar Horario --</option>
-                  <optgroup label="Horarios de Mañana">
+                  <optgroup label="Horarios de Mañana" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">
                     <option value="08:00-09:00">08:00 - 09:00</option>
                     <option value="09:00-10:00">09:00 - 10:00</option>
                     <option value="10:00-11:00">10:00 - 11:00</option>
                     <option value="11:00-12:00">11:00 - 12:00</option>
                   </optgroup>
-                  <optgroup label="Horarios de Tarde/Noche">
+                  <optgroup label="Horarios de Tarde/Noche" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">
                     <option value="14:00-15:00">14:00 - 15:00 (2:00 PM - 3:00 PM)</option>
                     <option value="15:00-16:00">15:00 - 16:00 (3:00 PM - 4:00 PM)</option>
                     <option value="16:00-17:00">16:00 - 17:00 (4:00 PM - 5:00 PM)</option>
@@ -505,10 +507,10 @@ export const GroupsPanel = ({ classId, className }: GroupsPanelProps) => {
               </div>
             </div>
 
-            <div className="flex gap-3 mt-6">
+            <div className="px-6 py-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/20 rounded-b-2xl flex gap-3">
               <button
                 onClick={() => setShowGroupModal(false)}
-                className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition"
+                className="flex-1 px-5 py-2.5 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-700 transition font-bold"
                 disabled={isCreating}
               >
                 Cancelar
@@ -516,11 +518,11 @@ export const GroupsPanel = ({ classId, className }: GroupsPanelProps) => {
               <button
                 onClick={handleSaveGroup}
                 disabled={isCreating}
-                className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition disabled:opacity-50 flex items-center justify-center gap-2"
+                className="flex-1 px-5 py-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition shadow-sm font-bold flex items-center justify-center gap-2 disabled:opacity-50"
               >
                 {isCreating ? (
                   <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <Loader2 className="w-5 h-5 animate-spin" />
                     Guardando...
                   </>
                 ) : (
@@ -534,25 +536,27 @@ export const GroupsPanel = ({ classId, className }: GroupsPanelProps) => {
 
       {/* Enroll Student Modal */}
       {showEnrollModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6">
-            <h3 className="text-xl font-semibold text-gray-900 mb-4">
-              Inscribir Estudiante a {selectedGroupData?.name}
-            </h3>
+        <div className="fixed inset-0 bg-black/60 dark:bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 transition-all">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-xl max-w-md w-full border border-slate-200 dark:border-slate-800">
+            <div className="px-6 py-5 border-b border-slate-200 dark:border-slate-800/60">
+              <h3 className="text-xl font-bold text-slate-900 dark:text-white">
+                Inscribir a {selectedGroupData?.name}
+              </h3>
+            </div>
             
-            <div className="space-y-4">
+            <div className="p-6 space-y-5">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-2">
                   Seleccionar Estudiante *
                 </label>
                 <select
                   value={enrollStudentId}
                   onChange={(e) => setEnrollStudentId(e.target.value)}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent outline-none"
+                  className="w-full px-4 py-3 bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent outline-none transition appearance-none"
                 >
                   <option value="">-- Seleccionar --</option>
                   {getUnassignedStudents().map((student) => (
-                    <option key={student.id} value={student.id}>
+                    <option key={student.id} value={student.id} className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">
                       {student.name} (@{student.username})
                     </option>
                   ))}
@@ -560,28 +564,28 @@ export const GroupsPanel = ({ classId, className }: GroupsPanelProps) => {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-2">
                   Notas (opcional)
                 </label>
                 <textarea
                   value={enrollNotes}
                   onChange={(e) => setEnrollNotes(e.target.value)}
-                  placeholder="Notas sobre el estudiante"
-                  rows={2}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent outline-none resize-none"
+                  placeholder="Notas internas sobre la inscripción"
+                  rows={3}
+                  className="w-full px-4 py-3 bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent outline-none resize-none transition"
                   maxLength={500}
                 />
               </div>
             </div>
 
-            <div className="flex gap-3 mt-6">
+            <div className="px-6 py-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/20 rounded-b-2xl flex gap-3">
               <button
                 onClick={() => {
                   setShowEnrollModal(false);
                   setEnrollStudentId('');
                   setEnrollNotes('');
                 }}
-                className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition"
+                className="flex-1 px-5 py-2.5 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-700 transition font-bold"
                 disabled={isEnrolling}
               >
                 Cancelar
@@ -589,17 +593,17 @@ export const GroupsPanel = ({ classId, className }: GroupsPanelProps) => {
               <button
                 onClick={handleEnrollStudent}
                 disabled={isEnrolling || !enrollStudentId}
-                className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition disabled:opacity-50 flex items-center justify-center gap-2"
+                className="flex-1 px-5 py-2.5 bg-green-600 text-white rounded-xl hover:bg-green-700 transition shadow-sm font-bold flex items-center justify-center gap-2 disabled:opacity-50"
               >
                 {isEnrolling ? (
                   <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <Loader2 className="w-5 h-5 animate-spin" />
                     Inscribiendo...
                   </>
                 ) : (
                   <>
-                    <UserPlus className="w-4 h-4" />
-                    Inscribir
+                    <UserPlus className="w-5 h-5" />
+                    Inscribir Estudiante
                   </>
                 )}
               </button>
