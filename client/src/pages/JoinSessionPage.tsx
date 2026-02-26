@@ -58,28 +58,28 @@ export const JoinSessionPage = () => {
 
   return (
     <Layout>
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 flex items-center justify-center p-4">
+      <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex items-center justify-center p-4 transition-colors duration-300">
         <div className="max-w-md w-full">
           {/* Header */}
           <div className="text-center mb-8">
-            <div className="inline-flex items-center justify-center w-16 h-16 bg-green-100 rounded-full mb-4">
-              <Radio className="w-8 h-8 text-green-600" />
+            <div className="inline-flex items-center justify-center w-16 h-16 bg-emerald-100 dark:bg-emerald-500/10 rounded-full mb-4 shadow-inner border border-emerald-200 dark:border-emerald-500/20">
+              <Radio className="w-8 h-8 text-emerald-600 dark:text-emerald-400" />
             </div>
-            <h1 className="text-3xl font-bold text-gray-900 mb-2">
-              Join Live Session
+            <h1 className="text-3xl font-bold text-slate-900 dark:text-white mb-2 tracking-tight">
+              Unirse a Sesión en Vivo
             </h1>
-            <p className="text-gray-600">
-              Enter the 6-character code shared by your teacher
+            <p className="text-slate-600 dark:text-slate-400">
+              Ingresa el código de 6 caracteres compartido por tu profesor
             </p>
           </div>
 
           {/* Form Card */}
-          <div className="bg-white rounded-2xl shadow-xl p-8">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-xl dark:shadow-2xl p-8 border border-slate-200 dark:border-slate-800 transition-colors duration-300">
             <form onSubmit={handleJoin} className="space-y-6">
               {/* Session Code Input */}
               <div>
-                <label htmlFor="sessionCode" className="block text-sm font-medium text-gray-700 mb-2">
-                  Session Code
+                <label htmlFor="sessionCode" className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-2">
+                  Código de Sesión
                 </label>
                 <input
                   id="sessionCode"
@@ -87,21 +87,21 @@ export const JoinSessionPage = () => {
                   value={sessionCode}
                   onChange={(e) => handleCodeChange(e.target.value)}
                   placeholder="ABC123"
-                  className="w-full px-4 py-3 text-center text-2xl font-bold tracking-widest border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition uppercase"
+                  className="w-full px-4 py-3.5 text-center text-2xl font-black tracking-[0.3em] bg-slate-50 dark:bg-slate-950 border-2 border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white placeholder-slate-300 dark:placeholder-slate-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:focus:ring-emerald-500 dark:focus:border-emerald-500 transition-all uppercase shadow-inner"
                   maxLength={6}
                   autoFocus
                   disabled={isJoining}
                 />
-                <p className="mt-2 text-xs text-gray-500 text-center">
-                  {sessionCode.length}/6 characters
+                <p className="mt-2 text-xs font-bold text-slate-500 dark:text-slate-500 text-center uppercase tracking-widest">
+                  {sessionCode.length}/6 caracteres
                 </p>
               </div>
 
               {/* Error Message */}
               {error && (
-                <div className="flex items-start space-x-2 p-3 bg-red-50 border border-red-200 rounded-lg">
-                  <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
-                  <p className="text-sm text-red-700">{error}</p>
+                <div className="flex items-start space-x-2 p-3.5 bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/30 rounded-xl">
+                  <AlertCircle className="w-5 h-5 text-rose-600 dark:text-rose-400 flex-shrink-0 mt-0.5" />
+                  <p className="text-sm font-bold text-rose-700 dark:text-rose-300">{error === 'Please enter a session code' ? 'Por favor ingresa un código válida' : error === 'Session code must be 6 characters' ? 'El código debe tener 6 caracteres' : error === 'Session not found. Please check the code.' ? 'Sesión no encontrada. Verifica el código.' : error === 'Failed to join session. Please try again.' ? 'Error al unirse. Inténtalo de nuevo.' : error}</p>
                 </div>
               )}
 
@@ -109,16 +109,16 @@ export const JoinSessionPage = () => {
               <button
                 type="submit"
                 disabled={isJoining || sessionCode.length !== 6}
-                className="w-full flex items-center justify-center space-x-2 px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition font-medium shadow-md"
+                className="w-full flex items-center justify-center gap-2 px-6 py-3.5 bg-emerald-600 hover:bg-emerald-700 dark:bg-emerald-600 dark:hover:bg-emerald-500 text-white rounded-xl disabled:opacity-50 disabled:cursor-not-allowed transition-all font-bold shadow-md shadow-emerald-600/20 dark:shadow-none"
               >
                 {isJoining ? (
                   <>
                     <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                    <span>Joining...</span>
+                    <span>Conectando...</span>
                   </>
                 ) : (
                   <>
-                    <span>Join Session</span>
+                    <span>Unirme a la Sesión</span>
                     <ArrowRight className="w-5 h-5" />
                   </>
                 )}
@@ -126,23 +126,23 @@ export const JoinSessionPage = () => {
             </form>
 
             {/* Help Text */}
-            <div className="mt-6 pt-6 border-t border-gray-200">
-              <p className="text-sm text-gray-600 text-center">
-                Don't have a code?{' '}
-                <span className="text-blue-600 font-medium">
-                  Ask your teacher to start a live session
+            <div className="mt-8 pt-6 border-t border-slate-200 dark:border-slate-800">
+              <p className="text-sm font-medium text-slate-600 dark:text-slate-400 text-center">
+                ¿No tienes un código?{' '}
+                <span className="text-emerald-600 dark:text-emerald-400 font-bold block mt-1">
+                  Pídele a tu profesor que inicie una sesión en vivo
                 </span>
               </p>
             </div>
           </div>
 
           {/* Back Link */}
-          <div className="mt-6 text-center">
+          <div className="mt-8 text-center">
             <button
               onClick={() => navigate('/')}
-              className="text-gray-600 hover:text-gray-900 transition"
+              className="text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white transition-colors font-bold text-sm"
             >
-              ← Back to Home
+              ← Volver al Inicio
             </button>
           </div>
         </div>
