@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { groupsService, type StudentGroup } from '../../services/groupsService';
 import toast from 'react-hot-toast';
-import { Users, BookOpen, Loader2, Calendar } from 'lucide-react';
+import { Users, BookOpen, Calendar, ArrowRight, CheckCircle2, AlertCircle } from 'lucide-react';
 
 export const StudentGroupsView = () => {
   const navigate = useNavigate();
@@ -29,128 +29,149 @@ export const StudentGroupsView = () => {
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('es-ES', {
       year: 'numeric',
-      month: 'long',
+      month: 'short',
       day: 'numeric',
     });
   };
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+      <div className="flex flex-col items-center justify-center py-16">
+        <div className="inline-block animate-spin rounded-full h-8 w-8 border-4 border-slate-100 border-t-emerald-500 mb-4"></div>
+        <p className="text-sm text-slate-500 font-medium">Cargando tus grupos...</p>
       </div>
     );
   }
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div>
-        <h2 className="text-2xl font-bold text-gray-900">Mis Grupos</h2>
-        <p className="text-sm text-gray-500 mt-1">
-          Grupos en los que estás inscrito
-        </p>
+    <div className="space-y-6 w-full">
+      {/* Header Sección */}
+      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-2">
+        <div>
+          <h2 className="text-2xl font-bold text-slate-800 tracking-tight">Tus Grupos de Estudio</h2>
+          <p className="text-sm text-slate-500 mt-1 font-medium">
+            Accede al material exclusivo de tus clases.
+          </p>
+        </div>
+        {groups.length > 0 && (
+          <div className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 text-slate-600 rounded-lg border border-slate-200">
+            <Users className="w-4 h-4 text-slate-500" />
+            <span className="text-xs font-bold uppercase tracking-wider">
+              {groups.length} {groups.length === 1 ? 'Grupo' : 'Grupos'}
+            </span>
+          </div>
+        )}
       </div>
 
       {groups.length === 0 ? (
-        <div className="bg-white rounded-xl shadow-sm p-12 border border-gray-200 text-center">
-          <Users className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-          <h3 className="text-lg font-semibold text-gray-900 mb-2">
-            No estás inscrito en ningún grupo
+        <div className="flex flex-col items-center justify-center p-12 lg:p-16 text-center bg-white rounded-2xl border border-slate-200 border-dashed shadow-sm">
+          <div className="w-16 h-16 bg-slate-50 rounded-2xl flex items-center justify-center mb-4 border border-slate-100">
+            <Users className="w-8 h-8 text-slate-300" />
+          </div>
+          <h3 className="text-lg font-bold text-slate-800 mb-2">
+            No tienes grupos activos
           </h3>
-          <p className="text-gray-600">
-            Contacta a tu profesor para que te asigne a un grupo
+          <p className="text-sm text-slate-500 max-w-xs mb-6">
+            Pide a tu profesor que te asigne a una clase para comenzar a colaborar.
           </p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {groups.map((item) => (
-            item.group && item.class && (
+        /* RESPONSIVE GRID: 1 columna en móvil, 2 en tablet (sm), 3 en desktop (lg) */
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+          {groups.map((item, index) => {
+            if (!item.group || !item.class) return null;
+
+            // Paleta de colores pastel hermosos para asegurar que NO se mezclen con el fondo
+            const themeColors = [
+              { bg: 'bg-blue-50/80', border: 'border-blue-200', hoverBg: 'hover:bg-blue-100/60', hoverBorder: 'hover:border-blue-400', iconBg: 'bg-blue-100', iconColor: 'text-blue-700' },
+              { bg: 'bg-indigo-50/80', border: 'border-indigo-200', hoverBg: 'hover:bg-indigo-100/60', hoverBorder: 'hover:border-indigo-400', iconBg: 'bg-indigo-100', iconColor: 'text-indigo-700' },
+              { bg: 'bg-emerald-50/80', border: 'border-emerald-200', hoverBg: 'hover:bg-emerald-100/60', hoverBorder: 'hover:border-emerald-400', iconBg: 'bg-emerald-100', iconColor: 'text-emerald-700' },
+              { bg: 'bg-fuchsia-50/80', border: 'border-fuchsia-200', hoverBg: 'hover:bg-fuchsia-100/60', hoverBorder: 'hover:border-fuchsia-400', iconBg: 'bg-fuchsia-100', iconColor: 'text-fuchsia-700' },
+              { bg: 'bg-rose-50/80', border: 'border-rose-200', hoverBg: 'hover:bg-rose-100/60', hoverBorder: 'hover:border-rose-400', iconBg: 'bg-rose-100', iconColor: 'text-rose-700' },
+              { bg: 'bg-amber-50/80', border: 'border-amber-200', hoverBg: 'hover:bg-amber-100/60', hoverBorder: 'hover:border-amber-400', iconBg: 'bg-amber-100', iconColor: 'text-amber-700' }
+            ];
+            const theme = themeColors[index % themeColors.length];
+
+            return (
               <div
                 key={item.enrollment.id}
-                onClick={() => item.class && navigate(`/classes/${item.class.id}`)}
-                className="group bg-white rounded-2xl shadow-md border-2 border-gray-100 overflow-hidden hover:shadow-2xl hover:border-blue-300 transition-all duration-300 cursor-pointer transform hover:-translate-y-1"
+                onClick={() => navigate(`/classes/${item.class!.id}`)}
+                className={`group relative ${theme.bg} rounded-2xl p-5 shadow-sm hover:shadow-lg transition-all duration-300 border-2 ${theme.border} ${theme.hoverBg} ${theme.hoverBorder} flex flex-col cursor-pointer overflow-hidden transform hover:-translate-y-1`}
               >
-                {/* Card Header - Cambia de color en hover */}
-                <div className="p-6 bg-gradient-to-br from-blue-50 to-purple-50 group-hover:from-blue-100 group-hover:to-purple-100 border-b border-gray-200 transition-all duration-300">
-                  <div className="flex items-start gap-3">
-                    <div className="w-12 h-12 bg-blue-600 group-hover:bg-purple-600 rounded-lg flex items-center justify-center flex-shrink-0 transition-colors duration-300 shadow-sm">
-                      <BookOpen className="w-6 h-6 text-white" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <h3 className="font-bold text-gray-900 group-hover:text-blue-700 truncate transition-colors duration-300">
-                        {item.class.title}
-                      </h3>
-                      {item.class.description && (
-                        <p className="text-sm text-gray-600 group-hover:text-gray-700 line-clamp-2 mt-1 transition-colors duration-300">
-                          {item.class.description}
-                        </p>
-                      )}
+                {/* Header de Tarjeta */}
+                <div className="flex items-start gap-4 mb-4">
+                  {/* Icono Principal Moderno Dinámico */}
+                  <div className={`w-12 h-12 rounded-xl ${theme.iconBg} ${theme.iconColor} flex items-center justify-center shrink-0 border border-white/60 shadow-sm group-hover:scale-105 transition-all duration-300`}>
+                    <BookOpen className="w-6 h-6" />
+                  </div>
+                  
+                  {/* Títulos */}
+                  <div className="flex-1 min-w-0 pt-0.5">
+                    <h3 className="font-bold text-base md:text-lg text-slate-800 group-hover:text-blue-600 truncate transition-colors leading-tight">
+                      {item.class.title}
+                    </h3>
+                    <div className="flex items-center gap-1.5 mt-1">
+                      <Users className="w-3.5 h-3.5 text-slate-400" />
+                      <span className="text-[13px] font-medium text-slate-600 truncate">
+                        {item.group.name}
+                      </span>
                     </div>
                   </div>
                 </div>
 
-                {/* Card Body */}
-                <div className="p-6">
-                  {/* Group Info */}
-                  <div className="flex items-center gap-2 mb-4">
-                    <Users className="w-4 h-4 text-gray-500" />
-                    <span className="font-medium text-gray-900">{item.group.name}</span>
-                  </div>
-
+                {/* Descripción (Opcional) */}
+                <div className="flex-1 flex flex-col">
                   {item.group.description && (
-                    <p className="text-sm text-gray-600 mb-4">
+                    <p className="text-sm text-slate-500 line-clamp-2 leading-relaxed mb-4">
                       {item.group.description}
                     </p>
                   )}
+                </div>
 
-                  {/* Enrollment Info */}
-                  <div className="space-y-2 pt-4 border-t border-gray-100">
-                    <div className="flex items-center gap-2 text-sm text-gray-600">
-                      <Calendar className="w-4 h-4" />
-                      <span>Inscrito el {formatDate(item.enrollment.enrolled_at)}</span>
+                {/* Área Inferior: Metadatos */}
+                <div className="mt-auto pt-4 border-t border-slate-100 space-y-3 relative">
+                  
+                  {/* Fecha y Estado */}
+                  <div className="flex flex-wrap items-center justify-between gap-y-2">
+                    <div className="flex items-center gap-1.5 text-xs text-slate-500 font-medium">
+                      <Calendar className="w-3.5 h-3.5 text-slate-400" />
+                      <span>{formatDate(item.enrollment.enrolled_at)}</span>
                     </div>
 
                     {item.enrollment.status && (
-                      <div className="flex items-center gap-2">
-                        <span className={`text-xs px-2 py-1 rounded-full ${
-                          item.enrollment.status === 'active'
-                            ? 'bg-green-100 text-green-800'
-                            : item.enrollment.status === 'completed'
-                            ? 'bg-blue-100 text-blue-800'
-                            : 'bg-gray-100 text-gray-800'
-                        }`}>
-                          {item.enrollment.status === 'active' ? 'Activo' :
-                           item.enrollment.status === 'completed' ? 'Completado' : 'Inactivo'}
-                        </span>
-                      </div>
-                    )}
-
-                    {item.enrollment.notes && (
-                      <div className="text-sm text-gray-600 bg-gray-50 p-3 rounded-lg mt-3">
-                        <span className="font-medium">Notas:</span> {item.enrollment.notes}
-                      </div>
+                      <span className={`flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-md border ${
+                        item.enrollment.status === 'active'
+                          ? 'bg-emerald-50 text-emerald-600 border-emerald-200/60'
+                          : item.enrollment.status === 'completed'
+                          ? 'bg-blue-50 text-blue-600 border-blue-200/60'
+                          : 'bg-slate-50 text-slate-600 border-slate-200/60'
+                      }`}>
+                        {item.enrollment.status === 'active' && <CheckCircle2 className="w-3 h-3" />}
+                        {item.enrollment.status === 'active' ? 'Activo' :
+                         item.enrollment.status === 'completed' ? 'Finalizado' : 'Inactivo'}
+                      </span>
                     )}
                   </div>
-                </div>
-              </div>
-            )
-          ))}
-        </div>
-      )}
 
-      {/* Info Footer */}
-      {groups.length > 0 && (
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-          <div className="flex items-start gap-3">
-            <Users className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
-            <div className="text-sm text-blue-900">
-              <p className="font-medium mb-1">Estás inscrito en {groups.length} grupo{groups.length !== 1 ? 's' : ''}</p>
-              <p className="text-blue-700">
-                Los grupos te permiten organizarte mejor con tus compañeros y acceder a contenido específico de tu clase.
-              </p>
-            </div>
-          </div>
+                  {/* Notas */}
+                  {item.enrollment.notes && (
+                    <div className="flex items-start gap-2 bg-amber-50/50 border border-amber-100/50 p-2.5 rounded-lg text-xs text-slate-600 mt-2">
+                      <AlertCircle className="w-3.5 h-3.5 text-amber-500 shrink-0 mt-0.5" />
+                      <span className="block leading-relaxed">
+                        {item.enrollment.notes}
+                      </span>
+                    </div>
+                  )}
+
+                  {/* Flecha Flotante sutil en Hover (Oculta en móviles para evitar distracciones, visible en md+) */}
+                  <div className="hidden md:flex absolute bottom-0 right-0 w-8 h-8 rounded-full bg-blue-50 items-center justify-center shadow-sm border border-blue-100 opacity-0 group-hover:opacity-100 transform translate-x-2 group-hover:translate-x-0 transition-all duration-300">
+                    <ArrowRight className="w-4 h-4 text-blue-600" />
+                  </div>
+                </div>
+
+              </div>
+            );
+          })}
         </div>
       )}
     </div>
