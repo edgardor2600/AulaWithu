@@ -44,10 +44,10 @@ export const ClassDetailPage = () => {
   if (isLoading) {
     return (
       <Layout>
-        <div className="flex items-center justify-center h-screen">
+        <div className="flex items-center justify-center h-screen bg-gray-50 dark:bg-slate-950">
           <div className="text-center">
-            <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-            <p className="mt-4 text-gray-600">Loading class...</p>
+            <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 dark:border-blue-400"></div>
+            <p className="mt-4 text-gray-600 dark:text-slate-400 font-medium">Cargando clase...</p>
           </div>
         </div>
       </Layout>
@@ -60,44 +60,46 @@ export const ClassDetailPage = () => {
 
   return (
     <Layout>
-      <div className="p-8">
+      <div className="p-4 md:p-8">
         {/* Back Button */}
         <button
           onClick={() => navigate('/dashboard')}
-          className="flex items-center space-x-2 text-gray-600 hover:text-gray-900 mb-6 transition"
+          className="flex items-center space-x-2 text-gray-600 dark:text-slate-400 hover:text-gray-900 dark:hover:text-slate-200 mb-6 transition font-medium"
         >
           <ArrowLeft className="w-5 h-5" />
-          <span>Back to Dashboard</span>
+          <span>Volver al Dashboard</span>
         </button>
 
         {/* Class Header */}
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8 mb-6">
+        <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-gray-200 dark:border-slate-800/60 p-6 md:p-8 mb-6">
           <div className="flex items-start justify-between">
             <div className="flex items-start space-x-4 flex-1">
               <div className="w-16 h-16 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg flex items-center justify-center flex-shrink-0">
                 <BookOpen className="w-8 h-8 text-white" />
               </div>
               <div className="flex-1">
-                <h1 className="text-3xl font-bold text-gray-900 mb-2">
+                <h1 className="text-2xl md:text-3xl font-bold text-gray-900 dark:text-white mb-2">
                   {classData.title}
                 </h1>
                 {classData.description && (
-                  <p className="text-gray-600 mb-4">{classData.description}</p>
+                  <p className="text-gray-600 dark:text-slate-400 mb-4">{classData.description}</p>
                 )}
-                <div className="flex items-center space-x-4 text-sm text-gray-500">
+                <div className="flex flex-wrap items-center gap-4 text-sm text-gray-500 dark:text-slate-400">
                   {classData.teacher_name && (
-                    <div className="flex items-center space-x-2">
+                    <div className="flex items-center space-x-2 bg-slate-50 dark:bg-slate-800/50 px-3 py-1.5 rounded-full border border-slate-100 dark:border-slate-700/50">
                       <div
-                        className="w-6 h-6 rounded-full flex items-center justify-center text-white text-xs font-semibold"
+                        className="w-6 h-6 rounded-full flex items-center justify-center text-white text-xs font-bold"
                         style={{ backgroundColor: classData.teacher_color }}
                       >
                         {classData.teacher_name.charAt(0).toUpperCase()}
                       </div>
-                      <span>{classData.teacher_name}</span>
+                      <span className="font-medium text-slate-700 dark:text-slate-300">{classData.teacher_name}</span>
                     </div>
                   )}
-                  <span>•</span>
-                  <span>{classData.slides_count || 0} slides</span>
+                  <div className="hidden sm:block text-slate-300 dark:text-slate-600">•</div>
+                  <span className="font-medium bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 px-3 py-1.5 rounded-full border border-blue-100 dark:border-blue-500/20">
+                    {classData.slides_count || 0} slides
+                  </span>
                 </div>
               </div>
             </div>
@@ -107,14 +109,14 @@ export const ClassDetailPage = () => {
 
         {/* Tabs (Only for teachers/admins) */}
         {isTeacher && isOwner && (
-          <div className="bg-white rounded-t-lg shadow-sm border border-b-0 border-gray-200">
-            <div className="flex border-b border-gray-200">
+          <div className="bg-white dark:bg-slate-900 rounded-t-2xl shadow-sm border border-b-0 border-gray-200 dark:border-slate-800/60 overflow-hidden">
+            <div className="flex border-b border-gray-200 dark:border-slate-800/60 flex-wrap">
               <button
                 onClick={() => setActiveTab('topics')}
-                className={`flex items-center gap-2 px-6 py-4 font-medium transition ${
+                className={`flex-1 sm:flex-none flex justify-center sm:justify-start items-center gap-2 px-6 py-4 font-bold transition ${
                   activeTab === 'topics'
-                    ? 'text-blue-600 border-b-2 border-blue-600'
-                    : 'text-gray-600 hover:text-gray-900'
+                    ? 'text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400 bg-blue-50/50 dark:bg-blue-500/5'
+                    : 'text-gray-600 dark:text-slate-400 hover:text-gray-900 dark:hover:text-slate-200 hover:bg-gray-50 dark:hover:bg-slate-800/50'
                 }`}
               >
                 <BookOpen className="w-5 h-5" />
@@ -122,10 +124,10 @@ export const ClassDetailPage = () => {
               </button>
               <button
                 onClick={() => setActiveTab('groups')}
-                className={`flex items-center gap-2 px-6 py-4 font-medium transition ${
+                className={`flex-1 sm:flex-none flex justify-center sm:justify-start items-center gap-2 px-6 py-4 font-bold transition ${
                   activeTab === 'groups'
-                    ? 'text-blue-600 border-b-2 border-blue-600'
-                    : 'text-gray-600 hover:text-gray-900'
+                    ? 'text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400 bg-blue-50/50 dark:bg-blue-500/5'
+                    : 'text-gray-600 dark:text-slate-400 hover:text-gray-900 dark:hover:text-slate-200 hover:bg-gray-50 dark:hover:bg-slate-800/50'
                 }`}
               >
                 <Users className="w-5 h-5" />
@@ -136,7 +138,9 @@ export const ClassDetailPage = () => {
         )}
 
         {/* Content Area */}
-        <div className="bg-white rounded-b-lg shadow-sm border border-gray-200 p-8">
+        <div className={`bg-white dark:bg-slate-900 shadow-sm border border-gray-200 dark:border-slate-800/60 min-h-[400px] p-6 md:p-8 ${
+          (isTeacher && isOwner) ? 'rounded-b-2xl border-t-0' : 'rounded-2xl'
+        }`}>
           {/* Topics Tab */}
           {activeTab === 'topics' && id && (
             <TopicsPanel classId={id} className={classData.title} />

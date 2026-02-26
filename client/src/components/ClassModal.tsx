@@ -71,19 +71,19 @@ export const ClassModal = ({ isOpen, onClose, onSubmit, initialData, mode }: Cla
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl shadow-xl max-w-md w-full">
+    <div className="fixed inset-0 bg-black/60 dark:bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 transition-all">
+      <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-xl max-w-md w-full border border-slate-200 dark:border-slate-800">
         {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-gray-200">
-          <h2 className="text-xl font-semibold text-gray-900">
-            {mode === 'create' ? 'Create New Class' : 'Edit Class'}
+        <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-slate-800">
+          <h2 className="text-xl font-bold text-gray-900 dark:text-white">
+            {mode === 'create' ? 'Crear Nueva Clase' : 'Editar Clase'}
           </h2>
           <button
             onClick={onClose}
-            className="p-2 hover:bg-gray-100 rounded-lg transition"
+            className="p-2 hover:bg-gray-100 dark:hover:bg-slate-800 rounded-lg transition"
             disabled={isLoading}
           >
-            <X className="w-5 h-5 text-gray-500" />
+            <X className="w-5 h-5 text-gray-500 dark:text-slate-400" />
           </button>
         </div>
 
@@ -91,16 +91,16 @@ export const ClassModal = ({ isOpen, onClose, onSubmit, initialData, mode }: Cla
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
           {/* Title */}
           <div>
-            <label htmlFor="title" className="block text-sm font-medium text-gray-700 mb-2">
-              Class Title *
+            <label htmlFor="title" className="block text-sm font-bold text-gray-700 dark:text-slate-300 mb-2">
+              Título de la Clase *
             </label>
             <input
               id="title"
               type="text"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              placeholder="e.g., English Level A1 - Unit 1"
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition"
+              placeholder="Ej: Inglés Nivel A1 - Unidad 1"
+              className="w-full px-4 py-3 bg-white dark:bg-slate-950 border border-gray-300 dark:border-slate-700 text-slate-800 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition"
               disabled={isLoading}
               required
             />
@@ -108,33 +108,33 @@ export const ClassModal = ({ isOpen, onClose, onSubmit, initialData, mode }: Cla
 
           {/* Description */}
           <div>
-            <label htmlFor="description" className="block text-sm font-medium text-gray-700 mb-2">
-              Description
+            <label htmlFor="description" className="block text-sm font-bold text-gray-700 dark:text-slate-300 mb-2">
+              Descripción
             </label>
             <textarea
               id="description"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              placeholder="Brief description of the class..."
+              placeholder="Breve descripción de la clase..."
               rows={4}
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition resize-none"
+              className="w-full px-4 py-3 bg-white dark:bg-slate-950 border border-gray-300 dark:border-slate-700 text-slate-800 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition resize-none"
               disabled={isLoading}
             />
           </div>
 
           {/* Academic Level */}
           <div>
-            <label htmlFor="level" className="block text-sm font-medium text-gray-700 mb-2">
-              Academic Level
+            <label htmlFor="level" className="block text-sm font-bold text-gray-700 dark:text-slate-300 mb-2">
+              Nivel Académico (Opcional)
             </label>
             <select
               id="level"
               value={levelId}
               onChange={(e) => setLevelId(e.target.value)}
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition appearance-none bg-white"
+              className="w-full px-4 py-3 bg-white dark:bg-slate-950 border border-gray-300 dark:border-slate-700 text-slate-800 dark:text-white rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition appearance-none"
               disabled={isLoading || isLoadingLevels}
             >
-              <option value="">-- No Level Assigned --</option>
+              <option value="">-- Sin Nivel Asignado --</option>
               {levels.map((l) => (
                 <option key={l.id} value={l.id}>{l.name}</option>
               ))}
@@ -142,21 +142,21 @@ export const ClassModal = ({ isOpen, onClose, onSubmit, initialData, mode }: Cla
           </div>
 
           {/* Actions */}
-          <div className="flex space-x-3 pt-4">
+          <div className="flex space-x-3 pt-4 border-t border-slate-100 dark:border-slate-800 mt-6">
             <button
               type="button"
               onClick={onClose}
-              className="flex-1 px-4 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition font-medium"
+              className="flex-1 px-4 py-3 bg-slate-50 dark:bg-slate-800/50 border border-gray-300 dark:border-slate-700 text-gray-700 dark:text-slate-300 rounded-xl hover:bg-gray-100 dark:hover:bg-slate-800 transition font-bold"
               disabled={isLoading}
             >
-              Cancel
+              Cancelar
             </button>
             <button
               type="submit"
-              className="flex-1 px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+              className="flex-1 px-4 py-3 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition font-bold disabled:opacity-50 disabled:cursor-not-allowed shadow-md"
               disabled={isLoading}
             >
-              {isLoading ? 'Saving...' : mode === 'create' ? 'Create Class' : 'Save Changes'}
+              {isLoading ? 'Guardando...' : mode === 'create' ? 'Crear Clase' : 'Guardar Cambios'}
             </button>
           </div>
         </form>
