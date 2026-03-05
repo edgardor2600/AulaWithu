@@ -522,21 +522,6 @@ export const GroupManagementPage = () => {
     return level ? level.name : '';
   };
 
-  const getCapacityColor = (group: Group) => {
-    if (!group.student_count) return 'text-green-600';
-    const percentage = (group.student_count / group.max_students) * 100;
-    if (percentage >= 90) return 'text-red-600';
-    if (percentage >= 70) return 'text-orange-600';
-    return 'text-green-600';
-  };
-
-  const getCapacityBarColor = (group: Group) => {
-    if (!group.student_count) return 'bg-green-500';
-    const percentage = (group.student_count / group.max_students) * 100;
-    if (percentage >= 90) return 'bg-red-500';
-    if (percentage >= 70) return 'bg-orange-500';
-    return 'bg-green-500';
-  };
 
   const handleLogout = () => {
     logout();
@@ -548,36 +533,49 @@ export const GroupManagementPage = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <header className="bg-white border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-lg flex items-center justify-center">
-                <Users className="w-6 h-6 text-white" />
+    <div className="min-h-screen bg-slate-50 font-sans pb-16 overflow-x-hidden">
+      
+      {/* === HEADER INMERSIVO E INTERACTIVO (PREMIUM SAAS) === */}
+      <header className="bg-slate-900 border-b border-slate-800 relative z-10 shadow-lg pb-12">
+        {/* Abstract Dark Layer */}
+        <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-[0.03] pointer-events-none mix-blend-overlay" />
+        <div className="absolute top-[-50%] right-[-10%] w-[300px] h-[300px] bg-blue-500/20 rounded-full blur-[80px] pointer-events-none mix-blend-screen overflow-hidden" />
+
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between py-6 gap-6">
+            
+            {/* Logo / Título */}
+            <div className="flex items-center gap-4">
+              <div className="w-14 h-14 bg-gradient-to-tr from-blue-500 to-indigo-600 rounded-2xl flex items-center justify-center shadow-[0_4px_20px_0_rgb(59,130,246,0.4)] border border-white/20 shrink-0">
+                <Users className="w-7 h-7 text-white drop-shadow-sm" />
               </div>
               <div>
-                <h1 className="text-xl font-bold text-gray-900">Gestión de Grupos</h1>
-                <p className="text-sm text-gray-500">Organiza estudiantes por grupos y horarios</p>
+                <div className="inline-flex items-center gap-2 mb-1">
+                   <button
+                    onClick={handleBackToAdmin}
+                    className="px-2 py-0.5 rounded-md bg-white/10 text-slate-300 text-[10px] font-black tracking-widest uppercase border border-white/10 backdrop-blur-sm hover:bg-white/20 transition-all flex items-center gap-1"
+                   >
+                      ← Volver al Panel
+                   </button>
+                </div>
+                <h1 className="text-2xl md:text-3xl font-extrabold text-white tracking-tight">Gestión de Grupos</h1>
               </div>
             </div>
 
-            <div className="flex items-center gap-3 shrink-0">
-              <button
-                onClick={handleBackToAdmin}
-                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition"
-              >
-                ← Volver al Panel
-              </button>
-              <div className="text-right hidden sm:block">
-                <p className="text-sm font-medium text-gray-900">{user?.name}</p>
-                <p className="text-xs text-gray-500">Administrador</p>
+            {/* User Meta / Logout */}
+            <div className="flex items-center gap-3 sm:gap-5 shrink-0 bg-slate-800/80 p-2 pr-4 rounded-[1.25rem] border border-slate-700/60 backdrop-blur-sm w-full sm:w-auto mt-2 sm:mt-0 overflow-hidden">
+              <div className="w-10 h-10 bg-indigo-500 rounded-xl flex items-center justify-center font-black text-white shadow-inner shrink-0">
+                {user?.name.charAt(0).toUpperCase()}
               </div>
+              <div className="text-left flex-1 sm:flex-none min-w-0 pr-2">
+                <p className="text-[13px] font-bold text-white leading-tight truncate">{user?.name}</p>
+                <p className="text-[11px] font-medium text-slate-400">Super Admin</p>
+              </div>
+              <div className="h-6 w-px bg-slate-700 hidden sm:block shrink-0"></div>
               <button
                 onClick={handleLogout}
-                className="p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition"
-                title="Cerrar sesión"
+                className="w-10 h-10 flex items-center justify-center text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 rounded-xl transition-all shrink-0 ml-auto sm:ml-0"
+                title="Cerrar sesión segura"
               >
                 <LogOut className="w-5 h-5" />
               </button>
@@ -587,261 +585,269 @@ export const GroupManagementPage = () => {
       </header>
 
       {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Level Selector */}
-        <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200 mb-6">
-          <label className="block text-sm font-semibold text-gray-700 mb-3">
-            Selecciona un Nivel Académico
-          </label>
-          <div className="relative">
-            <Layers className="absolute left-3 top-3.5 w-5 h-5 text-gray-400" />
-            <select
-              value={selectedLevelId}
-              onChange={(e) => setSelectedLevelId(e.target.value)}
-              className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition appearance-none bg-white text-base"
-              disabled={isLoadingLevels}
-            >
-              <option value="">Selecciona un nivel para ver sus grupos</option>
-              {levels.map((level) => (
-                <option key={level.id} value={level.id}>
-                  {level.name} - {level.description}
-                </option>
-              ))}
-            </select>
-            {isLoadingLevels && (
-              <div className="absolute right-3 top-3.5">
-                <Loader2 className="w-5 h-5 animate-spin text-gray-400" />
-              </div>
-            )}
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 relative -mt-16 z-20">
+        
+        {/* Selector de Nivel Moderno */}
+        <div className="bg-white/95 backdrop-blur-xl rounded-[2rem] shadow-[0_8px_30px_rgb(0,0,0,0.08)] border border-slate-200 p-6 mb-10 flex flex-col md:flex-row items-center gap-6">
+          <div className="flex-1 w-full">
+             <label className="block text-sm font-bold text-slate-700 mb-2">
+               Selecciona un Eje Académico
+             </label>
+             <div className="relative group">
+               <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                 <Layers className="w-5 h-5 text-indigo-400 group-focus-within:text-indigo-600 transition-colors" />
+               </div>
+               <select
+                 value={selectedLevelId}
+                 onChange={(e) => setSelectedLevelId(e.target.value)}
+                 className="w-full pl-12 pr-10 py-3.5 bg-slate-50 border-2 border-slate-200 rounded-xl focus:ring-0 focus:border-indigo-500 outline-none transition-all duration-200 font-bold text-slate-800 appearance-none hover:border-slate-300"
+                 disabled={isLoadingLevels}
+               >
+                 <option value="" disabled className="text-slate-400 font-medium">-- Elige un nivel para analizar sus grupos --</option>
+                 {levels.map((level) => (
+                   <option key={level.id} value={level.id} className="font-bold text-slate-800">
+                     {level.name} - {level.description}
+                   </option>
+                 ))}
+               </select>
+               {isLoadingLevels ? (
+                  <div className="absolute inset-y-0 right-0 pr-4 flex items-center">
+                    <Loader2 className="w-5 h-5 animate-spin text-indigo-500" />
+                  </div>
+               ) : (
+                  <div className="absolute inset-y-0 right-0 pr-4 flex items-center pointer-events-none">
+                    <span className="text-xs font-black text-slate-400">▼</span>
+                  </div>
+               )}
+             </div>
+          </div>
+          
+          <div className="hidden md:flex items-center justify-center w-16 h-16 bg-slate-50 rounded-2xl border-2 border-slate-100 shrink-0">
+             <Search className="w-6 h-6 text-slate-300" />
           </div>
         </div>
 
         {/* Groups Display */}
         {selectedLevelId && (
-          <div>
+          <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
             {isLoadingGroups ? (
-              <div className="flex flex-col items-center justify-center py-16 bg-white rounded-xl border border-gray-200">
-                <Loader2 className="w-8 h-8 animate-spin text-blue-600 mb-3" />
-                <p className="text-sm text-gray-600">Cargando grupos...</p>
+              <div className="flex flex-col items-center justify-center py-24 bg-white rounded-3xl border border-slate-200 shadow-sm">
+                <div className="w-12 h-12 border-4 border-slate-100 border-t-indigo-500 rounded-full animate-spin mb-4" />
+                <p className="text-sm font-bold text-slate-500">Localizando grupos formativos...</p>
               </div>
             ) : groups.length === 0 ? (
-              <div className="bg-amber-50 p-8 rounded-xl border-2 border-dashed border-amber-200">
-                <div className="text-center">
-                  <Users className="w-16 h-16 text-amber-400 mx-auto mb-4" />
-                  <h3 className="text-lg font-bold text-gray-900 mb-2">
-                    No hay grupos para {getSelectedLevelName()}
+              <div className="bg-white p-12 rounded-[2rem] border-2 border-dashed border-slate-200 text-center shadow-sm relative overflow-hidden">
+                <div className="absolute top-0 right-0 w-64 h-64 bg-slate-50 rounded-bl-full pointer-events-none -z-0"></div>
+                <div className="relative z-10">
+                  <div className="w-20 h-20 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-6 shadow-inner">
+                     <Users className="w-10 h-10 text-slate-400" />
+                  </div>
+                  <h3 className="text-2xl font-black text-slate-800 tracking-tight mb-2">
+                    Sin Formaciones en {getSelectedLevelName()}
                   </h3>
-                  <p className="text-sm text-gray-600 mb-1">
-                    Aún no se han creado grupos para este nivel académico.
+                  <p className="text-sm font-medium text-slate-500 mb-8 max-w-md mx-auto">
+                    Aún no se ha estructurado ningún grupo operativo para esta área académica.
                   </p>
+                  
                   {levelClasses.length > 0 ? (
-                    <>
-                      <p className="text-xs text-gray-500 mb-4">
-                        Hay {levelClasses.length} clase{levelClasses.length !== 1 ? 's' : ''} disponible{levelClasses.length !== 1 ? 's' : ''} para crear grupos
-                      </p>
+                    <div className="flex flex-col items-center gap-4">
+                      <span className="px-3 py-1 bg-indigo-50 text-indigo-700 text-[10px] font-black tracking-widest uppercase rounded-full border border-indigo-100">
+                        {levelClasses.length} clase{levelClasses.length !== 1 ? 's' : ''} disponible{levelClasses.length !== 1 ? 's' : ''}
+                      </span>
                       <button
                         onClick={handleOpenCreateGroupModal}
-                        className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition font-medium"
+                        className="inline-flex items-center gap-2 px-6 py-3.5 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition font-bold shadow-lg shadow-indigo-200 hover:-translate-y-0.5"
                       >
-                        <Plus className="w-4 h-4" />
-                        Crear Primer Grupo
+                        <Plus className="w-5 h-5" />
+                        Inaugurar Primer Grupo
                       </button>
-                    </>
+                    </div>
                   ) : (
-                    <>
-                      <p className="text-sm text-gray-600 mb-4">
-                        Primero necesitas crear una clase para este nivel.
+                    <div className="flex flex-col items-center gap-4">
+                      <p className="text-sm font-bold text-rose-500 bg-rose-50 px-4 py-2 rounded-lg border border-rose-100">
+                        Sección inoperativa: Requiere crear una clase madre primero.
                       </p>
                       <button
                         onClick={handleOpenCreateClassModal}
-                        className="inline-flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition font-medium"
+                        className="inline-flex items-center gap-2 px-6 py-3.5 bg-slate-900 text-white rounded-xl hover:bg-slate-800 transition font-bold shadow-lg shadow-slate-200 hover:-translate-y-0.5"
                       >
-                        <Plus className="w-4 h-4" />
+                        <Plus className="w-5 h-5 text-emerald-400" />
                         Crear Clase para {getSelectedLevelName()}
                       </button>
-                    </>
+                    </div>
                   )}
                 </div>
               </div>
             ) : (
               <div className="space-y-6">
-                {/* Header con resumen */}
-                <div className="bg-gradient-to-r from-blue-50 to-indigo-50 p-4 rounded-xl border border-blue-200">
-                  <div className="flex items-center justify-between gap-4">
-                    <div className="flex-1">
-                      <h2 className="text-lg font-bold text-blue-900">
-                        Grupos de {getSelectedLevelName()}
-                      </h2>
-                      <div className="flex items-center gap-4 mt-1">
-                        <p className="text-sm text-blue-700">
-                          {groups.length} grupo{groups.length !== 1 ? 's' : ''} • {' '}
-                          {groups.reduce((sum, g) => sum + (g.student_count || 0), 0)} estudiantes • {' '}
-                          {groups.reduce((sum, g) => sum + g.max_students, 0)} plazas totales
-                        </p>
-                      </div>
-                    </div>
-                    
-                    {/* Botón Crear Nuevo Grupo */}
-                    <button
-                      onClick={async () => {
-                        // Cargar clases del nivel antes de abrir el modal
-                        setIsLoadingGroups(true);
-                        try {
-                          const allClasses = await classService.getAll();
-                          const classesForLevel = allClasses.filter(c => c.level_id === selectedLevelId);
-                          setLevelClasses(classesForLevel);
-                          
-                          if (classesForLevel.length === 0) {
-                            toast.error('No hay clases disponibles para este nivel. Crea una clase primero.');
-                            handleOpenCreateClassModal();
-                          } else {
-                            // Reset form y abrir modal
-                            setGroupForm({
-                              classId: '',
-                              name: '',
-                              description: '',
-                              maxStudents: 30,
-                              scheduleTime: '',
-                            });
-                            setShowCreateGroupModal(true);
-                          }
-                        } catch (error) {
-                          console.error('Error loading classes:', error);
-                          toast.error('Error al cargar clases');
-                        } finally {
-                          setIsLoadingGroups(false);
-                        }
-                      }}
-                      className="inline-flex items-center gap-2 px-4 py-2.5 bg-green-600 text-white rounded-lg hover:bg-green-700 transition font-medium shadow-md hover:shadow-lg"
-                    >
-                      <Plus className="w-4 h-4" />
-                      Crear Nuevo Grupo
-                    </button>
-                  </div>
+                {/* Header Dinámico con Resumen */}
+                <div className="bg-white p-6 rounded-[2rem] border border-slate-200 shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6 relative overflow-hidden">
+                   <div className="absolute left-0 top-0 bottom-0 w-2 bg-gradient-to-b from-indigo-500 to-blue-500"></div>
+                   
+                   <div className="pl-4">
+                     <h2 className="text-2xl font-black text-slate-900 tracking-tight mb-1">
+                       Panel de Control: <span className="text-indigo-600">{getSelectedLevelName()}</span>
+                     </h2>
+                     <div className="flex flex-wrap items-center gap-3 mt-3">
+                       <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-slate-100 rounded-md text-xs font-bold text-slate-600">
+                         <span className="w-2 h-2 rounded-full bg-slate-800"></span> {groups.length} grupo{groups.length !== 1 ? 's' : ''}
+                       </span>
+                       <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-50 rounded-md text-xs font-bold text-emerald-700 border border-emerald-100">
+                         <Users className="w-3.5 h-3.5" /> {groups.reduce((sum, g) => sum + (g.student_count || 0), 0)} matrículas
+                       </span>
+                       <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-blue-50 rounded-md text-xs font-bold text-blue-700 border border-blue-100">
+                         <BookOpen className="w-3.5 h-3.5" /> {groups.reduce((sum, g) => sum + g.max_students, 0)} plazas de capacidad
+                       </span>
+                     </div>
+                   </div>
+                   
+                   <button
+                     onClick={async () => {
+                       setIsLoadingGroups(true);
+                       try {
+                         const allClasses = await classService.getAll();
+                         const classesForLevel = allClasses.filter(c => c.level_id === selectedLevelId);
+                         setLevelClasses(classesForLevel);
+                         
+                         if (classesForLevel.length === 0) {
+                           toast.error('No hay clases disponibles para este nivel. Crea una clase primero.');
+                           handleOpenCreateClassModal();
+                         } else {
+                           setGroupForm({ classId: '', name: '', description: '', maxStudents: 30, scheduleTime: '' });
+                           setShowCreateGroupModal(true);
+                         }
+                       } catch (error) {
+                         toast.error('Error al cargar clases');
+                       } finally {
+                         setIsLoadingGroups(false);
+                       }
+                     }}
+                     className="shrink-0 inline-flex items-center gap-2 px-5 py-3.5 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-all font-bold shadow-[0_4px_14px_0_rgb(79,70,229,0.39)] hover:shadow-[0_6px_20px_rgba(79,70,229,0.23)] hover:-translate-y-0.5 w-full sm:w-auto justify-center"
+                   >
+                     <Plus className="w-5 h-5 bg-white/20 rounded-md p-0.5" />
+                     Estructurar Nuevo Grupo
+                   </button>
                 </div>
 
-                {/* Lista de grupos */}
-                <div className="space-y-4">
+                {/* Grid Vibrante de Grupos */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
                   {groups.map((group) => {
                     const isExpanded = expandedGroups.has(group.id);
                     const capacity = group.student_count || 0;
                     const maxCapacity = group.max_students;
                     const availableSeats = maxCapacity - capacity;
                     const isFull = capacity >= maxCapacity;
+                    
+                    // Colores refinados para barras
+                    const getRefinedBarColor = () => {
+                        if (!capacity) return 'bg-emerald-400';
+                        const p = (capacity / maxCapacity) * 100;
+                        if (p >= 90) return 'bg-rose-500';
+                        if (p >= 70) return 'bg-amber-400';
+                        return 'bg-emerald-400';
+                    };
 
                     return (
                       <div
                         key={group.id}
-                        className="bg-white rounded-xl border-2 border-gray-200 overflow-hidden hover:border-blue-300 transition"
+                        className={`bg-white rounded-[1.5rem] border-2 overflow-hidden transition-all duration-300 hover:shadow-xl hover:-translate-y-1 ${isExpanded ? 'border-indigo-400 shadow-md transform -translate-y-1' : 'border-slate-200 hover:border-indigo-200'}`}
                       >
-                        {/* Group Header */}
-                        <div className="p-5 hover:bg-gray-50 transition">
-                          <div className="flex items-start justify-between gap-4">
-                            {/* Contenido principal - clickeable para expandir */}
-                            <div 
-                              onClick={() => toggleGroupExpanded(group.id)}
-                              className="flex-1 space-y-3 cursor-pointer"
-                            >
-                              {/* Nombre y estado */}
-                              <div className="flex items-center gap-3 flex-wrap">
-                                <h3 className="text-lg font-bold text-gray-900">
+                        {/* Group Header - Clickeable */}
+                        <div className="p-5 sm:p-6 hover:bg-slate-50/50 transition-colors cursor-pointer" onClick={() => toggleGroupExpanded(group.id)}>
+                          
+                          <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+                            
+                            <div className="flex-1 space-y-4">
+                              {/* Nombre y Badges Premium */}
+                              <div className="flex items-center gap-2.5 flex-wrap">
+                                <h3 className="text-xl font-black text-slate-800 tracking-tight">
                                   {group.name}
                                 </h3>
                                 {!group.active && (
-                                  <span className="px-2 py-0.5 bg-gray-200 text-gray-700 text-xs font-bold rounded uppercase">
-                                    Inactivo
+                                  <span className="px-2.5 py-1 bg-slate-100 text-slate-500 text-[10px] font-black tracking-widest uppercase rounded-md border border-slate-200">
+                                    Pausado
                                   </span>
                                 )}
                                 {isFull && (
-                                  <span className="px-2 py-0.5 bg-red-100 text-red-700 text-xs font-bold rounded uppercase">
-                                    Lleno
+                                  <span className="px-2.5 py-1 bg-rose-50 text-rose-600 text-[10px] font-black tracking-widest uppercase rounded-md border border-rose-200 flex items-center gap-1">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-rose-500"></span> Capacidad Máxima
                                   </span>
                                 )}
                               </div>
 
-                              {/* Clase */}
+                              {/* Clase Info Pill */}
                               {group.class_title && (
-                                <div className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-blue-50 border border-blue-200 rounded-lg">
-                                  <BookOpen className="w-3.5 h-3.5 text-blue-600" />
-                                  <span className="text-xs font-semibold text-blue-700">
+                                <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-slate-100 rounded-lg max-w-full">
+                                  <BookOpen className="w-4 h-4 text-slate-500 shrink-0" />
+                                  <span className="text-sm font-bold text-slate-700 truncate">
                                     {group.class_title}
                                   </span>
                                 </div>
                               )}
 
-                              {/* Horario y capacidad */}
-                              <div className="flex items-center gap-4 flex-wrap">
+                              {/* Métricas e info táctica */}
+                              <div className="flex items-center gap-6 flex-wrap pt-2">
                                 {group.schedule_time && (
-                                  <div className="flex items-center gap-1.5 text-gray-600">
-                                    <Clock className="w-4 h-4 text-gray-400" />
-                                    <span className="text-sm font-medium">{group.schedule_time}</span>
+                                  <div className="flex items-center gap-2 text-slate-600 bg-white border border-slate-200 px-3 py-1.5 rounded-md shadow-sm">
+                                    <Clock className="w-4 h-4 text-indigo-500" />
+                                    <span className="text-sm font-bold">{group.schedule_time}</span>
                                   </div>
                                 )}
-                                <div className="flex items-center gap-2">
-                                  <span className={`text-sm font-bold ${getCapacityColor(group)}`}>
-                                    {capacity}/{maxCapacity} estudiantes
-                                  </span>
-                                  <span className="text-xs text-gray-500">
-                                    • {availableSeats} disponible{availableSeats !== 1 ? 's' : ''}
-                                  </span>
+                                
+                                <div className="flex flex-col gap-1 w-full sm:w-auto flex-1 max-w-[200px]">
+                                   <div className="flex justify-between items-center w-full">
+                                     <span className="text-xs font-bold text-slate-500 uppercase tracking-wide">Ocupación</span>
+                                     <span className="text-xs font-black text-slate-800">{capacity}/{maxCapacity}</span>
+                                   </div>
+                                    <div className="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden shadow-inner isolate">
+                                    <div
+                                      className={`h-full rounded-full transition-all duration-1000 ease-out ${getRefinedBarColor()}`}
+                                      style={{ width: `${(capacity / maxCapacity) * 100}%` }}
+                                    />
+                                  </div>
                                 </div>
                               </div>
-
-                              {/* Barra de capacidad */}
-                              <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
-                                <div
-                                  className={`h-2 rounded-full transition-all duration-300 ${getCapacityBarColor(group)}`}
-                                  style={{ width: `${(capacity / maxCapacity) * 100}%` }}
-                                />
-                              </div>
                             </div>
 
-                            {/* Botones de acción y expandir */}
-                            <div className="flex items-center gap-2">
-                              {/* Botón Editar */}
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleOpenEditGroupModal(group);
-                                }}
-                                className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition"
-                                title="Editar grupo"
-                              >
-                                <Edit2 className="w-4 h-4" />
-                              </button>
-
-                              {/* Botón Eliminar */}
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleOpenDeleteConfirmation(group);
-                                }}
-                                className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition"
-                                title="Eliminar grupo"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </button>
-
-                              {/* Icono expandir - clickeable */}
-                              <button
-                                onClick={() => toggleGroupExpanded(group.id)}
-                                className="p-1 hover:bg-gray-100 rounded transition"
-                                title={isExpanded ? "Contraer" : "Expandir"}
-                              >
-                                {isExpanded ? (
-                                  <ChevronUp className="w-5 h-5 text-gray-400" />
-                                ) : (
-                                  <ChevronDown className="w-5 h-5 text-gray-400" />
-                                )}
-                              </button>
+                            {/* Chevron Toggle */}
+                            <div className="shrink-0 flex items-center justify-center w-10 h-10 rounded-xl bg-slate-50 border border-slate-200 text-slate-400 group-hover:bg-slate-100 self-end sm:self-start">
+                                {isExpanded ? <ChevronUp className="w-5 h-5 text-indigo-500" /> : <ChevronDown className="w-5 h-5" />}
                             </div>
+
                           </div>
                         </div>
 
-                        {/* Expanded Content */}
-                        {isExpanded && (
-                          <div className="border-t border-gray-200 bg-gray-50 p-5">
+                        {/* Panel de Opciones Expandido */}
+                        <div className={`overflow-hidden transition-all duration-300 ${isExpanded ? 'max-h-96 opacity-100' : 'max-h-0 opacity-0'}`}>
+                          <div className="border-t border-slate-100 bg-slate-50/50 p-5 sm:p-6">
                             <div className="space-y-4">
+                              {/* Acciones Rápidas */}
+                              <div className="flex items-center gap-2">
+                                {/* Botón Editar */}
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleOpenEditGroupModal(group);
+                                  }}
+                                  className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition"
+                                  title="Editar grupo"
+                                >
+                                  <Edit2 className="w-4 h-4" />
+                                </button>
+
+                                {/* Botón Eliminar */}
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleOpenDeleteConfirmation(group);
+                                  }}
+                                  className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition"
+                                  title="Eliminar grupo"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              </div>
+
                               {/* Información adicional */}
                               {group.class_description && (
                                 <div className="bg-white p-3 rounded-lg border border-gray-200">
@@ -858,7 +864,7 @@ export const GroupManagementPage = () => {
                                     handleOpenAddStudentsModal(group);
                                   }}
                                   disabled={isFull}
-                                  className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-green-600 text-white rounded-lg hover:bg-green-700 transition font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                                  className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition font-medium disabled:opacity-50 disabled:cursor-not-allowed shadow-md"
                                 >
                                   <UserPlus className="w-4 h-4" />
                                   Añadir Estudiantes
@@ -868,7 +874,7 @@ export const GroupManagementPage = () => {
                                     e.stopPropagation();
                                     handleOpenViewStudentsModal(group);
                                   }}
-                                  className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition font-medium"
+                                  className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition font-medium shadow-md"
                                 >
                                   <Users className="w-4 h-4" />
                                   Ver Estudiantes ({capacity})
@@ -876,7 +882,7 @@ export const GroupManagementPage = () => {
                               </div>
                             </div>
                           </div>
-                        )}
+                        </div>
                       </div>
                     );
                   })}
@@ -888,18 +894,20 @@ export const GroupManagementPage = () => {
 
         {/* Empty state cuando no hay nivel seleccionado */}
         {!selectedLevelId && !isLoadingLevels && (
-          <div className="bg-white p-12 rounded-xl border-2 border-dashed border-gray-300 text-center">
-            <Layers className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-            <h3 className="text-lg font-bold text-gray-900 mb-2">
-              Selecciona un Nivel Académico
+          <div className="bg-white p-12 rounded-[2rem] border-2 border-dashed border-slate-300 text-center shadow-sm">
+            <div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-6 shadow-inner">
+               <Layers className="w-10 h-10 text-slate-400" />
+            </div>
+            <h3 className="text-xl font-black text-slate-800 mb-2 tracking-tight">
+              Selecciona un Eje Académico
             </h3>
-            <p className="text-sm text-gray-600">
-              Elige un nivel en el selector de arriba para ver y gestionar sus grupos
+            <p className="text-sm font-medium text-slate-500 max-w-sm mx-auto">
+              Elige un nivel en el selector superior para analizar y estructurar sus formaciones grupales.
             </p>
           </div>
         )}
       </main>
-
+    
       {/* Create Group Modal */}
       {showCreateGroupModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
