@@ -11,11 +11,16 @@ export const validate = (req: Request, res: Response, next: NextFunction) => {
       field: (err as any).path || (err as any).param,
       message: err.msg,
     }));
-    
-    // DEBUG: Log validation errors
-    console.log('❌ Validation failed:');
-    console.log('  Errors:', formattedErrors);
-    console.log('  Request body:', req.body);
+
+    // Solo loguear en desarrollo — y nunca exponer campos sensibles
+    if (process.env.NODE_ENV !== 'production') {
+      const sensitiveFields = ['password', 'oldPassword', 'newPassword', 'passwordHash', 'token'];
+      const sanitizedBody = { ...req.body };
+      sensitiveFields.forEach(field => {
+        if (sanitizedBody[field]) sanitizedBody[field] = '[REDACTED]';
+      });
+      console.log('❌ Validation failed:', { errors: formattedErrors, body: sanitizedBody });
+    }
     
     throw new ValidationError('Validation failed', formattedErrors);
   }
