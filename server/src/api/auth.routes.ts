@@ -250,53 +250,60 @@ router.get(
 );
 
 // ============================================
-// LEGACY ENDPOINT (Backward Compatibility)
+// LEGACY ENDPOINT (Solo disponible en desarrollo)
 // ============================================
 
 /**
  * POST /api/auth/join
- * Legacy endpoint for simple name-based authentication
- * @deprecated Use /api/auth/login or /api/auth/register instead
- * Kept for backward compatibility during migration
- * 
- * Request Body:
- * - name: string
- * - role: 'teacher' | 'student'
- * 
- * Response:
- * - success: boolean
- * - token: string
- * - user: User object
+ * @deprecated — DESACTIVADO EN PRODUCCIÓN
+ *
+ * Permitía crear/autenticar usuarios solo con nombre y rol, sin contraseña.
+ * En producción retorna 410 Gone para prevenir creación de cuentas sin credenciales.
+ * En desarrollo sigue disponible para correr test-sessions.ts manualmente.
+ *
+ * Usar en su lugar: POST /api/auth/login o /api/auth/register/teacher|student
  */
-router.post(
-  '/join',
-  [
-    body('name')
-      .trim()
-      .notEmpty().withMessage('Name is required')
-      .isLength({ min: 2, max: 100 }).withMessage('Name must be between 2 and 100 characters'),
-    body('role')
-      .notEmpty().withMessage('Role is required')
-      .isIn(['teacher', 'student']).withMessage('Role must be either teacher or student'),
-  ],
-  validate,
-  asyncHandler(async (req: any, res: any) => {
-    const { name, role } = req.body;
+if (process.env.NODE_ENV !== 'production') {
+  router.post(
+    '/join',
+    [
+      body('name')
+        .trim()
+        .notEmpty().withMessage('Name is required')
+        .isLength({ min: 2, max: 100 }).withMessage('Name must be between 2 and 100 characters'),
+      body('role')
+        .notEmpty().withMessage('Role is required')
+        .isIn(['teacher', 'student']).withMessage('Role must be either teacher or student'),
+    ],
+    validate,
+    asyncHandler(async (req: any, res: any) => {
+      const { name, role } = req.body;
 
-    const result = await AuthService.join({ name, role });
+      const result = await AuthService.join({ name, role });
 
-    res.status(200).json({
-      success: true,
-      token: result.token,
-      user: {
-        id: result.user.id,
-        name: result.user.name,
-        role: result.user.role,
-        avatar_color: result.user.avatar_color,
-        created_at: result.user.created_at,
+      res.status(200).json({
+        success: true,
+        token: result.token,
+        user: {
+          id: result.user.id,
+          name: result.user.name,
+          role: result.user.role,
+          avatar_color: result.user.avatar_color,
+          created_at: result.user.created_at,
+        },
+      });
+    })
+  );
+} else {
+  // En producción: endpoint eliminado permanentemente
+  router.post('/join', (_req, res) => {
+    res.status(410).json({
+      error: {
+        message: 'This endpoint has been removed. Use POST /api/auth/login instead.',
+        code: 'ENDPOINT_REMOVED',
       },
     });
-  })
-);
+  });
+}
 
 export default router;
