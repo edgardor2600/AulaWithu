@@ -199,18 +199,21 @@ export const LoginPage = () => {
               <div className="h-px bg-slate-200 dark:bg-slate-800 flex-1"></div>
             </div>
             
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
               {[
-                { label: 'Admin', user: 'admin', pass: 'admin123', bg: 'bg-amber-50 dark:bg-amber-500/10', border: 'border-amber-200 dark:border-amber-500/20', text: 'text-amber-700 dark:text-amber-400' },
-                { label: 'Docente', user: 'prof.garcia', pass: 'password123', bg: 'bg-indigo-50 dark:bg-indigo-500/10', border: 'border-indigo-200 dark:border-indigo-500/20', text: 'text-indigo-700 dark:text-indigo-400' },
-                { label: 'Estudiante', user: 'ana.martinez', pass: 'password123', bg: 'bg-emerald-50 dark:bg-emerald-500/10', border: 'border-emerald-200 dark:border-emerald-500/20', text: 'text-emerald-700 dark:text-emerald-400' }
+                { label: 'Admin', user: 'admin', pass: 'admin123', bg: 'bg-amber-50 dark:bg-amber-500/5', border: 'border-amber-200 dark:border-amber-500/20', text: 'text-amber-700 dark:text-amber-400' },
+                { label: 'Docente', user: 'prof.garcia', pass: 'password123', bg: 'bg-indigo-50 dark:bg-indigo-500/5', border: 'border-indigo-200 dark:border-indigo-500/20', text: 'text-indigo-700 dark:text-indigo-400' },
+                { label: 'Estudiante', user: 'ana.martinez', pass: 'password123', bg: 'bg-emerald-50 dark:bg-emerald-500/5', border: 'border-emerald-200 dark:border-emerald-500/20', text: 'text-emerald-700 dark:text-emerald-400' }
               ].map((c, i) => (
-                <div key={i} className={`flex flex-col p-3 rounded-xl border-2 hover:shadow-sm dark:hover:shadow-black/20 transition-all cursor-default ${c.bg} ${c.border}`}>
-                  <span className={`text-[11px] font-black uppercase tracking-wider mb-1 ${c.text}`}>
+                <div key={i} className={`flex flex-col p-3 rounded-xl border-2 hover:shadow-sm dark:hover:shadow-black/20 hover:-translate-y-0.5 transition-all cursor-default ${c.bg} ${c.border}`}>
+                  <span className={`text-[10px] font-black uppercase tracking-wider mb-1 opacity-90 ${c.text}`}>
                     {c.label}
                   </span>
-                  <div className="text-[13px] font-mono font-bold text-slate-700 dark:text-slate-300">
-                    {c.user} <span className="text-slate-400 dark:text-slate-500 mx-1">/</span> <span className="text-slate-500 dark:text-slate-400 font-normal">{c.pass}</span>
+                  <div className="text-[12px] font-mono font-bold text-slate-700 dark:text-slate-300 break-all leading-tight">
+                    {c.user} <br className="hidden sm:block lg:hidden" />
+                    <span className="text-slate-400 dark:text-slate-500 mx-1 hidden sm:inline lg:hidden">-</span>
+                    <span className="text-slate-400 dark:text-slate-500 mx-1 sm:hidden lg:inline">/</span> 
+                    <span className="text-slate-500 dark:text-slate-400 font-normal">{c.pass}</span>
                   </div>
                 </div>
               ))}

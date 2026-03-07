@@ -204,9 +204,9 @@ export const DashboardPage = () => {
           {isTeacher && (
             <div>
               {isLoading ? (
-                <div className="flex flex-col items-center justify-center py-20 bg-white rounded-3xl border border-slate-200 shadow-sm">
-                  <div className="inline-block animate-spin rounded-full h-10 w-10 border-4 border-slate-100 border-t-indigo-500 mb-5"></div>
-                  <p className="text-slate-500 font-bold tracking-wide">Cargando material educativo...</p>
+                <div className="flex flex-col items-center justify-center py-20 bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm transition-colors">
+                  <div className="inline-block animate-spin rounded-full h-10 w-10 border-4 border-slate-100 dark:border-slate-800 border-t-indigo-500 dark:border-t-indigo-400 mb-5"></div>
+                  <p className="text-slate-500 dark:text-slate-400 font-bold tracking-wide">Cargando material educativo...</p>
                 </div>
               ) : filteredClasses.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-20 px-6 text-center bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 border-dashed shadow-sm">

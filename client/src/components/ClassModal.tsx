@@ -71,27 +71,28 @@ export const ClassModal = ({ isOpen, onClose, onSubmit, initialData, mode }: Cla
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black/60 dark:bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 transition-all">
-      <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-xl max-w-md w-full border border-slate-200 dark:border-slate-800">
-        {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-slate-800">
-          <h2 className="text-xl font-bold text-gray-900 dark:text-white">
+    <div className="fixed inset-0 bg-slate-900/60 dark:bg-slate-950/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 transition-all duration-300">
+      <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-xl dark:shadow-black/60 max-w-md w-full border border-slate-200 dark:border-slate-800 transition-colors">
+        {/* Header no arrastable */}
+        <div className="flex items-center justify-between p-6 border-b border-slate-200 dark:border-slate-800/60 bg-slate-50/50 dark:bg-slate-800/20 rounded-t-2xl transition-colors">
+          <h2 className="text-xl font-bold text-slate-900 dark:text-white transition-colors">
             {mode === 'create' ? 'Crear Nueva Clase' : 'Editar Clase'}
           </h2>
           <button
+            type="button"
             onClick={onClose}
-            className="p-2 hover:bg-gray-100 dark:hover:bg-slate-800 rounded-lg transition"
+            className="p-2 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-lg transition-colors"
             disabled={isLoading}
           >
-            <X className="w-5 h-5 text-gray-500 dark:text-slate-400" />
+            <X className="w-5 h-5 text-slate-500 dark:text-slate-400" />
           </button>
         </div>
 
-        {/* Form */}
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+        {/* Form Body */}
+        <form onSubmit={handleSubmit} className="p-6 space-y-5">
           {/* Title */}
           <div>
-            <label htmlFor="title" className="block text-sm font-bold text-gray-700 dark:text-slate-300 mb-2">
+            <label htmlFor="title" className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-2 transition-colors">
               Título de la Clase *
             </label>
             <input
@@ -100,7 +101,7 @@ export const ClassModal = ({ isOpen, onClose, onSubmit, initialData, mode }: Cla
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               placeholder="Ej: Inglés Nivel A1 - Unidad 1"
-              className="w-full px-4 py-3 bg-white dark:bg-slate-950 border border-gray-300 dark:border-slate-700 text-slate-800 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition"
+              className="w-full px-4 py-3 bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-700 text-slate-800 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-colors shadow-sm"
               disabled={isLoading}
               required
             />
@@ -108,7 +109,7 @@ export const ClassModal = ({ isOpen, onClose, onSubmit, initialData, mode }: Cla
 
           {/* Description */}
           <div>
-            <label htmlFor="description" className="block text-sm font-bold text-gray-700 dark:text-slate-300 mb-2">
+            <label htmlFor="description" className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-2 transition-colors">
               Descripción
             </label>
             <textarea
@@ -117,46 +118,51 @@ export const ClassModal = ({ isOpen, onClose, onSubmit, initialData, mode }: Cla
               onChange={(e) => setDescription(e.target.value)}
               placeholder="Breve descripción de la clase..."
               rows={4}
-              className="w-full px-4 py-3 bg-white dark:bg-slate-950 border border-gray-300 dark:border-slate-700 text-slate-800 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition resize-none"
+              className="w-full px-4 py-3 bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-700 text-slate-800 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-colors resize-none shadow-sm"
               disabled={isLoading}
             />
           </div>
 
           {/* Academic Level */}
           <div>
-            <label htmlFor="level" className="block text-sm font-bold text-gray-700 dark:text-slate-300 mb-2">
+            <label htmlFor="level" className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-2 transition-colors">
               Nivel Académico (Opcional)
             </label>
-            <select
-              id="level"
-              value={levelId}
-              onChange={(e) => setLevelId(e.target.value)}
-              className="w-full px-4 py-3 bg-white dark:bg-slate-950 border border-gray-300 dark:border-slate-700 text-slate-800 dark:text-white rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition appearance-none"
-              disabled={isLoading || isLoadingLevels}
-            >
-              <option value="">-- Sin Nivel Asignado --</option>
-              {levels.map((l) => (
-                <option key={l.id} value={l.id}>{l.name}</option>
-              ))}
-            </select>
+            <div className="relative">
+              <select
+                id="level"
+                value={levelId}
+                onChange={(e) => setLevelId(e.target.value)}
+                className="w-full px-4 py-3 bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-700 text-slate-800 dark:text-white rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition-colors appearance-none shadow-sm"
+                disabled={isLoading || isLoadingLevels}
+              >
+                <option value="" className="text-slate-500">-- Sin Nivel Asignado --</option>
+                {levels.map((l) => (
+                  <option key={l.id} value={l.id}>{l.name}</option>
+                ))}
+              </select>
+            </div>
           </div>
 
           {/* Actions */}
-          <div className="flex space-x-3 pt-4 border-t border-slate-100 dark:border-slate-800 mt-6">
+          <div className="flex space-x-3 pt-5 border-t border-slate-100 dark:border-slate-800/80 mt-6 transition-colors">
             <button
               type="button"
               onClick={onClose}
-              className="flex-1 px-4 py-3 bg-slate-50 dark:bg-slate-800/50 border border-gray-300 dark:border-slate-700 text-gray-700 dark:text-slate-300 rounded-xl hover:bg-gray-100 dark:hover:bg-slate-800 transition font-bold"
+              className="flex-1 px-4 py-3 bg-slate-50 dark:bg-slate-800/50 border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors font-bold shadow-sm"
               disabled={isLoading}
             >
               Cancelar
             </button>
             <button
               type="submit"
-              className="flex-1 px-4 py-3 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition font-bold disabled:opacity-50 disabled:cursor-not-allowed shadow-md"
+              className="flex-1 px-4 py-3 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition disabled:opacity-50 disabled:cursor-not-allowed shadow-md hover:-translate-y-0.5 font-bold flex items-center justify-center gap-2"
               disabled={isLoading}
             >
-              {isLoading ? 'Guardando...' : mode === 'create' ? 'Crear Clase' : 'Guardar Cambios'}
+              {isLoading && (
+                <div className="w-4 h-4 border-2 border-white/80 border-t-transparent rounded-full animate-spin"></div>
+              )}
+              {isLoading ? 'Guardando...' : (mode === 'create' ? 'Crear Clase' : 'Guardar Cambios')}
             </button>
           </div>
         </form>
