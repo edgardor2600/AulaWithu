@@ -49,7 +49,7 @@ export const LoginPage = () => {
   };
 
   return (
-    <div className="min-h-screen w-full flex bg-slate-50 font-sans">
+    <div className="min-h-screen w-full flex bg-slate-50 dark:bg-slate-950 font-sans transition-colors duration-300">
       
       {/* ===== Lado Izquierdo: Visual (Oculto en móviles) ===== */}
       <div className="hidden lg:flex w-[45%] bg-slate-900 relative overflow-hidden flex-col justify-between p-12 xl:p-16">
@@ -89,20 +89,20 @@ export const LoginPage = () => {
       </div>
 
       {/* ===== Lado Derecho: Formulario ===== */}
-      <div className="w-full lg:w-[55%] flex items-center justify-center p-6 sm:p-12 relative bg-slate-50">
+      <div className="w-full lg:w-[55%] flex items-center justify-center p-6 sm:p-12 relative bg-slate-50 dark:bg-slate-950 transition-colors duration-300">
         
         {/* Mobile Logo Only */}
         <div className="absolute top-8 left-8 lg:hidden flex items-center gap-3">
-          <div className="w-12 h-12 bg-slate-900 rounded-xl flex items-center justify-center shadow-md">
+          <div className="w-12 h-12 bg-slate-900 dark:bg-slate-800 rounded-xl flex items-center justify-center shadow-md">
             <GraduationCap className="w-6 h-6 text-white" />
           </div>
-          <span className="text-2xl font-black text-slate-900 tracking-tight">Aula Colaborativa</span>
+          <span className="text-2xl font-black text-slate-900 dark:text-white tracking-tight">Aula Colaborativa</span>
         </div>
 
         <div className="w-full max-w-md mt-16 lg:mt-0">
           <div className="mb-10">
-            <h1 className="text-4xl font-extrabold text-slate-900 mb-3 tracking-tight">Bienvenido de vuelta</h1>
-            <p className="text-lg text-slate-500 font-medium">
+            <h1 className="text-4xl font-extrabold text-slate-900 dark:text-white mb-3 tracking-tight transition-colors">Bienvenido de vuelta</h1>
+            <p className="text-lg text-slate-500 dark:text-slate-400 font-medium transition-colors">
               Ingresa tus credenciales para acceder a tu panel.
             </p>
           </div>
@@ -111,9 +111,9 @@ export const LoginPage = () => {
             
             {/* Username Input */}
             <div className="space-y-2">
-              <label className="text-sm font-bold text-slate-700 uppercase tracking-wide">Usuario</label>
+              <label className="text-sm font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wide transition-colors">Usuario</label>
               <div className="relative group">
-                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-400 group-focus-within:text-blue-600 transition-colors">
+                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-400 dark:text-slate-500 group-focus-within:text-blue-600 dark:group-focus-within:text-blue-400 transition-colors">
                   <User className="h-5 w-5" />
                 </div>
                 <input
@@ -122,7 +122,7 @@ export const LoginPage = () => {
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
                   placeholder="ej. ana.martinez"
-                  className="w-full pl-12 pr-4 py-3.5 bg-white border-2 border-slate-200 rounded-2xl focus:ring-4 focus:ring-blue-100 focus:border-blue-500 text-slate-800 outline-none transition-all placeholder:text-slate-400 font-medium text-base shadow-sm hover:border-slate-300"
+                  className="w-full pl-12 pr-4 py-3.5 bg-white dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-800 rounded-2xl focus:ring-4 focus:ring-blue-100 dark:focus:ring-blue-900/30 focus:border-blue-500 dark:focus:border-blue-500 text-slate-800 dark:text-slate-100 outline-none transition-all placeholder:text-slate-400 dark:placeholder-slate-600 font-medium text-base shadow-sm hover:border-slate-300 dark:hover:border-slate-700"
                   disabled={isLoading}
                   autoComplete="username"
                 />
@@ -132,13 +132,13 @@ export const LoginPage = () => {
             {/* Password Input */}
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <label className="text-sm font-bold text-slate-700 uppercase tracking-wide">Contraseña</label>
-                <a href="#" className="text-sm font-bold text-blue-600 hover:text-blue-800 transition-colors">
+                <label className="text-sm font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wide transition-colors">Contraseña</label>
+                <a href="#" className="text-sm font-bold text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 transition-colors">
                   ¿Olvidaste tu clave?
                 </a>
               </div>
               <div className="relative group">
-                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-400 group-focus-within:text-blue-600 transition-colors">
+                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-400 dark:text-slate-500 group-focus-within:text-blue-600 dark:group-focus-within:text-blue-400 transition-colors">
                   <Lock className="h-5 w-5" />
                 </div>
                 <input
@@ -147,14 +147,14 @@ export const LoginPage = () => {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••"
-                  className="w-full pl-12 pr-12 py-3.5 bg-white border-2 border-slate-200 rounded-2xl focus:ring-4 focus:ring-blue-100 focus:border-blue-500 text-slate-800 outline-none transition-all placeholder:text-slate-400 font-medium text-base shadow-sm hover:border-slate-300"
+                  className="w-full pl-12 pr-12 py-3.5 bg-white dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-800 rounded-2xl focus:ring-4 focus:ring-blue-100 dark:focus:ring-blue-900/30 focus:border-blue-500 dark:focus:border-blue-500 text-slate-800 dark:text-slate-100 outline-none transition-all placeholder:text-slate-400 dark:placeholder-slate-600 font-medium text-base shadow-sm hover:border-slate-300 dark:hover:border-slate-700"
                   disabled={isLoading}
                   autoComplete="current-password"
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute inset-y-0 right-0 pr-4 flex items-center text-slate-400 hover:text-slate-600 focus:text-blue-600 transition-colors outline-none"
+                  className="absolute inset-y-0 right-0 pr-4 flex items-center text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 focus:text-blue-600 dark:focus:text-blue-400 transition-colors outline-none"
                   tabIndex={-1}
                 >
                   {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
@@ -192,25 +192,25 @@ export const LoginPage = () => {
           {/* ===== Demo Credentials (Grid en 2 columnas estilo premium) ===== */}
           <div className="mt-12">
             <div className="flex items-center gap-4 mb-6">
-              <div className="h-px bg-slate-200 flex-1"></div>
-              <span className="text-[11px] font-black text-slate-400 uppercase tracking-widest px-2">
+              <div className="h-px bg-slate-200 dark:bg-slate-800 flex-1"></div>
+              <span className="text-[11px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest px-2 transition-colors">
                 Credenciales de Prueba
               </span>
-              <div className="h-px bg-slate-200 flex-1"></div>
+              <div className="h-px bg-slate-200 dark:bg-slate-800 flex-1"></div>
             </div>
             
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {[
-                { label: 'Admin', user: 'admin', pass: 'admin123', bg: 'bg-amber-50', border: 'border-amber-200', text: 'text-amber-700' },
-                { label: 'Docente', user: 'prof.garcia', pass: 'password123', bg: 'bg-indigo-50', border: 'border-indigo-200', text: 'text-indigo-700' },
-                { label: 'Estudiante', user: 'ana.martinez', pass: 'password123', bg: 'bg-emerald-50', border: 'border-emerald-200', text: 'text-emerald-700' }
+                { label: 'Admin', user: 'admin', pass: 'admin123', bg: 'bg-amber-50 dark:bg-amber-500/10', border: 'border-amber-200 dark:border-amber-500/20', text: 'text-amber-700 dark:text-amber-400' },
+                { label: 'Docente', user: 'prof.garcia', pass: 'password123', bg: 'bg-indigo-50 dark:bg-indigo-500/10', border: 'border-indigo-200 dark:border-indigo-500/20', text: 'text-indigo-700 dark:text-indigo-400' },
+                { label: 'Estudiante', user: 'ana.martinez', pass: 'password123', bg: 'bg-emerald-50 dark:bg-emerald-500/10', border: 'border-emerald-200 dark:border-emerald-500/20', text: 'text-emerald-700 dark:text-emerald-400' }
               ].map((c, i) => (
-                <div key={i} className={`flex flex-col p-3 rounded-xl border-2 hover:shadow-sm transition-all cursor-default ${c.bg} ${c.border}`}>
+                <div key={i} className={`flex flex-col p-3 rounded-xl border-2 hover:shadow-sm dark:hover:shadow-black/20 transition-all cursor-default ${c.bg} ${c.border}`}>
                   <span className={`text-[11px] font-black uppercase tracking-wider mb-1 ${c.text}`}>
                     {c.label}
                   </span>
-                  <div className="text-[13px] font-mono font-bold text-slate-700">
-                    {c.user} <span className="text-slate-400 mx-1">/</span> <span className="text-slate-500 font-normal">{c.pass}</span>
+                  <div className="text-[13px] font-mono font-bold text-slate-700 dark:text-slate-300">
+                    {c.user} <span className="text-slate-400 dark:text-slate-500 mx-1">/</span> <span className="text-slate-500 dark:text-slate-400 font-normal">{c.pass}</span>
                   </div>
                 </div>
               ))}

@@ -83,8 +83,8 @@ export const CreateUserModal = ({ type, onClose, onSuccess }: CreateUserModalPro
   const title = type === 'teacher' ? 'Crear Profesor' : 'Crear Estudiante';
 
   return (
-    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-in fade-in duration-200">
-      <div className="bg-white rounded-3xl shadow-[0_10px_40px_-10px_rgba(0,0,0,0.3)] max-w-md w-full max-h-[95vh] flex flex-col overflow-hidden border border-slate-200">
+    <div className="fixed inset-0 bg-slate-900/60 dark:bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-in fade-in duration-200">
+      <div className="bg-white dark:bg-slate-900 rounded-3xl shadow-[0_10px_40px_-10px_rgba(0,0,0,0.3)] dark:shadow-black/60 max-w-md w-full max-h-[95vh] flex flex-col overflow-hidden border border-slate-200 dark:border-slate-800 transition-colors">
         {/* Header Visual */}
         <div className={`relative p-6 ${type === 'teacher' ? 'bg-violet-600' : 'bg-emerald-600'} flex-shrink-0 overflow-hidden`}>
           {/* Abstract background elements */}
@@ -112,22 +112,22 @@ export const CreateUserModal = ({ type, onClose, onSuccess }: CreateUserModalPro
         </div>
 
         {/* Form Body - Scrollable */}
-        <div className="p-6 overflow-y-auto flex-1 bg-slate-50">
+        <div className="p-6 overflow-y-auto flex-1 bg-slate-50 dark:bg-slate-900 transition-colors">
           <div className="space-y-5">
             {/* Name */}
             <div>
-              <label className="block text-sm font-bold text-slate-700 mb-2">
+              <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-2 transition-colors">
                 Nombre Completo *
               </label>
               <div className="relative group">
                 <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
-                  <User className="w-5 h-5 text-slate-400 group-focus-within:text-indigo-500 transition-colors" />
+                  <User className="w-5 h-5 text-slate-400 dark:text-slate-500 group-focus-within:text-indigo-500 transition-colors" />
                 </div>
                 <input
                   type="text"
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  className="w-full pl-11 pr-4 py-3 bg-white border-2 border-slate-200 rounded-xl focus:ring-0 focus:border-indigo-500 outline-none transition-all duration-200 shadow-sm font-medium text-slate-800 placeholder-slate-400 hover:border-slate-300"
+                  className="w-full pl-11 pr-4 py-3 bg-white dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-700 rounded-xl focus:ring-0 focus:border-indigo-500 outline-none transition-all duration-200 shadow-sm font-medium text-slate-800 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 hover:border-slate-300 dark:hover:border-slate-600"
                   placeholder="Ej: Juan Pérez García"
                   disabled={isLoading}
                   autoFocus
@@ -137,48 +137,48 @@ export const CreateUserModal = ({ type, onClose, onSuccess }: CreateUserModalPro
 
             {/* Username */}
             <div>
-              <label className="block text-sm font-bold text-slate-700 mb-2">
+              <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-2 transition-colors">
                 Usuario *
               </label>
               <div className="relative group">
                 <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
-                  <User className="w-5 h-5 text-slate-400 group-focus-within:text-indigo-500 transition-colors" />
+                  <User className="w-5 h-5 text-slate-400 dark:text-slate-500 group-focus-within:text-indigo-500 transition-colors" />
                 </div>
                 <input
                   type="text"
                   value={formData.username}
                   onChange={(e) => setFormData({ ...formData, username: e.target.value.toLowerCase().replace(/\s/g, '') })}
-                  className="w-full pl-11 pr-4 py-3 bg-white border-2 border-slate-200 rounded-xl focus:ring-0 focus:border-indigo-500 outline-none transition-all duration-200 shadow-sm font-medium text-slate-800 placeholder-slate-400 hover:border-slate-300"
+                  className="w-full pl-11 pr-4 py-3 bg-white dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-700 rounded-xl focus:ring-0 focus:border-indigo-500 outline-none transition-all duration-200 shadow-sm font-medium text-slate-800 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 hover:border-slate-300 dark:hover:border-slate-600"
                   placeholder="Ej: juanperez"
                   disabled={isLoading}
                 />
               </div>
-              <p className="text-xs font-semibold text-slate-500 mt-1.5 flex items-center gap-1">
-                 <span className="w-1 h-1 rounded-full bg-slate-400"></span>
+              <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 mt-1.5 flex items-center gap-1 transition-colors">
+                 <span className="w-1 h-1 rounded-full bg-slate-400 dark:bg-slate-500"></span>
                  Mínimo 3 caracteres, sin espacios
               </p>
             </div>
 
             {/* Password */}
             <div>
-              <label className="block text-sm font-bold text-slate-700 mb-2">
+              <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-2 transition-colors">
                 Contraseña de acceso *
               </label>
               <div className="relative group">
                 <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
-                  <Lock className="w-5 h-5 text-slate-400 group-focus-within:text-indigo-500 transition-colors" />
+                  <Lock className="w-5 h-5 text-slate-400 dark:text-slate-500 group-focus-within:text-indigo-500 transition-colors" />
                 </div>
                 <input
                   type="text"
                   value={formData.password}
                   onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                  className="w-full pl-11 pr-4 py-3 bg-white border-2 border-slate-200 rounded-xl focus:ring-0 focus:border-indigo-500 outline-none transition-all duration-200 shadow-sm font-medium text-slate-800 placeholder-slate-400 hover:border-slate-300"
+                  className="w-full pl-11 pr-4 py-3 bg-white dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-700 rounded-xl focus:ring-0 focus:border-indigo-500 outline-none transition-all duration-200 shadow-sm font-medium text-slate-800 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 hover:border-slate-300 dark:hover:border-slate-600"
                   placeholder="Genera una clave"
                   disabled={isLoading}
                 />
               </div>
-              <p className="text-xs font-semibold text-slate-500 mt-1.5 flex items-center gap-1">
-                 <span className="w-1 h-1 rounded-full bg-slate-400"></span>
+              <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 mt-1.5 flex items-center gap-1 transition-colors">
+                 <span className="w-1 h-1 rounded-full bg-slate-400 dark:bg-slate-500"></span>
                  Mínimo 6 caracteres
               </p>
             </div>
@@ -186,38 +186,38 @@ export const CreateUserModal = ({ type, onClose, onSuccess }: CreateUserModalPro
             {/* Level Selection - Only for students */}
             {type === 'student' && (
               <div>
-                <label className="block text-sm font-bold text-slate-700 mb-2">
+                <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-2 transition-colors">
                   Nivel Académico Inicial *
                 </label>
                 <div className="relative group">
                   <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
-                    <Layers className="w-5 h-5 text-slate-400 group-focus-within:text-indigo-500 transition-colors z-10" />
+                    <Layers className="w-5 h-5 text-slate-400 dark:text-slate-500 group-focus-within:text-indigo-500 transition-colors z-10" />
                   </div>
                   <select
                     value={formData.levelId}
                     onChange={(e) => setFormData({ ...formData, levelId: e.target.value })}
-                    className="w-full pl-11 pr-10 py-3 bg-white border-2 border-slate-200 rounded-xl focus:ring-0 focus:border-emerald-500 outline-none transition-all duration-200 shadow-sm font-medium text-slate-800 appearance-none hover:border-slate-300"
+                    className="w-full pl-11 pr-10 py-3 bg-white dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-700 rounded-xl focus:ring-0 focus:border-emerald-500 outline-none transition-all duration-200 shadow-sm font-medium text-slate-800 dark:text-slate-100 appearance-none hover:border-slate-300 dark:hover:border-slate-600"
                     disabled={isLoading || isLoadingLevels}
                   >
-                    <option value="" disabled className="text-slate-400">Selecciona el nivel de inglés base</option>
+                    <option value="" disabled className="text-slate-400 dark:text-slate-500">Selecciona el nivel de inglés base</option>
                     {levels.map((level) => (
-                      <option key={level.id} value={level.id} className="font-medium text-slate-800">
+                      <option key={level.id} value={level.id} className="font-medium text-slate-800 dark:text-slate-100 dark:bg-slate-800">
                         {level.name} - {level.description}
                       </option>
                     ))}
                   </select>
                   {isLoadingLevels ? (
                     <div className="absolute inset-y-0 right-0 pr-3 flex items-center">
-                      <Loader2 className="w-5 h-5 animate-spin text-slate-400" />
+                      <Loader2 className="w-5 h-5 animate-spin text-slate-400 dark:text-slate-500" />
                     </div>
                   ) : (
                     <div className="absolute inset-y-0 right-0 pr-4 flex items-center pointer-events-none">
-                      <span className="text-xs font-black text-slate-400">▼</span>
+                      <span className="text-xs font-black text-slate-400 dark:text-slate-500">▼</span>
                     </div>
                   )}
                 </div>
-                <div className="mt-3 p-3 bg-blue-50 border border-blue-100 rounded-xl">
-                    <p className="text-xs font-medium text-blue-800 leading-relaxed">
+                <div className="mt-3 p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800/50 rounded-xl transition-colors">
+                    <p className="text-xs font-medium text-blue-800 dark:text-blue-300 leading-relaxed">
                       Este nivel define el plan de estudios del estudiante. Más adelante deberás asignarlo a un grupo desde la "Gestión de Grupos".
                     </p>
                 </div>
@@ -227,12 +227,12 @@ export const CreateUserModal = ({ type, onClose, onSuccess }: CreateUserModalPro
         </div>
 
         {/* Footer Buttons */}
-        <div className="p-5 bg-white border-t border-slate-100 flex flex-col sm:flex-row gap-3">
+        <div className="p-5 bg-white dark:bg-slate-900 border-t border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row gap-3 transition-colors">
           <button
             type="button"
             onClick={onClose}
             disabled={isLoading}
-            className="w-full sm:w-1/3 px-4 py-3.5 rounded-xl font-bold text-slate-600 bg-white border-2 border-slate-200 hover:bg-slate-50 hover:border-slate-300 transition-all focus:outline-none focus:ring-2 focus:ring-slate-200 disabled:opacity-50"
+            className="w-full sm:w-1/3 px-4 py-3.5 rounded-xl font-bold text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 hover:border-slate-300 dark:hover:border-slate-600 transition-all focus:outline-none focus:ring-2 focus:ring-slate-200 dark:focus:ring-slate-700 disabled:opacity-50"
           >
             Cancelar
           </button>
