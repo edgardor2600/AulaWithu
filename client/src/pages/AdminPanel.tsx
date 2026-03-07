@@ -9,7 +9,6 @@ import {
   UserPlus,
   BarChart3,
   LogOut,
-  Loader2,
   Shield,
   BookOpen,
 } from 'lucide-react';
