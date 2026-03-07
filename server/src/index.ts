@@ -79,6 +79,8 @@ app.use(express.urlencoded({ limit: '10mb', extended: true }));
 app.use('/api', generalLimiter);
 app.use('/api/auth/login', authLimiter);
 app.use('/api/auth/register', authLimiter);
+app.use('/api/auth/change-password', authLimiter); // Protección anti brute-force en cambio de contraseña
+
 
 // ============================================================
 // ARCHIVOS ESTÁTICOS — /uploads con CORS restringido
