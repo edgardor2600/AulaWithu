@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { adminService } from '../../services/adminService';
 import toast from 'react-hot-toast';
-import { X, User, Lock, Loader2, GraduationCap, Layers } from 'lucide-react';
+import { X, User, Lock, Loader2, GraduationCap, Layers, Eye, EyeOff } from 'lucide-react';
 import { type AcademicLevel } from '../../services/adminService';
 
 interface CreateUserModalProps {
@@ -20,6 +20,27 @@ export const CreateUserModal = ({ type, onClose, onSuccess }: CreateUserModalPro
   const [levels, setLevels] = useState<AcademicLevel[]>([]);
   const [isLoadingLevels, setIsLoadingLevels] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+
+  // Calcular fortaleza de la contraseña en tiempo real
+  const getPasswordStrength = (pass: string) => {
+    const hasMinLength = pass.length >= 8;
+    const hasUppercase = /[A-Z]/.test(pass);
+    const hasNumber = /[0-9]/.test(pass);
+    const hasSpecial = /[^A-Za-z0-9]/.test(pass);
+    const score = [hasMinLength, hasUppercase, hasNumber, hasSpecial].filter(Boolean).length;
+
+    if (!pass) return null;
+    if (score <= 1) return { label: 'Débil', color: 'bg-red-500', trackColor: 'bg-red-100 dark:bg-red-900/20', width: 'w-1/4', textColor: 'text-red-600 dark:text-red-400' };
+    if (score === 2) return { label: 'Regular', color: 'bg-amber-500', trackColor: 'bg-amber-100 dark:bg-amber-900/20', width: 'w-2/4', textColor: 'text-amber-600 dark:text-amber-400' };
+    if (score === 3) return { label: 'Buena', color: 'bg-blue-500', trackColor: 'bg-blue-100 dark:bg-blue-900/20', width: 'w-3/4', textColor: 'text-blue-600 dark:text-blue-400' };
+    return { label: 'Fuerte', color: 'bg-emerald-500', trackColor: 'bg-emerald-100 dark:bg-emerald-900/20', width: 'w-full', textColor: 'text-emerald-600 dark:text-emerald-400' };
+  };
+
+  const strength = getPasswordStrength(formData.password);
+  const hasMinLength = formData.password.length >= 8;
+  const hasUppercase = /[A-Z]/.test(formData.password);
+  const hasNumber = /[0-9]/.test(formData.password);
 
   // Load levels for students
   useEffect(() => {
@@ -46,7 +67,9 @@ export const CreateUserModal = ({ type, onClose, onSuccess }: CreateUserModalPro
     // Validaciones
     if (!formData.name.trim()) return toast.error('El nombre completo es requerido');
     if (!formData.username.trim() || formData.username.length < 3) return toast.error('El usuario debe tener al menos 3 caracteres');
-    if (!formData.password || formData.password.length < 6) return toast.error('La contraseña debe tener al menos 6 caracteres');
+    if (!formData.password || formData.password.length < 8) return toast.error('La contraseña debe tener al menos 8 caracteres');
+    if (!/[A-Z]/.test(formData.password)) return toast.error('La contraseña debe tener al menos una mayúscula');
+    if (!/[0-9]/.test(formData.password)) return toast.error('La contraseña debe tener al menos un número');
     
     if (type === 'student' && !formData.levelId) {
       return toast.error('Debes seleccionar el nivel de inglés del estudiante');
@@ -169,18 +192,70 @@ export const CreateUserModal = ({ type, onClose, onSuccess }: CreateUserModalPro
                   <Lock className="w-5 h-5 text-slate-400 dark:text-slate-500 group-focus-within:text-indigo-500 transition-colors" />
                 </div>
                 <input
-                  type="text"
+                  type={showPassword ? 'text' : 'password'}
                   value={formData.password}
                   onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                  className="w-full pl-11 pr-4 py-3 bg-white dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-700 rounded-xl focus:ring-0 focus:border-indigo-500 outline-none transition-all duration-200 shadow-sm font-medium text-slate-800 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 hover:border-slate-300 dark:hover:border-slate-600"
-                  placeholder="Genera una clave"
+                  className="w-full pl-11 pr-12 py-3 bg-white dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-700 rounded-xl focus:ring-0 focus:border-indigo-500 outline-none transition-all duration-200 shadow-sm font-medium text-slate-800 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 hover:border-slate-300 dark:hover:border-slate-600"
+                  placeholder="Mín. 8 chars, mayúscula y número"
                   disabled={isLoading}
+                  autoComplete="new-password"
                 />
+                {/* Botón ver/ocultar contraseña */}
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  tabIndex={-1}
+                  className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 transition-colors"
+                  aria-label={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+                >
+                  {showPassword ? <EyeOff className="w-4.5 h-4.5" /> : <Eye className="w-4.5 h-4.5" />}
+                </button>
               </div>
-              <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 mt-1.5 flex items-center gap-1 transition-colors">
-                 <span className="w-1 h-1 rounded-full bg-slate-400 dark:bg-slate-500"></span>
-                 Mínimo 6 caracteres
-              </p>
+
+              {/* Barra de fortaleza animada */}
+              {formData.password && (
+                <div className="mt-2.5 space-y-2">
+                  {/* Track + barra */}
+                  <div className="flex items-center gap-2">
+                    <div className={`flex-1 h-1.5 rounded-full overflow-hidden ${strength?.trackColor || 'bg-slate-100 dark:bg-slate-800'}`}>
+                      <div
+                        className={`h-full rounded-full transition-all duration-500 ease-out ${strength?.color || ''} ${strength?.width || 'w-0'}`}
+                      />
+                    </div>
+                    <span className={`text-[11px] font-black tabular-nums w-14 text-right transition-colors ${strength?.textColor || ''}`}>
+                      {strength?.label}
+                    </span>
+                  </div>
+
+                  {/* Requisitos con checkmarks */}
+                  <div className="flex flex-wrap gap-x-4 gap-y-1">
+                    <span className={`flex items-center gap-1 text-[11px] font-semibold transition-colors ${
+                      hasMinLength ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400 dark:text-slate-500'
+                    }`}>
+                      <span className={`w-3.5 h-3.5 rounded-full flex items-center justify-center text-[9px] transition-all ${
+                        hasMinLength ? 'bg-emerald-100 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400' : 'bg-slate-100 dark:bg-slate-800'
+                      }`}>{hasMinLength ? '✓' : ''}</span>
+                      8+ caracteres
+                    </span>
+                    <span className={`flex items-center gap-1 text-[11px] font-semibold transition-colors ${
+                      hasUppercase ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400 dark:text-slate-500'
+                    }`}>
+                      <span className={`w-3.5 h-3.5 rounded-full flex items-center justify-center text-[9px] transition-all ${
+                        hasUppercase ? 'bg-emerald-100 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400' : 'bg-slate-100 dark:bg-slate-800'
+                      }`}>{hasUppercase ? '✓' : ''}</span>
+                      Mayúscula
+                    </span>
+                    <span className={`flex items-center gap-1 text-[11px] font-semibold transition-colors ${
+                      hasNumber ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400 dark:text-slate-500'
+                    }`}>
+                      <span className={`w-3.5 h-3.5 rounded-full flex items-center justify-center text-[9px] transition-all ${
+                        hasNumber ? 'bg-emerald-100 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400' : 'bg-slate-100 dark:bg-slate-800'
+                      }`}>{hasNumber ? '✓' : ''}</span>
+                      Número
+                    </span>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Level Selection - Only for students */}
