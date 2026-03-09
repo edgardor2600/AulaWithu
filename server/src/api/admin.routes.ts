@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { body } from 'express-validator';
+import { body, param } from 'express-validator';
 import { AdminService } from '../services/admin.service';
 import { authMiddleware } from '../middleware/auth.middleware';
 import { adminMiddleware } from '../middleware/admin.middleware';
@@ -343,6 +343,36 @@ router.get(
     res.status(200).json({
       success: true,
       stats,
+    });
+  })
+);
+
+// ============================================
+// PASSWORD RESET ENDPOINT
+// ============================================
+
+/**
+ * POST /api/admin/users/:id/reset-password
+ * Reset a user's password and return a temporary one (shown once)
+ * Admin cannot reset their own password through this endpoint
+ */
+router.post(
+  '/users/:id/reset-password',
+  [
+    param('id').notEmpty().withMessage('User ID is required'),
+  ],
+  validate,
+  asyncHandler(async (req: any, res: any) => {
+    const { id } = req.params;
+    const adminId = req.user.userId;
+
+    const result = await AdminService.resetUserPassword(id, adminId);
+
+    res.status(200).json({
+      success: true,
+      message: `Password for ${result.userName} has been reset successfully`,
+      temporaryPassword: result.temporaryPassword,
+      warning: 'This temporary password is shown only once. Share it securely with the user.',
     });
   })
 );

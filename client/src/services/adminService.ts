@@ -162,4 +162,21 @@ export const adminService = {
     const response = await api.get<{ success: boolean; levels: AcademicLevel[] }>('/classes/levels');
     return response.data.levels;
   },
+
+  /**
+   * Reset a user's password (Admin only)
+   * Returns the temporary password — must be shown once and shared securely with the user
+   */
+  async resetPassword(userId: string): Promise<{ temporaryPassword: string; message: string }> {
+    const response = await api.post<{
+      success: boolean;
+      message: string;
+      temporaryPassword: string;
+      warning: string;
+    }>(`/admin/users/${userId}/reset-password`);
+    return {
+      temporaryPassword: response.data.temporaryPassword,
+      message: response.data.message,
+    };
+  },
 };
