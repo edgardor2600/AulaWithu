@@ -10,6 +10,7 @@ export const LoginPage = () => {
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [showForgotModal, setShowForgotModal] = useState(false);
   
   const navigate = useNavigate();
   const setAuth = useAuthStore((state) => state.setAuth);
@@ -133,9 +134,13 @@ export const LoginPage = () => {
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <label className="text-sm font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wide transition-colors">Contraseña</label>
-                <a href="#" className="text-sm font-bold text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 transition-colors">
+                <button
+                  type="button"
+                  onClick={() => setShowForgotModal(true)}
+                  className="text-sm font-bold text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 transition-colors focus:outline-none focus-visible:underline"
+                >
                   ¿Olvidaste tu clave?
-                </a>
+                </button>
               </div>
               <div className="relative group">
                 <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-400 dark:text-slate-500 group-focus-within:text-blue-600 dark:group-focus-within:text-blue-400 transition-colors">
@@ -226,6 +231,70 @@ export const LoginPage = () => {
 
         </div>
       </div>
+
+      {/* ===== Modal: Olvidé mi contraseña ===== */}
+      {showForgotModal && (
+        <div
+          className="fixed inset-0 bg-slate-900/60 dark:bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-in fade-in duration-200"
+          onClick={() => setShowForgotModal(false)}
+        >
+          <div
+            className="bg-white dark:bg-slate-900 rounded-3xl shadow-2xl dark:shadow-black/60 max-w-sm w-full border border-slate-200 dark:border-slate-800 overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="bg-gradient-to-r from-indigo-600 to-blue-600 px-6 py-5">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-white/20 rounded-2xl flex items-center justify-center">
+                  <Lock className="w-5 h-5 text-white" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-black text-white tracking-tight">¿Olvidaste tu contraseña?</h3>
+                  <p className="text-blue-100 text-xs font-medium">Aula Colaborativa</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-6 space-y-4">
+              <p className="text-slate-700 dark:text-slate-300 text-sm font-medium leading-relaxed">
+                Para recuperar el acceso a tu cuenta, necesitas contactar a tu
+                <strong className="text-slate-900 dark:text-white"> administrador</strong>.
+              </p>
+
+              <div className="space-y-2.5">
+                {/* Paso 1 */}
+                <div className="flex items-start gap-3">
+                  <div className="w-6 h-6 rounded-full bg-indigo-100 dark:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 flex items-center justify-center text-xs font-black shrink-0 mt-0.5">1</div>
+                  <p className="text-sm text-slate-600 dark:text-slate-400 font-medium">
+                    Contáctate con tu administrador por el canal habitual (WhatsApp, email, etc.).
+                  </p>
+                </div>
+                {/* Paso 2 */}
+                <div className="flex items-start gap-3">
+                  <div className="w-6 h-6 rounded-full bg-indigo-100 dark:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 flex items-center justify-center text-xs font-black shrink-0 mt-0.5">2</div>
+                  <p className="text-sm text-slate-600 dark:text-slate-400 font-medium">
+                    El administrador generará una <strong className="text-slate-700 dark:text-slate-200">contraseña temporal</strong> desde su panel.
+                  </p>
+                </div>
+                {/* Paso 3 */}
+                <div className="flex items-start gap-3">
+                  <div className="w-6 h-6 rounded-full bg-indigo-100 dark:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 flex items-center justify-center text-xs font-black shrink-0 mt-0.5">3</div>
+                  <p className="text-sm text-slate-600 dark:text-slate-400 font-medium">
+                    Inicia sesión con esa contraseña temporal y cambia la tuya.
+                  </p>
+                </div>
+              </div>
+
+              <button
+                onClick={() => setShowForgotModal(false)}
+                className="w-full py-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-sm transition-colors mt-2"
+              >
+                Entendido
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

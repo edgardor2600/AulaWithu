@@ -298,4 +298,51 @@ export class AdminService {
       enrollments: totalEnrollments,
     };
   }
+
+  // ============================================
+  // PASSWORD RESET (By Admin)
+  // ============================================
+
+  /**
+   * Reset a user's password (Admin-only action)
+   * Generates a secure temporary password and returns it once.
+   * The temporary password follows the new security policy (8+ chars, uppercase, number).
+   *
+   * @param userId  - ID of the user whose password to reset
+   * @param adminId - ID of the admin performing the action
+   * @returns The generated temporary password (shown once, then gone)
+   */
+  static async resetUserPassword(
+    userId: string,
+    adminId: string
+  ): Promise<{ temporaryPassword: string; userName: string }> {
+    // Validate admin permission
+    const admin = await UsersRepository.getById(adminId);
+    if (!admin || admin.role !== 'admin') {
+      throw new UnauthorizedError('Only administrators can reset passwords');
+    }
+
+    // Admin cannot reset their own password this way
+    if (userId === adminId) {
+      throw new ValidationError('Cannot reset your own password. Use the change-password endpoint instead.');
+    }
+
+    // Verify target user exists
+    const user = await UsersRepository.getById(userId);
+    if (!user) {
+      throw new NotFoundError('User not found');
+    }
+
+    // Generate a secure temporary password that meets the complexity policy:
+    // Format: "Temp@" + 6 random digits → always 11 chars, has uppercase + number
+    const randomDigits = Math.floor(100000 + Math.random() * 900000);
+    const temporaryPassword = `Temp@${randomDigits}`;
+
+    // Hash and save
+    const password_hash = await hashPassword(temporaryPassword);
+    await UsersRepository.updatePassword(userId, password_hash);
+
+    return { temporaryPassword, userName: user.name };
+  }
 }
+
