@@ -89,9 +89,9 @@ export const adminService = {
   /**
    * Create a new student account
    */
-  async createStudent(data: CreateUserRequest): Promise<User> {
-    const response = await api.post<{ success: boolean; user: User }>('/admin/users/student', data);
-    return response.data.user;
+  async createStudent(data: CreateUserRequest): Promise<{ user: User; warning?: string }> {
+    const response = await api.post<{ success: boolean; user: User; warning?: string }>('/admin/users/student', data);
+    return { user: response.data.user, warning: response.data.warning };
   },
 
   /**

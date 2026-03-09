@@ -91,13 +91,15 @@ router.post(
     const { name, username, password, groupId, levelId, enrollmentNotes } = req.body;
     const adminId = req.user.userId;
 
-    const student = await AdminService.createStudent(
+    const { student, enrollmentWarning } = await AdminService.createStudent(
       { name, username, password, groupId, levelId, enrollmentNotes }, 
       adminId
     );
 
     res.status(201).json({
       success: true,
+      // warning solo aparece en la respuesta si el enrollment falló
+      ...(enrollmentWarning && { warning: enrollmentWarning }),
       user: {
         id: student.id,
         name: student.name,

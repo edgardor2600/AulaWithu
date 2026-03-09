@@ -82,7 +82,7 @@ export class AdminService {
       levelId?: string;
     },
     adminId: string
-  ): Promise<User> {
+  ): Promise<{ student: User; enrollmentWarning: string | null }> {
     // Validate admin permission
     const admin = await UsersRepository.getById(adminId);
     if (!admin || admin.role !== 'admin') {
@@ -119,8 +119,13 @@ export class AdminService {
       level_id: data.levelId || null,
     });
 
-    // If groupId is provided, perform enrollment using GroupsService
-    // This will automatically handle teacher assignment and validations
+    // Si se proporcionó un grupo, intentar el enrollment automático.
+    // IMPORTANTE: Si el enrollment falla (grupo lleno, no existe, etc.), NO abortamos
+    // la creación del estudiante — ya está guardado en la DB correctamente.
+    // En su lugar, capturamos el error y lo devolvemos como warning para que
+    // el admin sepa que debe asignarlo manualmente al grupo.
+    let enrollmentWarning: string | null = null;
+
     if (data.groupId) {
       try {
         await GroupsService.enrollStudent(
@@ -129,13 +134,13 @@ export class AdminService {
           adminId,
           data.enrollmentNotes || 'Enrolled during student creation'
         );
-      } catch (error) {
+      } catch (error: any) {
         console.error('Failed to auto-enroll student during creation:', error);
-        // We don't throw here to avoid failing student creation if enrollment fails
+        enrollmentWarning = error.message || 'Enrollment failed — assign the student to a group manually';
       }
     }
 
-    return student;
+    return { student, enrollmentWarning };
   }
 
   /**

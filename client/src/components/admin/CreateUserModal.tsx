@@ -82,17 +82,32 @@ export const CreateUserModal = ({ type, onClose, onSuccess }: CreateUserModalPro
         await adminService.createTeacher(formData);
         toast.success('✅ Profesor creado exitosamente');
       } else {
-        await adminService.createStudent({
+        const result = await adminService.createStudent({
           name: formData.name,
           username: formData.username,
           password: formData.password,
           levelId: formData.levelId || undefined,
         });
         
-        toast.success(
-          `✅ Estudiante creado exitosamente`,
-          { duration: 4000 }
-        );
+        if (result.warning) {
+          // Estudiante creado correctamente, PERO el enrollment al grupo falló
+          // El admin necesita saberlo para asignarlo manualmente desde Gestión de Grupos
+          toast.success(`✅ Estudiante "${result.user.name}" creado`, { duration: 3000 });
+          setTimeout(() => {
+            toast(`⚠️ No se pudo asignar al grupo: ${result.warning}\nAsígnalo manualmente desde Gestión de Grupos.`, {
+              duration: 7000,
+              icon: '⚠️',
+              style: {
+                background: '#92400e',
+                color: '#fef3c7',
+                fontWeight: '600',
+                fontSize: '13px',
+              },
+            });
+          }, 400);
+        } else {
+          toast.success(`✅ Estudiante creado exitosamente`, { duration: 4000 });
+        }
       }
       onSuccess();
     } catch (error: any) {
