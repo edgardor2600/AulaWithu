@@ -34,7 +34,7 @@ router.post(
       .matches(/^[a-zA-Z0-9._-]+$/).withMessage('Username can only contain letters, numbers, dots, hyphens, and underscores'),
     body('password')
       .notEmpty().withMessage('Password is required')
-      .isLength({ min: 6 }).withMessage('Password must be at least 6 characters long'),
+      .isLength({ min: 1 }).withMessage('Password is required'),
   ],
   validate,
   asyncHandler(async (req: any, res: any) => {
@@ -88,7 +88,9 @@ router.post(
       .toLowerCase(),
     body('password')
       .notEmpty().withMessage('Password is required')
-      .isLength({ min: 6, max: 72 }).withMessage('Password must be between 6 and 72 characters'),
+      .isLength({ min: 8, max: 72 }).withMessage('La contraseña debe tener al menos 8 caracteres')
+      .matches(/[A-Z]/).withMessage('La contraseña debe tener al menos una letra mayúscula')
+      .matches(/[0-9]/).withMessage('La contraseña debe tener al menos un número'),
   ],
   validate,
   asyncHandler(async (req: any, res: any) => {
@@ -141,7 +143,9 @@ router.post(
       .toLowerCase(),
     body('password')
       .notEmpty().withMessage('Password is required')
-      .isLength({ min: 6, max: 72 }).withMessage('Password must be between 6 and 72 characters'),
+      .isLength({ min: 8, max: 72 }).withMessage('La contraseña debe tener al menos 8 caracteres')
+      .matches(/[A-Z]/).withMessage('La contraseña debe tener al menos una letra mayúscula')
+      .matches(/[0-9]/).withMessage('La contraseña debe tener al menos un número'),
   ],
   validate,
   asyncHandler(async (req: any, res: any) => {
@@ -185,7 +189,9 @@ router.post(
       .notEmpty().withMessage('Current password is required'),
     body('newPassword')
       .notEmpty().withMessage('New password is required')
-      .isLength({ min: 6, max: 72 }).withMessage('New password must be between 6 and 72 characters')
+      .isLength({ min: 8, max: 72 }).withMessage('La contraseña debe tener al menos 8 caracteres')
+      .matches(/[A-Z]/).withMessage('La contraseña debe tener al menos una letra mayúscula')
+      .matches(/[0-9]/).withMessage('La contraseña debe tener al menos un número')
       .custom((value, { req }) => {
         if (value === req.body.oldPassword) {
           throw new Error('New password must be different from current password');

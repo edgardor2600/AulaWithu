@@ -36,7 +36,9 @@ router.post(
       .isLength({ min: 3, max: 20 }).withMessage('Username must be between 3 and 20 characters'),
     body('password')
       .notEmpty().withMessage('Password is required')
-      .isLength({ min: 6 }).withMessage('Password must be at least 6 characters'),
+      .isLength({ min: 8, max: 72 }).withMessage('La contraseña debe tener al menos 8 caracteres')
+      .matches(/[A-Z]/).withMessage('La contraseña debe tener al menos una letra mayúscula')
+      .matches(/[0-9]/).withMessage('La contraseña debe tener al menos un número'),
   ],
   validate,
   asyncHandler(async (req: any, res: any) => {
@@ -77,7 +79,9 @@ router.post(
       .isLength({ min: 3, max: 20 }).withMessage('Username must be between 3 and 20 characters'),
     body('password')
       .notEmpty().withMessage('Password is required')
-      .isLength({ min: 6 }).withMessage('Password must be at least 6 characters'),
+      .isLength({ min: 8, max: 72 }).withMessage('La contraseña debe tener al menos 8 caracteres')
+      .matches(/[A-Z]/).withMessage('La contraseña debe tener al menos una letra mayúscula')
+      .matches(/[0-9]/).withMessage('La contraseña debe tener al menos un número'),
     body('groupId').optional().isString(),
     body('levelId').optional().isString(),
     body('enrollmentNotes').optional().isString(),

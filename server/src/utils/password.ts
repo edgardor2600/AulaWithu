@@ -9,8 +9,8 @@ import bcrypt from 'bcrypt';
 // Higher values = more secure but slower (10 = ~100ms, 12 = ~400ms)
 const SALT_ROUNDS = 10;
 
-// Minimum password length requirement
-const MIN_PASSWORD_LENGTH = 6;
+// Minimum password length requirement (NIST SP 800-63B: minimum 8)
+const MIN_PASSWORD_LENGTH = 8;
 
 /**
  * Hash a plaintext password using bcrypt
@@ -92,8 +92,15 @@ export function validatePasswordStrength(password: string): {
     errors.push('Password is too long (max 72 characters)');
   }
 
-  // Optional: Add more strength requirements here
-  // For MVP, we keep it simple - just length requirements
+  // Requiere al menos una letra mayúscula
+  if (!/[A-Z]/.test(password)) {
+    errors.push('Password must contain at least one uppercase letter');
+  }
+
+  // Requiere al menos un número
+  if (!/[0-9]/.test(password)) {
+    errors.push('Password must contain at least one number');
+  }
 
   return {
     isValid: errors.length === 0,
