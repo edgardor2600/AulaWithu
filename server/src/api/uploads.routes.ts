@@ -67,22 +67,34 @@ router.post(
 
 
 // GET /api/uploads/:filename - Get file
+// FIX-SECURITY: Protección contra path traversal
+// Un atacante podría enviar "../../../server/.env" para leer archivos fuera de uploads
 router.get(
   '/:filename',
   [
     param('filename')
-      .notEmpty().withMessage('Filename is required'),
+      .notEmpty().withMessage('Filename is required')
+      // Capa 1: Solo permitir caracteres seguros. Bloquea ../, \, %2f y similares
+      .matches(/^[\w\-. ]+$/).withMessage('Invalid filename'),
   ],
   validate,
   asyncHandler(async (req: any, res: any) => {
     const { filename } = req.params;
 
-    // Get upload record
-    const upload = await UploadService.getByFilename(filename);
+    // Capa 2: Verificar matemáticamente que la ruta resuelta esté dentro de uploads
+    // path.resolve elimina cualquier ".." que pueda haber escapado la validación anterior
+    const uploadsDir = path.resolve(
+      process.env.UPLOADS_DIR || path.join(__dirname, '../../../uploads')
+    );
+    const filePath = path.resolve(path.join(uploadsDir, filename));
 
-    // Send file
-    const uploadsDir = process.env.UPLOADS_DIR || path.join(__dirname, '../../../uploads');
-    const filePath = path.join(uploadsDir, filename);
+    // Si la ruta final no comienza con uploadsDir, alguien intentó escapar del directorio
+    if (!filePath.startsWith(uploadsDir + path.sep) && filePath !== uploadsDir) {
+      throw new ValidationError('Access denied: invalid file path');
+    }
+
+    // Verificar que el archivo existe en la BD (previene enumerar archivos del disco)
+    await UploadService.getByFilename(filename);
 
     res.sendFile(filePath);
   })
