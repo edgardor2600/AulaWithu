@@ -448,6 +448,7 @@ export function useYjs(
      */
     function syncFabricToYjs(obj: fabric.Object) {
       if (!yCanvas || isRemoteChangeRef.current) return;
+      if ((obj as any).excludeFromSync) return;
 
       const objectId = (obj as any).id || generateObjectId();
       (obj as any).id = objectId;
@@ -526,6 +527,7 @@ export function useYjs(
 
     const handleObjectAdded = (e: any) => {
       if (e.target && !isRemoteChangeRef.current) {
+        if ((e.target as any).excludeFromSync) return;
         // Asegurar createdBy antes de sincronizar
         if (!(e.target as any).createdBy && ydocRef.current) {
           (e.target as any).createdBy = ydocRef.current.clientID;
@@ -540,6 +542,7 @@ export function useYjs(
       if (isReadOnly || isRemoteChangeRef.current) return;
 
       if (e.target) {
+        if ((e.target as any).excludeFromSync) return;
         syncFabricToYjs(e.target);
       }
     };
@@ -549,6 +552,7 @@ export function useYjs(
       if (isReadOnly || isRemoteChangeRef.current) return;
 
       if (e.target && yCanvas) {
+        if ((e.target as any).excludeFromSync) return;
         const objectId = (e.target as any).id;
         if (objectId) {
           yCanvas.delete(objectId);

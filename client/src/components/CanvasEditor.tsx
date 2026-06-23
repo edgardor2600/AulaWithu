@@ -4,13 +4,14 @@ import {
   Pencil, 
   Square, 
   Circle as CircleIcon, 
+  Triangle as TriangleIcon,
   Type, 
   Eraser, 
   MousePointer,
   Minus,
   Trash2,
   Save,
-  Download,
+  FileDown,
   Undo2,
   Redo2,
   Users,
@@ -18,11 +19,26 @@ import {
   ZoomOut,
   Maximize2,
   Hand,
-  Image as ImageIcon
+  ArrowRight,
+  Image as ImageIcon,
+  FolderOpen,
+  Keyboard
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useYjs } from '../hooks/useYjs';
 import { uploadImage } from '../services/uploadService';
+
+const isEditableTarget = (target: EventTarget | null) => {
+  if (!(target instanceof HTMLElement)) return false;
+
+  const tagName = target.tagName;
+  return (
+    target.isContentEditable ||
+    tagName === 'INPUT' ||
+    tagName === 'TEXTAREA' ||
+    tagName === 'SELECT'
+  );
+};
 
 interface CanvasEditorProps {
   slideId: string;
@@ -42,7 +58,7 @@ interface CanvasEditorProps {
   onPermissionsChange?: (allowDraw: boolean) => void;  // ✅ NUEVO: Callback cuando cambien permisos
 }
 
-type Tool = 'select' | 'pencil' | 'rectangle' | 'circle' | 'line' | 'text' | 'eraser' | 'hand' | 'image';
+type Tool = 'select' | 'pencil' | 'rectangle' | 'circle' | 'line' | 'triangle' | 'arrow' | 'text' | 'eraser' | 'hand' | 'image';
 
 export const CanvasEditor = ({ 
   slideId, 
@@ -90,7 +106,9 @@ export const CanvasEditor = ({
   const [isSpacePressed, setIsSpacePressed] = useState(false);  // ✅ Para pan temporal con Espacio
   const miniMapCanvasRef = useRef<HTMLCanvasElement | null>(null);  // ✅ NUEVO: Ref para mini-mapa
   const imageInputRef = useRef<HTMLInputElement | null>(null);  // ✅ NUEVO: Ref para input de imagen
+  const jsonInputRef = useRef<HTMLInputElement | null>(null);
   const containerRef = useRef<HTMLDivElement>(null); // ✅ NUEVO: Ref para el contenedor principal
+  const [showShortcuts, setShowShortcuts] = useState(false);
 
   // Yjs real-time collaboration
   const { isConnected, participants, participantsList, clientId, updateSessionPermissions } = useYjs(
@@ -124,7 +142,7 @@ export const CanvasEditor = ({
   const serializeCanvas = useCallback((canvas: fabric.Canvas) => {
     const json = canvas.toJSON();
     // Agregar propiedades personalizadas manualmente a cada objeto
-    json.objects = canvas.getObjects().map((obj: any) => {
+    json.objects = canvas.getObjects().filter((obj: any) => !obj.excludeFromSerialization).map((obj: any) => {
       const objJson = obj.toObject();
       objJson.id = obj.id;
       objJson.createdBy = obj.createdBy;
@@ -170,6 +188,30 @@ export const CanvasEditor = ({
     setCanRedo(false);
   }, [serializeCanvas]);
 
+  const restoreCanvasState = useCallback(async (canvas: fabric.Canvas, serializedState: string) => {
+    const state = JSON.parse(serializedState);
+
+    canvas.clear();
+    canvas.backgroundColor = '#ffffff';
+
+    if (state.objects && state.objects.length > 0) {
+      const enlivenedObjects = await fabric.util.enlivenObjects(state.objects);
+      enlivenedObjects.forEach((obj: any) => canvas.add(obj));
+    }
+
+    canvas.renderAll();
+  }, []);
+
+  const notifySerializedChange = useCallback((canvas: fabric.Canvas) => {
+    if (!onChange) return;
+    onChange(serializeCanvas(canvas));
+  }, [onChange, serializeCanvas]);
+
+  const shouldSkipCanvasPersistence = useCallback((obj?: fabric.Object | null) => {
+    const candidate = obj as any;
+    return !!candidate?.excludeFromHistory || !!candidate?.excludeFromSerialization;
+  }, []);
+
   // Undo
   const undo = useCallback(async () => {
     const canvas = fabricCanvasRef.current;
@@ -182,20 +224,12 @@ export const CanvasEditor = ({
     
     isUndoRedoRef.current = true;
     historyIndexRef.current--;
-    
-    const state = JSON.parse(historyRef.current[historyIndexRef.current]);
-    console.log('Restoring state with', state.objects?.length || 0, 'objects');
-    
-    // Clear canvas and reload
-    canvas.clear();
-    canvas.backgroundColor = '#ffffff';
-    
-    if (state.objects && state.objects.length > 0) {
-      const enlivenedObjects = await fabric.util.enlivenObjects(state.objects);
-      enlivenedObjects.forEach((obj: any) => canvas.add(obj));
-    }
-    
-    canvas.renderAll();
+
+    const targetState = historyRef.current[historyIndexRef.current];
+    const parsedState = JSON.parse(targetState);
+    console.log('Restoring state with', parsedState.objects?.length || 0, 'objects');
+
+    await restoreCanvasState(canvas, targetState);
     console.log('Undo complete');
     
     setCanUndo(historyIndexRef.current > 0);
@@ -207,12 +241,9 @@ export const CanvasEditor = ({
       console.log('Undo flag cleared, notifying parent');
       
       // Notify parent so auto-save can happen
-      if (onChange) {
-        const currentState = JSON.stringify(canvas.toJSON());
-        onChange(currentState);
-      }
+      notifySerializedChange(canvas);
     }, 500); // Longer delay to ensure history doesn't get saved again
-  }, [onChange]);
+  }, [notifySerializedChange, restoreCanvasState]);
 
   // Redo
   const redo = useCallback(async () => {
@@ -221,19 +252,9 @@ export const CanvasEditor = ({
 
     isUndoRedoRef.current = true;
     historyIndexRef.current++;
-    
-    const state = JSON.parse(historyRef.current[historyIndexRef.current]);
-    
-    // Clear canvas and reload
-    canvas.clear();
-    canvas.backgroundColor = '#ffffff';
-    
-    if (state.objects && state.objects.length > 0) {
-      const enlivenedObjects = await fabric.util.enlivenObjects(state.objects);
-      enlivenedObjects.forEach((obj: any) => canvas.add(obj));
-    }
-    
-    canvas.renderAll();
+
+    const targetState = historyRef.current[historyIndexRef.current];
+    await restoreCanvasState(canvas, targetState);
     
     setCanUndo(true);
     setCanRedo(historyIndexRef.current < historyRef.current.length - 1);
@@ -244,12 +265,9 @@ export const CanvasEditor = ({
       console.log('Redo flag cleared, notifying parent');
       
       // Notify parent so auto-save can happen
-      if (onChange) {
-        const currentState = JSON.stringify(canvas.toJSON());
-        onChange(currentState);
-      }
+      notifySerializedChange(canvas);
     }, 500); // Longer delay to ensure history doesn't get saved again
-  }, [onChange]);
+  }, [notifySerializedChange, restoreCanvasState]);
 
   // ✅ NUEVO: Función para actualizar el mini-mapa (movida arriba para ser usada en zoom)
   const updateMiniMap = useCallback(() => {
@@ -617,6 +635,122 @@ export const CanvasEditor = ({
     imageInputRef.current?.click();
   }, []);
 
+  const syncCursorForTool = useCallback((tool: Tool) => {
+    const canvas = fabricCanvasRef.current;
+    if (!canvas) return;
+
+    if (tool === 'hand') {
+      canvas.defaultCursor = 'grab';
+      canvas.hoverCursor = 'grab';
+      return;
+    }
+
+    canvas.defaultCursor = 'default';
+    canvas.hoverCursor = 'move';
+  }, []);
+
+  const addText = useCallback(() => {
+    const canvas = fabricCanvasRef.current;
+    if (!canvas) return;
+
+    const text = new fabric.IText('Click to edit', {
+      left: 100,
+      top: 100,
+      fontSize: 32,
+      fill: color,
+      fontFamily: 'Arial',
+    });
+
+    canvas.add(text);
+    canvas.setActiveObject(text);
+    text.enterEditing();
+    canvas.renderAll();
+  }, [color]);
+
+  const handleSave = useCallback(async () => {
+    const canvas = fabricCanvasRef.current;
+    if (!canvas) return;
+
+    setIsSaving(true);
+    try {
+      const canvasData = serializeCanvas(canvas);
+      await onSave(canvasData);
+      toast.success('Slide saved!');
+    } catch (error) {
+      console.error('Error saving:', error);
+    } finally {
+      setIsSaving(false);
+    }
+  }, [onSave, serializeCanvas]);
+
+  const handleToolClick = useCallback((tool: Tool) => {
+    if (tool === 'text') {
+      addText();
+      setCurrentTool('select');
+      syncCursorForTool('select');
+      return;
+    }
+
+    if (tool === 'image') {
+      triggerImageUpload();
+      return;
+    }
+
+    setCurrentTool(tool);
+    syncCursorForTool(tool);
+  }, [addText, syncCursorForTool, triggerImageUpload]);
+
+  const exportJSON = useCallback(() => {
+    const canvas = fabricCanvasRef.current;
+    if (!canvas) return;
+
+    const json = serializeCanvas(canvas);
+    const blob = new Blob([json], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+
+    const link = document.createElement('a');
+    link.download = `slide-${slideId}-backup.json`;
+    link.href = url;
+    link.click();
+
+    URL.revokeObjectURL(url);
+    toast.success('Backup JSON descargado');
+  }, [serializeCanvas, slideId]);
+
+  const importJSON = useCallback(() => {
+    jsonInputRef.current?.click();
+  }, []);
+
+  const handleJSONFileLoad = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const canvas = fabricCanvasRef.current;
+    if (!canvas) {
+      e.target.value = '';
+      return;
+    }
+
+    try {
+      const fileContents = await file.text();
+      JSON.parse(fileContents);
+
+      isLoadingRef.current = true;
+      await restoreCanvasState(canvas, fileContents);
+      isLoadingRef.current = false;
+
+      saveHistory();
+      notifySerializedChange(canvas);
+      toast.success('Pizarra cargada desde backup');
+    } catch (error) {
+      isLoadingRef.current = false;
+      console.error('Error importing JSON:', error);
+      toast.error('Archivo JSON invalido o incompatible');
+    } finally {
+      e.target.value = '';
+    }
+  }, [notifySerializedChange, restoreCanvasState, saveHistory]);
+
   // (updateMiniMap movida arriba)
 
   // ✅ NUEVO: Actualizar mini-mapa cuando cambie el canvas o viewport
@@ -646,63 +780,142 @@ export const CanvasEditor = ({
     if (!isReady || isReadOnly) return;
 
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (isEditableTarget(e.target)) {
+        return;
+      }
+
       const canvas = fabricCanvasRef.current;
       const activeObject = canvas?.getActiveObject();
+      const key = e.key.toLowerCase();
       
       // Don't intercept if editing text
       if (activeObject && activeObject instanceof fabric.IText && (activeObject as any).isEditing) {
         return;
       }
 
+      if (e.key === '?') {
+        e.preventDefault();
+        setShowShortcuts((prev) => !prev);
+        return;
+      }
+
       // Undo: Ctrl+Z / Cmd+Z
-      if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
+      if ((e.ctrlKey || e.metaKey) && key === 'z' && !e.shiftKey) {
         e.preventDefault();
         undo();
+        return;
       }
       
       // Redo: Ctrl+Y / Cmd+Shift+Z
-      if (((e.ctrlKey || e.metaKey) && e.key === 'y') || 
-          ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'z')) {
+      if (((e.ctrlKey || e.metaKey) && key === 'y') || 
+          ((e.ctrlKey || e.metaKey) && e.shiftKey && key === 'z')) {
         e.preventDefault();
         redo();
+        return;
       }
       
       // Copy: Ctrl+C / Cmd+C
-      if ((e.ctrlKey || e.metaKey) && e.key === 'c') {
+      if ((e.ctrlKey || e.metaKey) && key === 'c') {
         e.preventDefault();
         copySelected();
+        return;
       }
       
       // Paste: Ctrl+V / Cmd+V
-      if ((e.ctrlKey || e.metaKey) && e.key === 'v') {
+      if ((e.ctrlKey || e.metaKey) && key === 'v') {
         e.preventDefault();
         paste();
+        return;
       }
       
       // Delete: Delete / Backspace
       if (e.key === 'Delete' || e.key === 'Backspace') {
         e.preventDefault();
         deleteSelected();
+        return;
       }
       
       // Save: Ctrl+S / Cmd+S
-      if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+      if ((e.ctrlKey || e.metaKey) && key === 's') {
         e.preventDefault();
         handleSave();
+        return;
       }
-      
-      // ✅ NUEVO: Image upload: I
-      if (e.key === 'i' || e.key === 'I') {
-        e.preventDefault();
-        triggerImageUpload();
+
+      if (!e.ctrlKey && !e.metaKey) {
+        if (key === 'v') {
+          e.preventDefault();
+          handleToolClick('select');
+          return;
+        }
+
+        if (key === 'p') {
+          e.preventDefault();
+          handleToolClick('pencil');
+          return;
+        }
+
+        if (key === 'r') {
+          e.preventDefault();
+          handleToolClick('rectangle');
+          return;
+        }
+
+        if (key === 'c') {
+          e.preventDefault();
+          handleToolClick('circle');
+          return;
+        }
+
+        if (key === 'l') {
+          e.preventDefault();
+          handleToolClick('line');
+          return;
+        }
+
+        if (key === 'a') {
+          e.preventDefault();
+          handleToolClick('arrow');
+          return;
+        }
+
+        if (key === 't') {
+          e.preventDefault();
+          handleToolClick('text');
+          return;
+        }
+
+        if (key === 'e') {
+          e.preventDefault();
+          handleToolClick('eraser');
+          return;
+        }
+
+        if (key === 'h') {
+          e.preventDefault();
+          handleToolClick('hand');
+          return;
+        }
+
+        if (key === 'i') {
+          e.preventDefault();
+          handleToolClick('image');
+          return;
+        }
+
+        if (key === 'escape' && canvas) {
+          setShowShortcuts(false);
+          canvas.discardActiveObject();
+          canvas.requestRenderAll();
+          return;
+        }
       }
       
       // Espacio para pan temporal
       if (e.key === ' ' && currentTool !== 'hand') {
         e.preventDefault();
-        if (!isSpacePressed) {
+        if (!isSpacePressedRef.current) {
           setIsSpacePressed(true);
-          const canvas = fabricCanvasRef.current;
           if (canvas) {
             canvas.defaultCursor = 'grab';
             canvas.hoverCursor = 'grab';
@@ -730,7 +943,7 @@ export const CanvasEditor = ({
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
     };
-  }, [isReady, isReadOnly, undo, redo, copySelected, paste, deleteSelected, currentTool, isSpacePressed, triggerImageUpload]);
+  }, [isReady, isReadOnly, undo, redo, copySelected, paste, deleteSelected, currentTool, handleSave, handleToolClick]);
 
   // ✅ NUEVO: Ref para isSpacePressed para evitar re-render del useEffect
   const isSpacePressedRef = useRef(isSpacePressed);
@@ -1056,7 +1269,7 @@ export const CanvasEditor = ({
       }
       
       // Reset history for new slide
-      const initialState = JSON.stringify(canvas.toJSON());
+      const initialState = serializeCanvas(canvas);
       historyRef.current = [initialState];
       historyIndexRef.current = 0;
       console.log('History reset for slide:', slideId);
@@ -1091,8 +1304,12 @@ export const CanvasEditor = ({
              (obj as any).editable = false;
              (obj as any).selectable = false;
            }
-           
-           canvas.requestRenderAll();
+          
+          canvas.requestRenderAll();
+        }
+
+        if (shouldSkipCanvasPersistence(obj)) {
+          return;
         }
 
         if (!isUndoRedoRef.current && !isReadOnlyRef.current) {
@@ -1101,13 +1318,21 @@ export const CanvasEditor = ({
         }
       });
 
-      canvas.on('object:modified', () => {
+      canvas.on('object:modified', (e) => {
+        if (shouldSkipCanvasPersistence(e.target)) {
+          return;
+        }
+
         if (!isUndoRedoRef.current && !isReadOnlyRef.current) {
           setTimeout(() => saveHistory(), 100);
           notifyChange();
         }
       });
-      canvas.on('object:removed', () => {
+      canvas.on('object:removed', (e) => {
+        if (shouldSkipCanvasPersistence(e.target)) {
+          return;
+        }
+
         if (!isUndoRedoRef.current && !isReadOnlyRef.current) {
           setTimeout(() => saveHistory(), 100);
           notifyChange();
@@ -1133,7 +1358,7 @@ export const CanvasEditor = ({
       fabricCanvasRef.current = null;
       setIsReady(false);
     };
-  }, [slideId, initialData, notifyChange, saveHistory]);
+  }, [slideId, initialData, notifyChange, saveHistory, serializeCanvas, shouldSkipCanvasPersistence]);
 
   // Update tool - Handle drawing modes and shape drawing
   useEffect(() => {
@@ -1200,7 +1425,8 @@ export const CanvasEditor = ({
           
           // Only erase drawable objects (not background, etc)
           if (obj.type === 'path' || obj.type === 'rect' || obj.type === 'circle' || 
-              obj.type === 'line' || obj.type === 'i-text' || obj.type === 'text') {
+              obj.type === 'line' || obj.type === 'i-text' || obj.type === 'text' ||
+              obj.type === 'triangle' || obj.type === 'group') {
             
             // Get object bounds
             const bounds = obj.getBoundingRect();
@@ -1226,7 +1452,12 @@ export const CanvasEditor = ({
         isErasing = false;
         erasedObjects.clear();
       };
-    } else if (currentTool === 'rectangle' || currentTool === 'circle' || currentTool === 'line') {
+    } else if (
+      currentTool === 'rectangle' ||
+      currentTool === 'circle' ||
+      currentTool === 'line' ||
+      currentTool === 'triangle'
+    ) {
       // Drag-to-draw mode for shapes
       canvas.selection = false;
       let isDrawing = false;
@@ -1269,6 +1500,16 @@ export const CanvasEditor = ({
             stroke: color,
             strokeWidth: brushWidth,
           });
+        } else if (currentTool === 'triangle') {
+          shape = new fabric.Triangle({
+            left: startX,
+            top: startY,
+            width: 0,
+            height: 0,
+            fill: 'transparent',
+            stroke: color,
+            strokeWidth: brushWidth,
+          });
         }
 
         if (shape) {
@@ -1301,6 +1542,17 @@ export const CanvasEditor = ({
         } else if (currentTool === 'line') {
           const line = shape as fabric.Line;
           line.set({ x2: pointer.x, y2: pointer.y });
+        } else if (currentTool === 'triangle') {
+          const triangle = shape as fabric.Triangle;
+          const width = pointer.x - startX;
+          const height = pointer.y - startY;
+
+          triangle.set({
+            width: Math.abs(width),
+            height: Math.abs(height),
+            left: width < 0 ? pointer.x : startX,
+            top: height < 0 ? pointer.y : startY,
+          });
         }
 
         canvas.renderAll();
@@ -1319,6 +1571,83 @@ export const CanvasEditor = ({
           setCurrentTool('select'); // Auto-switch back to select
         }
       };
+    } else if (currentTool === 'arrow') {
+      canvas.selection = false;
+      let isDrawingArrow = false;
+      let arrowStartX = 0;
+      let arrowStartY = 0;
+      let tempLine: fabric.Line | null = null;
+
+      mouseDownHandler = (o) => {
+        const evt = o.e as MouseEvent;
+        if (isSpacePressedRef.current || evt.button === 1) return;
+
+        isDrawingArrow = true;
+        const pointer = canvas.getPointer(o.e);
+        arrowStartX = pointer.x;
+        arrowStartY = pointer.y;
+
+        tempLine = new fabric.Line([arrowStartX, arrowStartY, arrowStartX, arrowStartY], {
+          stroke: color,
+          strokeWidth: brushWidth,
+          selectable: false,
+          evented: false,
+        });
+
+        (tempLine as any).excludeFromSync = true;
+        (tempLine as any).excludeFromHistory = true;
+        (tempLine as any).excludeFromSerialization = true;
+
+        canvas.add(tempLine);
+      };
+
+      mouseMoveHandler = (o) => {
+        if (!isDrawingArrow || !tempLine) return;
+
+        const pointer = canvas.getPointer(o.e);
+        tempLine.set({ x2: pointer.x, y2: pointer.y });
+        canvas.renderAll();
+      };
+
+      mouseUpHandler = (o) => {
+        if (!isDrawingArrow || !tempLine) return;
+
+        isDrawingArrow = false;
+        const pointer = canvas.getPointer(o.e);
+        const distance = Math.hypot(pointer.x - arrowStartX, pointer.y - arrowStartY);
+
+        canvas.remove(tempLine);
+        tempLine = null;
+
+        if (distance < 2) {
+          setCurrentTool('select');
+          return;
+        }
+
+        const angle = Math.atan2(pointer.y - arrowStartY, pointer.x - arrowStartX) * (180 / Math.PI);
+        const line = new fabric.Line([arrowStartX, arrowStartY, pointer.x, pointer.y], {
+          stroke: color,
+          strokeWidth: brushWidth,
+        });
+        const head = new fabric.Triangle({
+          left: pointer.x,
+          top: pointer.y,
+          width: 14,
+          height: 18,
+          fill: color,
+          angle: angle + 90,
+          originX: 'center',
+          originY: 'center',
+        });
+        const group = new fabric.Group([line, head]);
+
+        group.setCoords();
+        canvas.add(group);
+        canvas.setActiveObject(group);
+        group.setCoords();
+        canvas.fire('object:modified', { target: group });
+        setCurrentTool('select');
+      };
     }
     
     // Registrar listeners si existen
@@ -1336,24 +1665,6 @@ export const CanvasEditor = ({
       canvas.isDrawingMode = false;
     };
   }, [currentTool, color, brushWidth, isReadOnly, isReady]);
-
-  const addText = () => {
-    const canvas = fabricCanvasRef.current;
-    if (!canvas) return;
-
-    const text = new fabric.IText('Click to edit', {
-      left: 100,
-      top: 100,
-      fontSize: 32,
-      fill: color,
-      fontFamily: 'Arial',
-    });
-
-    canvas.add(text);
-    canvas.setActiveObject(text);
-    text.enterEditing();
-    canvas.renderAll();
-  };
 
   // ✅ NUEVO: Handle image file selection
   const handleImageFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1428,31 +1739,6 @@ export const CanvasEditor = ({
     }
   };
 
-  const handleToolClick = (tool: Tool) => {
-    if (tool === 'text') {
-      addText();
-      setCurrentTool('select');
-    } else if (tool === 'image') {
-      // ✅ NUEVO: Trigger image upload
-      triggerImageUpload();
-      // Don't change current tool, stay on select
-    } else {
-      setCurrentTool(tool);
-      
-      // ✅ NUEVO: Cambiar cursor cuando se selecciona hand tool
-      const canvas = fabricCanvasRef.current;
-      if (canvas) {
-        if (tool === 'hand') {
-          canvas.defaultCursor = 'grab';
-          canvas.hoverCursor = 'grab';
-        } else {
-          canvas.defaultCursor = 'default';
-          canvas.hoverCursor = 'move';
-        }
-      }
-    }
-  };
-
   const clearCanvas = () => {
     const canvas = fabricCanvasRef.current;
     if (!canvas) return;
@@ -1466,39 +1752,39 @@ export const CanvasEditor = ({
     }
   };
 
-  const handleSave = async () => {
-    const canvas = fabricCanvasRef.current;
-    if (!canvas) return;
-
-    setIsSaving(true);
-    try {
-      // ✅ MODIFICADO: Usar serializeCanvas para persistir ownership
-      const canvasData = serializeCanvas(canvas);
-      await onSave(canvasData);
-      toast.success('Slide saved!');
-    } catch (error) {
-      console.error('Error saving:', error);
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  const downloadImage = () => {
+  const exportPNG = useCallback(() => {
     const canvas = fabricCanvasRef.current;
     if (!canvas) return;
 
     const dataURL = canvas.toDataURL({
       format: 'png',
       quality: 1,
-      multiplier: 1,
+      multiplier: 2,
     });
 
     const link = document.createElement('a');
     link.download = `slide-${slideId}.png`;
     link.href = dataURL;
     link.click();
-    toast.success('Image downloaded!');
-  };
+    toast.success('Imagen PNG exportada');
+  }, [slideId]);
+
+  const exportSVG = useCallback(() => {
+    const canvas = fabricCanvasRef.current;
+    if (!canvas) return;
+
+    const svg = canvas.toSVG();
+    const blob = new Blob([svg], { type: 'image/svg+xml' });
+    const url = URL.createObjectURL(blob);
+
+    const link = document.createElement('a');
+    link.download = `slide-${slideId}.svg`;
+    link.href = url;
+    link.click();
+
+    URL.revokeObjectURL(url);
+    toast.success('Vector SVG exportado');
+  }, [slideId]);
 
   const tools = [
     { id: 'select' as Tool, icon: MousePointer, label: 'Select', desc: 'Select and move (V)' },
@@ -1507,6 +1793,8 @@ export const CanvasEditor = ({
     { id: 'rectangle' as Tool, icon: Square, label: 'Rectangle', desc: 'Add rectangle (R)' },
     { id: 'circle' as Tool, icon: CircleIcon, label: 'Circle', desc: 'Add circle (C)' },
     { id: 'line' as Tool, icon: Minus, label: 'Line', desc: 'Add line (L)' },
+    { id: 'triangle' as Tool, icon: TriangleIcon, label: 'Triangle', desc: 'Add triangle' },
+    { id: 'arrow' as Tool, icon: ArrowRight, label: 'Arrow', desc: 'Add arrow (A)' },
     { id: 'text' as Tool, icon: Type, label: 'Text', desc: 'Add text (T)' },
     { id: 'image' as Tool, icon: ImageIcon, label: 'Image', desc: 'Upload image (I)' },  // ✅ NUEVO
     { id: 'eraser' as Tool, icon: Eraser, label: 'Eraser', desc: 'Erase (E)' },
@@ -1523,6 +1811,28 @@ export const CanvasEditor = ({
     { value: '#00ffff', name: 'Cyan' },
     { value: '#ff8800', name: 'Orange' },
     { value: '#8800ff', name: 'Purple' },
+  ];
+
+  const shortcuts = [
+    { desc: 'Seleccionar', key: 'V' },
+    { desc: 'Lapiz', key: 'P' },
+    { desc: 'Rectangulo', key: 'R' },
+    { desc: 'Circulo', key: 'C' },
+    { desc: 'Linea', key: 'L' },
+    { desc: 'Flecha', key: 'A' },
+    { desc: 'Texto', key: 'T' },
+    { desc: 'Imagen', key: 'I' },
+    { desc: 'Borrador', key: 'E' },
+    { desc: 'Mano / Pan', key: 'H o Espacio' },
+    { desc: 'Deshacer', key: 'Ctrl + Z' },
+    { desc: 'Rehacer', key: 'Ctrl + Y' },
+    { desc: 'Copiar', key: 'Ctrl + C' },
+    { desc: 'Pegar', key: 'Ctrl + V' },
+    { desc: 'Eliminar', key: 'Delete' },
+    { desc: 'Guardar', key: 'Ctrl + S' },
+    { desc: 'Zoom', key: 'Ctrl + Rueda' },
+    { desc: 'Ver atajos', key: '?' },
+    { desc: 'Cerrar panel', key: 'Esc' },
   ];
 
   return (
@@ -1663,11 +1973,43 @@ export const CanvasEditor = ({
                   {isSaving ? 'Saving...' : 'Save'}
                 </button>
                 <button
-                  onClick={downloadImage}
-                  className="p-2 text-gray-700 hover:bg-gray-100 rounded transition"
-                  title="Download"
+                  onClick={exportPNG}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-gray-700 hover:bg-gray-100 rounded transition text-sm font-medium"
+                  title="Exportar PNG"
                 >
-                  <Download className="w-4 h-4" />
+                  <FileDown className="w-3.5 h-3.5" />
+                  PNG
+                </button>
+                <button
+                  onClick={exportSVG}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-gray-700 hover:bg-gray-100 rounded transition text-sm font-medium"
+                  title="Exportar SVG"
+                >
+                  <FileDown className="w-3.5 h-3.5" />
+                  SVG
+                </button>
+                <button
+                  onClick={exportJSON}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-gray-700 hover:bg-gray-100 rounded transition text-sm font-medium"
+                  title="Exportar JSON"
+                >
+                  <FileDown className="w-3.5 h-3.5" />
+                  JSON
+                </button>
+                <button
+                  onClick={importJSON}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-gray-700 hover:bg-gray-100 rounded transition text-sm font-medium"
+                  title="Cargar JSON"
+                >
+                  <FolderOpen className="w-3.5 h-3.5" />
+                  Cargar
+                </button>
+                <button
+                  onClick={() => setShowShortcuts(true)}
+                  className="p-2 text-gray-700 hover:bg-gray-100 rounded transition"
+                  title="Atajos (?)"
+                >
+                  <Keyboard className="w-4 h-4" />
                 </button>
                 <button
                   onClick={clearCanvas}
@@ -1829,6 +2171,52 @@ export const CanvasEditor = ({
         onChange={handleImageFileSelect}
         style={{ display: 'none' }}
       />
+      <input
+        ref={jsonInputRef}
+        type="file"
+        accept=".json,application/json"
+        onChange={handleJSONFileLoad}
+        style={{ display: 'none' }}
+      />
+
+      {showShortcuts && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
+          onClick={() => setShowShortcuts(false)}
+        >
+          <div
+            className="w-full max-w-3xl max-h-[80vh] overflow-y-auto rounded-2xl bg-slate-800 border border-slate-600 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-700">
+              <div>
+                <h2 className="text-lg font-semibold text-white">Atajos de Teclado</h2>
+                <p className="text-sm text-slate-400">Resumen de herramientas y acciones rapidas del tablero.</p>
+              </div>
+              <button
+                onClick={() => setShowShortcuts(false)}
+                className="text-slate-400 hover:text-white text-2xl leading-none"
+                aria-label="Cerrar panel de atajos"
+              >
+                ×
+              </button>
+            </div>
+            <div className="grid gap-2 p-6 md:grid-cols-2">
+              {shortcuts.map((shortcut) => (
+                <div
+                  key={`${shortcut.desc}-${shortcut.key}`}
+                  className="flex items-center justify-between rounded-xl bg-slate-700/50 px-3 py-2"
+                >
+                  <span className="text-sm text-slate-200">{shortcut.desc}</span>
+                  <kbd className="rounded-md border border-slate-600 bg-slate-900 px-2 py-1 text-xs font-mono text-cyan-300">
+                    {shortcut.key}
+                  </kbd>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
