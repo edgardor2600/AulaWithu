@@ -55,3 +55,7 @@ server/scripts/test-postgres-simple.ts
 server/scripts/update-levels.ts
 server/src/db/add_group_columns.ts
 server/src/db/refactor_academic_structure.ts
+
+# Exclude local/temporary whiteboard directory
+tablero/
+
