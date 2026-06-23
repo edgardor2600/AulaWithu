@@ -349,5 +349,87 @@ export class AdminService {
 
     return { temporaryPassword, userName: user.name };
   }
+
+  // ============================================
+  // UPDATE CREDENTIALS (By Admin)
+  // ============================================
+
+  /**
+   * Update username and/or password for any user (Admin-only)
+   * Validates format, uniqueness, and strength requirements.
+   *
+   * @param userId  - ID of the user to update
+   * @param adminId - ID of the admin performing the action
+   * @param data    - New username and/or new password (both optional, at least one required)
+   */
+  static async updateUserCredentials(
+    userId: string,
+    adminId: string,
+    data: { newUsername?: string; newPassword?: string }
+  ): Promise<{ user: User; updatedFields: string[] }> {
+    const USERNAME_REGEX = /^[a-zA-Z0-9._-]+$/;
+
+    // Validate admin
+    const admin = await UsersRepository.getById(adminId);
+    if (!admin || admin.role !== 'admin') {
+      throw new UnauthorizedError('Only administrators can update user credentials');
+    }
+
+    // Verify target user exists
+    const user = await UsersRepository.getById(userId);
+    if (!user) {
+      throw new NotFoundError('User not found');
+    }
+
+    // At least one field must be provided
+    if (!data.newUsername && !data.newPassword) {
+      throw new ValidationError('At least one field (username or password) must be provided');
+    }
+
+    const updatedFields: string[] = [];
+
+    // --- Update username ---
+    if (data.newUsername) {
+      const username = data.newUsername.trim().toLowerCase();
+
+      if (username.length < 3 || username.length > 20) {
+        throw new ValidationError('El usuario debe tener entre 3 y 20 caracteres');
+      }
+      if (!USERNAME_REGEX.test(username)) {
+        throw new ValidationError('El usuario solo puede contener letras, números, puntos, guiones y guiones bajos (sin espacios)');
+      }
+
+      try {
+        await UsersRepository.updateUsername(userId, username);
+        updatedFields.push('username');
+      } catch (err: any) {
+        if (err.message === 'USERNAME_TAKEN') {
+          throw new ConflictError('Ese nombre de usuario ya está en uso por otro usuario');
+        }
+        throw err;
+      }
+    }
+
+    // --- Update password ---
+    if (data.newPassword) {
+      if (data.newPassword.length < 8) {
+        throw new ValidationError('La contraseña debe tener al menos 8 caracteres');
+      }
+      if (!/[A-Z]/.test(data.newPassword)) {
+        throw new ValidationError('La contraseña debe tener al menos una letra mayúscula');
+      }
+      if (!/[0-9]/.test(data.newPassword)) {
+        throw new ValidationError('La contraseña debe tener al menos un número');
+      }
+
+      const password_hash = await hashPassword(data.newPassword);
+      await UsersRepository.updatePassword(userId, password_hash);
+      updatedFields.push('password');
+    }
+
+    // Return updated user
+    const updatedUser = await UsersRepository.getById(userId);
+    return { user: updatedUser!, updatedFields };
+  }
 }
 

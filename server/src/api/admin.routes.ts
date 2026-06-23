@@ -33,7 +33,9 @@ router.post(
     body('username')
       .trim()
       .notEmpty().withMessage('Username is required')
-      .isLength({ min: 3, max: 20 }).withMessage('Username must be between 3 and 20 characters'),
+      .isLength({ min: 3, max: 20 }).withMessage('Username must be between 3 and 20 characters')
+      .matches(/^[a-zA-Z0-9._-]+$/).withMessage('El usuario solo puede contener letras, números, puntos, guiones y guiones bajos (sin espacios)')
+      .toLowerCase(),
     body('password')
       .notEmpty().withMessage('Password is required')
       .isLength({ min: 8, max: 72 }).withMessage('La contraseña debe tener al menos 8 caracteres')
@@ -76,7 +78,9 @@ router.post(
     body('username')
       .trim()
       .notEmpty().withMessage('Username is required')
-      .isLength({ min: 3, max: 20 }).withMessage('Username must be between 3 and 20 characters'),
+      .isLength({ min: 3, max: 20 }).withMessage('Username must be between 3 and 20 characters')
+      .matches(/^[a-zA-Z0-9._-]+$/).withMessage('El usuario solo puede contener letras, números, puntos, guiones y guiones bajos (sin espacios)')
+      .toLowerCase(),
     body('password')
       .notEmpty().withMessage('Password is required')
       .isLength({ min: 8, max: 72 }).withMessage('La contraseña debe tener al menos 8 caracteres')
@@ -375,6 +379,59 @@ router.post(
       message: `Password for ${result.userName} has been reset successfully`,
       temporaryPassword: result.temporaryPassword,
       warning: 'This temporary password is shown only once. Share it securely with the user.',
+    });
+  })
+);
+
+/**
+ * PATCH /api/admin/users/:id/credentials
+ * Update username and/or password of any user (Admin-only)
+ * At least one of newUsername or newPassword must be provided.
+ */
+router.patch(
+  '/users/:id/credentials',
+  [
+    param('id').notEmpty().withMessage('User ID is required'),
+    body('newUsername')
+      .optional({ checkFalsy: true })
+      .trim()
+      .isLength({ min: 3, max: 20 }).withMessage('El usuario debe tener entre 3 y 20 caracteres')
+      .matches(/^[a-zA-Z0-9._-]+$/).withMessage('El usuario solo puede contener letras, números, puntos, guiones y guiones bajos (sin espacios)')
+      .toLowerCase(),
+    body('newPassword')
+      .optional({ checkFalsy: true })
+      .isLength({ min: 8, max: 72 }).withMessage('La contraseña debe tener al menos 8 caracteres')
+      .matches(/[A-Z]/).withMessage('La contraseña debe tener al menos una letra mayúscula')
+      .matches(/[0-9]/).withMessage('La contraseña debe tener al menos un número'),
+  ],
+  validate,
+  asyncHandler(async (req: any, res: any) => {
+    const { id } = req.params;
+    const { newUsername, newPassword } = req.body;
+    const adminId = req.user.userId;
+
+    if (!newUsername && !newPassword) {
+      return res.status(400).json({
+        success: false,
+        error: { message: 'Debes proporcionar al menos un campo para actualizar (usuario o contraseña)' },
+      });
+    }
+
+    const result = await AdminService.updateUserCredentials(id, adminId, {
+      newUsername: newUsername || undefined,
+      newPassword: newPassword || undefined,
+    });
+
+    res.status(200).json({
+      success: true,
+      message: `Credenciales actualizadas: ${result.updatedFields.join(', ')}`,
+      updatedFields: result.updatedFields,
+      user: {
+        id: result.user.id,
+        name: result.user.name,
+        username: result.user.username,
+        role: result.user.role,
+      },
     });
   })
 );

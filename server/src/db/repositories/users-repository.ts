@@ -228,6 +228,25 @@ export class UsersRepository {
   }
 
   /**
+   * Update user's username (checks uniqueness excluding the current user)
+   */
+  static async updateUsername(id: string, newUsername: string): Promise<void> {
+    const normalized = newUsername.toLowerCase().trim();
+    // Check if another user already has this username
+    const existing = await getOne<User>(
+      `SELECT id FROM users WHERE LOWER(username) = $1 AND id != $2`,
+      [normalized, id]
+    );
+    if (existing) {
+      throw new Error('USERNAME_TAKEN');
+    }
+    await runQuery(
+      `UPDATE users SET username = $1 WHERE id = $2`,
+      [normalized, id]
+    );
+  }
+
+  /**
    * Update last login timestamp
    */
   static async updateLastLogin(id: string): Promise<void> {

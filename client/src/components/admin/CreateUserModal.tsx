@@ -42,6 +42,10 @@ export const CreateUserModal = ({ type, onClose, onSuccess }: CreateUserModalPro
   const hasUppercase = /[A-Z]/.test(formData.password);
   const hasNumber = /[0-9]/.test(formData.password);
 
+  // Validación de formato de username: igual que el servidor
+  const USERNAME_REGEX = /^[a-zA-Z0-9._-]+$/;
+  const isUsernameFormatValid = formData.username.length === 0 || USERNAME_REGEX.test(formData.username);
+
   // Load levels for students
   useEffect(() => {
     if (type === 'student') {
@@ -67,6 +71,7 @@ export const CreateUserModal = ({ type, onClose, onSuccess }: CreateUserModalPro
     // Validaciones
     if (!formData.name.trim()) return toast.error('El nombre completo es requerido');
     if (!formData.username.trim() || formData.username.length < 3) return toast.error('El usuario debe tener al menos 3 caracteres');
+    if (!USERNAME_REGEX.test(formData.username)) return toast.error('El usuario solo puede contener letras, números, puntos (.), guiones (-) y guiones bajos (_). Sin espacios ni caracteres especiales.');
     if (!formData.password || formData.password.length < 8) return toast.error('La contraseña debe tener al menos 8 caracteres');
     if (!/[A-Z]/.test(formData.password)) return toast.error('La contraseña debe tener al menos una mayúscula');
     if (!/[0-9]/.test(formData.password)) return toast.error('La contraseña debe tener al menos un número');
@@ -191,10 +196,23 @@ export const CreateUserModal = ({ type, onClose, onSuccess }: CreateUserModalPro
                   disabled={isLoading}
                 />
               </div>
-              <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 mt-1.5 flex items-center gap-1 transition-colors">
-                 <span className="w-1 h-1 rounded-full bg-slate-400 dark:bg-slate-500"></span>
-                 Mínimo 3 caracteres, sin espacios
-              </p>
+              {/* Indicador de formato de username */}
+              {formData.username.length > 0 && (
+                <p className={`text-xs font-semibold mt-1.5 flex items-center gap-1.5 transition-colors ${
+                  isUsernameFormatValid ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-500 dark:text-red-400'
+                }`}>
+                  <span className={`w-3.5 h-3.5 rounded-full flex items-center justify-center text-[9px] ${
+                    isUsernameFormatValid ? 'bg-emerald-100 dark:bg-emerald-500/20 text-emerald-600' : 'bg-red-100 dark:bg-red-500/20 text-red-500'
+                  }`}>{isUsernameFormatValid ? '✓' : '✕'}</span>
+                  {isUsernameFormatValid ? 'Formato válido' : 'Solo letras, números, puntos, - y _ (sin espacios)'}
+                </p>
+              )}
+              {formData.username.length === 0 && (
+                <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 mt-1.5 flex items-center gap-1 transition-colors">
+                  <span className="w-1 h-1 rounded-full bg-slate-400 dark:bg-slate-500"></span>
+                  Ej: juan.perez, ana_garcia, prof-lopez
+                </p>
+              )}
             </div>
 
             {/* Password */}

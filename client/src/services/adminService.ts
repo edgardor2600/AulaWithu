@@ -179,4 +179,23 @@ export const adminService = {
       message: response.data.message,
     };
   },
+
+  /**
+   * Update username and/or password of a user (Admin-only)
+   * At least one field must be provided.
+   */
+  async updateCredentials(
+    userId: string,
+    data: { newUsername?: string; newPassword?: string }
+  ): Promise<{ updatedFields: string[]; user: { id: string; name: string; username: string } }> {
+    const response = await api.patch<{
+      success: boolean;
+      updatedFields: string[];
+      user: { id: string; name: string; username: string };
+    }>(`/admin/users/${userId}/credentials`, data);
+    return {
+      updatedFields: response.data.updatedFields,
+      user: response.data.user,
+    };
+  },
 };

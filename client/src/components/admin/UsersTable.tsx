@@ -18,6 +18,7 @@ import {
   AlertTriangle,
 } from 'lucide-react';
 import { EditLevelModal } from './EditLevelModal';
+import { EditCredentialsModal } from './EditCredentialsModal';
 
 interface UsersTableProps {
   users: User[];
@@ -30,6 +31,7 @@ export const UsersTable = ({ users, onRefresh, onCreateUser }: UsersTableProps) 
   const [searchTerm, setSearchTerm] = useState('');
   const [activeMenu, setActiveMenu] = useState<string | null>(null);
   const [editingUser, setEditingUser] = useState<User | null>(null);
+  const [editingCredentialsUser, setEditingCredentialsUser] = useState<User | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [resetResult, setResetResult] = useState<{ userName: string; password: string } | null>(null);
   const [isCopied, setIsCopied] = useState(false);
@@ -307,6 +309,20 @@ export const UsersTable = ({ users, onRefresh, onCreateUser }: UsersTableProps) 
                               onClick={() => setActiveMenu(null)}
                             />
                             <div className="absolute right-0 mt-2 w-56 bg-white dark:bg-slate-900 rounded-xl shadow-lg shadow-black/10 dark:shadow-black/40 border border-slate-200 dark:border-slate-800 py-1.5 z-20 overflow-hidden transform opacity-100 scale-100 transition-all origin-top-right">
+                              {/* Edit Credentials - All non-admin users */}
+                              {user.role !== 'admin' && (
+                                <button
+                                  onClick={() => {
+                                    setEditingCredentialsUser(user);
+                                    setActiveMenu(null);
+                                  }}
+                                  className="w-full px-4 py-2.5 text-left text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/50 flex items-center gap-2.5 font-medium transition-colors"
+                                >
+                                  <KeyRound className="w-4 h-4 text-violet-500 dark:text-violet-400" />
+                                  Cambiar Usuario / Clave
+                                </button>
+                              )}
+
                               {/* Edit Level - Only for students */}
                               {user.role === 'student' && (
                                 <button
@@ -403,6 +419,18 @@ export const UsersTable = ({ users, onRefresh, onCreateUser }: UsersTableProps) 
           onClose={() => setEditingUser(null)}
           onSuccess={() => {
             setEditingUser(null);
+            onRefresh();
+          }}
+        />
+      )}
+
+      {/* Edit Credentials Modal */}
+      {editingCredentialsUser && (
+        <EditCredentialsModal
+          user={editingCredentialsUser}
+          onClose={() => setEditingCredentialsUser(null)}
+          onSuccess={() => {
+            setEditingCredentialsUser(null);
             onRefresh();
           }}
         />
