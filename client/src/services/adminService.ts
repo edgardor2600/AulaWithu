@@ -198,4 +198,18 @@ export const adminService = {
       user: response.data.user,
     };
   },
+
+  /**
+   * Update the display name of a user (Admin-only)
+   */
+  async updateProfile(
+    userId: string,
+    data: { name: string }
+  ): Promise<{ user: { id: string; name: string; username: string } }> {
+    const response = await api.patch<{
+      success: boolean;
+      user: { id: string; name: string; username: string };
+    }>(`/admin/users/${userId}/profile`, data);
+    return { user: response.data.user };
+  },
 };

@@ -436,4 +436,50 @@ router.patch(
   })
 );
 
+/**
+ * PATCH /api/admin/users/:id/profile
+ * Update display name of any user (Admin-only)
+ */
+router.patch(
+  '/users/:id/profile',
+  [
+    param('id').notEmpty().withMessage('User ID is required'),
+    body('name')
+      .trim()
+      .notEmpty().withMessage('El nombre no puede estar vacío')
+      .isLength({ min: 2, max: 80 }).withMessage('El nombre debe tener entre 2 y 80 caracteres'),
+  ],
+  validate,
+  asyncHandler(async (req: any, res: any) => {
+    const { id } = req.params;
+    const { name } = req.body;
+    const adminId = req.user.userId;
+
+    // Validate admin
+    const admin = await UsersRepository.getById(adminId);
+    if (!admin || admin.role !== 'admin') {
+      return res.status(403).json({ success: false, error: { message: 'Solo administradores pueden actualizar perfiles' } });
+    }
+
+    const user = await UsersRepository.getById(id);
+    if (!user) {
+      return res.status(404).json({ success: false, error: { message: 'Usuario no encontrado' } });
+    }
+
+    await UsersRepository.update(id, { name: name.trim() });
+    const updated = await UsersRepository.getById(id);
+
+    res.status(200).json({
+      success: true,
+      message: 'Nombre actualizado correctamente',
+      user: {
+        id: updated!.id,
+        name: updated!.name,
+        username: updated!.username,
+        role: updated!.role,
+      },
+    });
+  })
+);
+
 export default router;

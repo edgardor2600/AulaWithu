@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { adminService, type User } from '../../services/adminService';
 import toast from 'react-hot-toast';
-import { X, User as UserIcon, Lock, Loader2, ShieldCheck, Eye, EyeOff, KeyRound } from 'lucide-react';
+import { X, User as UserIcon, Lock, Loader2, ShieldCheck, Eye, EyeOff, KeyRound, Pencil } from 'lucide-react';
 
 interface EditCredentialsModalProps {
   user: User;
@@ -26,6 +26,7 @@ const getPasswordStrength = (pass: string) => {
 };
 
 export const EditCredentialsModal = ({ user, onClose, onSuccess }: EditCredentialsModalProps) => {
+  const [newName, setNewName] = useState('');
   const [newUsername, setNewUsername] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -38,19 +39,26 @@ export const EditCredentialsModal = ({ user, onClose, onSuccess }: EditCredentia
   const hasUppercase = /[A-Z]/.test(newPassword);
   const hasNumber = /[0-9]/.test(newPassword);
 
+  const nameChanged = newName.trim().length > 0;
   const usernameChanged = newUsername.trim().length > 0;
   const passwordChanged = newPassword.length > 0;
 
   const isUsernameFormatValid = newUsername.length === 0 || USERNAME_REGEX.test(newUsername);
   const passwordsMatch = newPassword === confirmPassword || confirmPassword.length === 0;
 
-  const canSubmit = (usernameChanged || passwordChanged) && !isLoading;
+  const canSubmit = (nameChanged || usernameChanged || passwordChanged) && !isLoading;
 
   const handleSubmit = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
 
-    if (!usernameChanged && !passwordChanged) {
+    if (!nameChanged && !usernameChanged && !passwordChanged) {
       toast.error('Completa al menos un campo para actualizar');
+      return;
+    }
+
+    // Validate name
+    if (nameChanged && newName.trim().length < 2) {
+      toast.error('El nombre debe tener al menos 2 caracteres');
       return;
     }
 
@@ -89,16 +97,29 @@ export const EditCredentialsModal = ({ user, onClose, onSuccess }: EditCredentia
 
     setIsLoading(true);
     try {
-      const result = await adminService.updateCredentials(user.id, {
-        newUsername: usernameChanged ? newUsername.trim().toLowerCase() : undefined,
-        newPassword: passwordChanged ? newPassword : undefined,
-      });
+      const updatedLabels: string[] = [];
 
-      const fieldLabels = result.updatedFields.map((f) => (f === 'username' ? 'usuario' : 'contraseña'));
-      toast.success(`✅ ${user.name}: ${fieldLabels.join(' y ')} actualizados correctamente`);
-      onSuccess(result.user.username);
+      // 1. Actualizar nombre si cambió
+      if (nameChanged) {
+        await adminService.updateProfile(user.id, { name: newName.trim() });
+        updatedLabels.push('nombre');
+      }
+
+      // 2. Actualizar username y/o password si cambiaron
+      if (usernameChanged || passwordChanged) {
+        const result = await adminService.updateCredentials(user.id, {
+          newUsername: usernameChanged ? newUsername.trim().toLowerCase() : undefined,
+          newPassword: passwordChanged ? newPassword : undefined,
+        });
+        result.updatedFields.forEach((f) =>
+          updatedLabels.push(f === 'username' ? 'usuario' : 'contraseña')
+        );
+      }
+
+      toast.success(`✅ ${user.name}: ${updatedLabels.join(', ')} actualizado${updatedLabels.length > 1 ? 's' : ''} correctamente`);
+      onSuccess(usernameChanged ? newUsername.trim().toLowerCase() : undefined);
     } catch (error: any) {
-      const msg = error.response?.data?.error?.message || error.response?.data?.errors?.[0]?.message || 'Error al actualizar credenciales';
+      const msg = error.response?.data?.error?.message || error.response?.data?.errors?.[0]?.message || 'Error al actualizar';
       toast.error(msg);
     } finally {
       setIsLoading(false);
@@ -145,11 +166,45 @@ export const EditCredentialsModal = ({ user, onClose, onSuccess }: EditCredentia
           <div className="p-3.5 bg-indigo-50 dark:bg-indigo-500/10 border border-indigo-200 dark:border-indigo-500/20 rounded-2xl flex items-start gap-3">
             <KeyRound className="w-4 h-4 text-indigo-500 dark:text-indigo-400 shrink-0 mt-0.5" />
             <p className="text-xs font-semibold text-indigo-800 dark:text-indigo-300 leading-relaxed">
-              Completa solo los campos que deseas cambiar. Puedes actualizar el usuario, la contraseña, o ambos a la vez.
+              Completa solo los campos que deseas cambiar. Puedes actualizar el nombre, usuario, contraseña, o cualquier combinación.
             </p>
           </div>
 
-          {/* === NUEVO USUARIO === */}
+          {/* === NOMBRE COMPLETO === */}
+          <div>
+            <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-2">
+              Nombre Completo <span className="text-xs font-semibold text-slate-400 dark:text-slate-500 normal-case">(opcional)</span>
+            </label>
+            <div className="relative group">
+              <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
+                <Pencil className="w-5 h-5 text-slate-400 dark:text-slate-500 group-focus-within:text-indigo-500 transition-colors" />
+              </div>
+              <input
+                type="text"
+                value={newName}
+                onChange={(e) => setNewName(e.target.value)}
+                className="w-full pl-11 pr-4 py-3 bg-white dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-700 rounded-xl focus:ring-0 focus:border-indigo-500 outline-none transition-all duration-200 shadow-sm font-medium text-slate-800 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 hover:border-slate-300 dark:hover:border-slate-600"
+                placeholder={`Actual: ${user.name}`}
+                disabled={isLoading}
+                autoComplete="off"
+                maxLength={80}
+              />
+            </div>
+            {newName.trim().length > 0 && newName.trim().length < 2 && (
+              <p className="text-xs font-semibold text-red-500 dark:text-red-400 mt-1.5 flex items-center gap-1.5">
+                <span className="w-3.5 h-3.5 rounded-full bg-red-100 dark:bg-red-500/20 flex items-center justify-center text-[9px]">✕</span>
+                Mínimo 2 caracteres
+              </p>
+            )}
+          </div>
+
+          {/* Divider */}
+          <div className="flex items-center gap-3">
+            <div className="flex-1 h-px bg-slate-200 dark:bg-slate-800" />
+            <span className="text-[11px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-wider">Credenciales de Acceso</span>
+            <div className="flex-1 h-px bg-slate-200 dark:bg-slate-800" />
+          </div>
+
           <div>
             <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-2">
               Nuevo Usuario <span className="text-xs font-semibold text-slate-400 dark:text-slate-500 normal-case">(opcional)</span>
@@ -324,13 +379,11 @@ export const EditCredentialsModal = ({ user, onClose, onSuccess }: EditCredentia
               <>
                 <ShieldCheck className="w-5 h-5" />
                 <span>
-                  {!usernameChanged && !passwordChanged
+                  {!nameChanged && !usernameChanged && !passwordChanged
                     ? 'Guardar Cambios'
-                    : usernameChanged && passwordChanged
-                    ? 'Actualizar Usuario y Contraseña'
-                    : usernameChanged
-                    ? 'Actualizar Usuario'
-                    : 'Actualizar Contraseña'}
+                    : [nameChanged && 'Nombre', usernameChanged && 'Usuario', passwordChanged && 'Contraseña']
+                        .filter(Boolean)
+                        .join(' + ')}
                 </span>
               </>
             )}
