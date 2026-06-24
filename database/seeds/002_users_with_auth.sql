@@ -1,7 +1,7 @@
 -- Seed Data: Users with Authentication
 -- Aula Colaborativa - Test Users
--- Created: 2025-12-19
--- Password for ALL test users: "password123"
+-- Created: 2025-12-19 | Updated: 2026-06-23
+-- Password for ALL test users: "Password123" (mayúscula inicial + número)
 
 -- ============================================
 -- CLEAR OLD TEST DATA
@@ -19,7 +19,7 @@ DELETE FROM users;
 
 -- TEACHER: Prof. García
 -- Username: prof.garcia
--- Password: password123
+-- Password: Password123
 INSERT INTO users (
   id, 
   name, 
@@ -33,7 +33,7 @@ INSERT INTO users (
   'teacher-001',
   'Prof. García',
   'prof.garcia',
-  '$2b$10$Bl5l5O4wzS993o585xJCuu1BjVIQ9bNCDDkEPPJOMwyYJJDYcH2Vu',
+  '$2b$10$KkqcqnU7M1h4ukZIpf89KuJIIJZ9jq5Ha3Vsi/q.7PSM1HkJdqv8q',
   'teacher',
   '#3b82f6',
   1,
@@ -42,7 +42,7 @@ INSERT INTO users (
 
 -- STUDENT 1: Ana Martínez
 -- Username: ana.martinez
--- Password: password123
+-- Password: Password123
 INSERT INTO users (
   id, 
   name, 
@@ -56,7 +56,7 @@ INSERT INTO users (
   'student-001',
   'Ana Martínez',
   'ana.martinez',
-  '$2b$10$Bl5l5O4wzS993o585xJCuu1BjVIQ9bNCDDkEPPJOMwyYJJDYcH2Vu',
+  '$2b$10$KkqcqnU7M1h4ukZIpf89KuJIIJZ9jq5Ha3Vsi/q.7PSM1HkJdqv8q',
   'student',
   '#10b981',
   1,
@@ -79,7 +79,7 @@ INSERT INTO users (
   'student-002',
   'Carlos López',
   'carlos.lopez',
-  '$2b$10$Bl5l5O4wzS993o585xJCuu1BjVIQ9bNCDDkEPPJOMwyYJJDYcH2Vu',
+  '$2b$10$KkqcqnU7M1h4ukZIpf89KuJIIJZ9jq5Ha3Vsi/q.7PSM1HkJdqv8q',
   'student',
   '#f59e0b',
   1,
@@ -102,7 +102,7 @@ INSERT INTO users (
   'student-003',
   'María Rodríguez',
   'maria.rodriguez',
-  '$2b$10$Bl5l5O4wzS993o585xJCuu1BjVIQ9bNCDDkEPPJOMwyYJJDYcH2Vu',
+  '$2b$10$KkqcqnU7M1h4ukZIpf89KuJIIJZ9jq5Ha3Vsi/q.7PSM1HkJdqv8q',
   'student',
   '#8b5cf6',
   1,
@@ -125,7 +125,7 @@ INSERT INTO users (
   'student-004',
   'Juan Pérez',
   'juan.perez',
-  '$2b$10$Bl5l5O4wzS993o585xJCuu1BjVIQ9bNCDDkEPPJOMwyYJJDYcH2Vu',
+  '$2b$10$KkqcqnU7M1h4ukZIpf89KuJIIJZ9jq5Ha3Vsi/q.7PSM1HkJdqv8q',
   'student',
   '#ec4899',
   1,
@@ -148,7 +148,7 @@ INSERT INTO users (
   'student-005',
   'Laura Sánchez',
   'laura.sanchez',
-  '$2b$10$Bl5l5O4wzS993o585xJCuu1BjVIQ9bNCDDkEPPJOMwyYJJDYcH2Vu',
+  '$2b$10$KkqcqnU7M1h4ukZIpf89KuJIIJZ9jq5Ha3Vsi/q.7PSM1HkJdqv8q',
   'student',
   '#06b6d4',
   1,

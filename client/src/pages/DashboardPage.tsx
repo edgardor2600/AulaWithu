@@ -27,15 +27,12 @@ export const DashboardPage = () => {
   const loadClasses = async () => {
     try {
       setIsLoading(true);
+      // El backend ya filtra por rol: profesor ve sus clases, estudiante ve las de sus grupos
       const data = await classService.getAll();
-      
-      const filteredClasses = isTeacher
-        ? data.filter((c) => c.teacher_id === user?.id)
-        : data;
-      
-      setClasses(filteredClasses);
+      setClasses(data);
     } catch (error) {
       console.error('Error loading classes:', error);
+      toast.error('Error al cargar las clases');
     } finally {
       setIsLoading(false);
     }
@@ -86,8 +83,9 @@ export const DashboardPage = () => {
       await classService.delete(classItem.id);
       toast.success('Clase eliminada');
       await loadClasses();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error deleting class:', error);
+      toast.error(error.response?.data?.message || 'Error al eliminar la clase');
     }
   };
 
