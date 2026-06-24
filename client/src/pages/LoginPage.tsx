@@ -44,6 +44,12 @@ export const LoginPage = () => {
       }
     } catch (error: any) {
       console.error('Login error:', error);
+      // Mostrar mensaje de error al usuario (antes era silencioso)
+      const msg =
+        error.response?.data?.error?.message ||
+        error.response?.data?.errors?.[0]?.message ||
+        'Usuario o contraseña incorrectos';
+      toast.error(msg);
     } finally {
       setIsLoading(false);
     }

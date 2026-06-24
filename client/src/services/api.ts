@@ -39,33 +39,44 @@ api.interceptors.response.use(
       const status = error.response.status;
       const data: any = error.response.data;
 
+      // ¿Viene el error del endpoint de login? El LoginPage muestra su propio toast.
+      const isLoginEndpoint = error.config?.url?.includes('/auth/login');
+
       switch (status) {
         case 401:
-          // Unauthorized - logout user
-          toast.error('Session expired. Please login again.');
+          if (isLoginEndpoint) {
+            // Credenciales incorrectas — el LoginPage muestra el mensaje, no hacer nada aquí
+            break;
+          }
+          // Sesión expirada para rutas protegidas
+          toast.error('Sesión expirada. Por favor inicia sesión nuevamente.');
           useAuthStore.getState().logout();
           window.location.href = '/login';
           break;
 
         case 403:
-          toast.error(data?.error?.message || 'Access denied');
+          toast.error(data?.error?.message || 'Acceso denegado');
           break;
 
         case 404:
-          toast.error(data?.error?.message || 'Resource not found');
+          toast.error(data?.error?.message || 'Recurso no encontrado');
           break;
 
         case 409:
-          toast.error(data?.error?.message || 'Conflict error');
+          toast.error(data?.error?.message || 'Conflicto en el servidor');
           break;
 
         case 500:
-          toast.error('Server error. Please try again later.');
+          toast.error('Error del servidor. Intenta nuevamente.');
           break;
 
         default:
-          toast.error(data?.error?.message || 'An error occurred');
+          // No mostrar toast si el componente (ej. LoginPage) ya maneja el error
+          if (!isLoginEndpoint) {
+            toast.error(data?.error?.message || 'Ocurrió un error');
+          }
       }
+
     } else if (error.request) {
       // Request made but no response
       toast.error('Network error. Please check your connection.');
