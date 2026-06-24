@@ -212,16 +212,22 @@ export const GroupsPanel = ({ classId, className }: GroupsPanelProps) => {
     }
   };
 
+  const [unenrollingId, setUnenrollingId] = useState<string | null>(null);
+
   const handleUnenrollStudent = async (studentId: string, studentName: string) => {
-    if (!confirm(`¿Desinscribir a ${studentName} del grupo?`)) return;
+    if (!confirm(`¿Desinscribir a ${studentName} del grupo? Esta acción se puede revertir volviendo a inscribirlo.`)) return;
     if (!selectedGroup) return;
 
+    setUnenrollingId(studentId);
     try {
       await groupsService.unenrollStudent(selectedGroup, studentId);
-      toast.success('Estudiante desinscrito');
+      toast.success(`${studentName} desinscrito del grupo`);
       loadGroupStudents(selectedGroup);
-    } catch (error) {
-      toast.error('Error al desinscribir estudiante');
+    } catch (error: any) {
+      const msg = error.response?.data?.error?.message || 'Error al desinscribir al estudiante';
+      toast.error(msg);
+    } finally {
+      setUnenrollingId(null);
     }
   };
 
@@ -404,10 +410,14 @@ export const GroupsPanel = ({ classId, className }: GroupsPanelProps) => {
                           </div>
                           <button
                             onClick={() => handleUnenrollStudent(item.student.id, item.student.name)}
-                            className="p-2 text-rose-500 hover:bg-rose-100 dark:hover:bg-rose-500/20 rounded-lg transition"
-                            title="Desinscribir"
+                            disabled={unenrollingId === item.student.id}
+                            className="p-2 text-rose-500 hover:bg-rose-100 dark:hover:bg-rose-500/20 rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed"
+                            title="Desinscribir del grupo"
                           >
-                            <X className="w-5 h-5" />
+                            {unenrollingId === item.student.id
+                              ? <Loader2 className="w-5 h-5 animate-spin" />
+                              : <X className="w-5 h-5" />
+                            }
                           </button>
                         </div>
                       ))}

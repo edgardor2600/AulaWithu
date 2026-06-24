@@ -326,6 +326,7 @@ router.get(
           name: item.group.name,
           description: item.group.description,
           max_students: item.group.max_students,
+          schedule_time: item.group.schedule_time ?? null,
         } : null,
         class: item.class ? {
           id: item.class.id,

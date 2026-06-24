@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { groupsService, type StudentGroup } from '../../services/groupsService';
 import toast from 'react-hot-toast';
-import { Users, BookOpen, Calendar, ArrowRight, CheckCircle2, AlertCircle } from 'lucide-react';
+import { Users, BookOpen, Calendar, ArrowRight, CheckCircle2, AlertCircle, Clock } from 'lucide-react';
 
 export const StudentGroupsView = () => {
   const navigate = useNavigate();
@@ -32,6 +32,20 @@ export const StudentGroupsView = () => {
       month: 'short',
       day: 'numeric',
     });
+  };
+
+  // Convierte '18:00-19:00' -> '6:00 PM – 7:00 PM'
+  const formatSchedule = (slot: string | null): string | null => {
+    if (!slot) return null;
+    const parts = slot.split('-');
+    if (parts.length !== 2) return slot;
+    const fmt = (t: string) => {
+      const [h, m] = t.split(':').map(Number);
+      const period = h >= 12 ? 'PM' : 'AM';
+      const hour12 = h % 12 || 12;
+      return `${hour12}:${String(m).padStart(2, '0')} ${period}`;
+    };
+    return `${fmt(parts[0])} – ${fmt(parts[1])}`;
   };
 
   if (isLoading) {
@@ -116,6 +130,13 @@ export const StudentGroupsView = () => {
                         {item.group.name}
                       </span>
                     </div>
+                    {/* Horario debajo del nombre del grupo */}
+                    {formatSchedule(item.group.schedule_time) && (
+                      <div className={`inline-flex items-center gap-1 mt-1.5 px-2 py-0.5 rounded-full text-[11px] font-bold ${theme.iconBg} ${theme.iconColor} border border-current/10`}>
+                        <Clock className="w-3 h-3 shrink-0" />
+                        {formatSchedule(item.group.schedule_time)}
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -131,11 +152,14 @@ export const StudentGroupsView = () => {
                 {/* Área Inferior: Metadatos */}
                 <div className="mt-auto pt-4 border-t border-slate-100 dark:border-slate-800/60 space-y-3 relative">
                   
-                  {/* Fecha y Estado */}
+                  {/* Fecha de inscripción, Horario y Estado */}
                   <div className="flex flex-wrap items-center justify-between gap-y-2">
-                    <div className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400 font-medium">
-                      <Calendar className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500" />
-                      <span>{formatDate(item.enrollment.enrolled_at)}</span>
+                    <div className="flex flex-col gap-1">
+                      {/* Horario si no fue mostrado arriba (fallback) */}
+                      <div className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400 font-medium">
+                        <Calendar className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500" />
+                        <span>Inscrito: {formatDate(item.enrollment.enrolled_at)}</span>
+                      </div>
                     </div>
 
                     {item.enrollment.status && (

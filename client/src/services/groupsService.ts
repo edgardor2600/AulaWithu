@@ -49,6 +49,7 @@ export interface StudentGroup {
     name: string;
     description: string | null;
     max_students: number;
+    schedule_time: string | null;
   } | null;
   class: {
     id: string;
