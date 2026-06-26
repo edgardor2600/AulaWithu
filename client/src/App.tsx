@@ -13,6 +13,10 @@ import { AdminPanel } from './pages/AdminPanel';
 import { GroupManagementPage } from './pages/GroupManagementPage';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { useAuthStore } from './store/authStore';
+import { CreateExamPage } from './pages/CreateExamPage';
+import { ExamBuilderPage } from './pages/ExamBuilderPage';
+import { TakeExamPage } from './pages/TakeExamPage';
+import { ExamResultsPage } from './pages/ExamResultsPage';
 
 import { ThemeProvider } from './components/ThemeProvider';
 
@@ -159,6 +163,48 @@ function App() {
             element={
               <ProtectedRoute>
                 <SessionViewPage />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* Exam Routes */}
+          <Route
+            path="/classes/:classId/exams/new"
+            element={
+              <ProtectedRoute requiredRole="teacher">
+                <CreateExamPage />
+              </ProtectedRoute>
+            }
+          />
+           <Route
+            path="/exams/:examId/edit"
+            element={
+              <ProtectedRoute requiredRole="teacher">
+                <CreateExamPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/exams/:examId/builder"
+            element={
+              <ProtectedRoute requiredRole="teacher">
+                <ExamBuilderPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/exams/:examId/take"
+            element={
+              <ProtectedRoute requiredRole="student">
+                <TakeExamPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/exams/:examId/results"
+            element={
+              <ProtectedRoute requiredRole="teacher">
+                <ExamResultsPage />
               </ProtectedRoute>
             }
           />
