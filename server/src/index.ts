@@ -16,6 +16,7 @@ import usersRoutes from './api/users.routes';
 import messagesRoutes from './api/messages.routes';
 import groupsRoutes from './api/groups.routes';
 import topicsRoutes from './api/topics.routes';
+import examsRoutes from './api/exams.routes';
 import { errorHandler } from './middleware/error.middleware';
 import { generalLimiter, authLimiter } from './middleware/rate-limit.middleware';
 import { testConnection } from './db/database';
@@ -112,6 +113,8 @@ app.use('/api/sessions', sessionsRoutes);
 app.use('/api/uploads', uploadsRoutes);
 app.use('/api/snapshots', snapshotsRoutes);
 app.use('/api/admin', adminRoutes);
+// Exams: /api/exams/... and /api/classes/...
+app.use('/api', examsRoutes);
 
 // ============================================================
 // FIX-08: RUTAS DE TEST — Solo en desarrollo
