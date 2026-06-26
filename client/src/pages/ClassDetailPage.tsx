@@ -5,10 +5,11 @@ import { useAuthStore } from '../store/authStore';
 import { Layout } from '../components/Layout';
 import { TopicsPanel } from '../components/topics/TopicsPanel';
 import { GroupsPanel } from '../components/groups/GroupsPanel';
-import { ArrowLeft, BookOpen, Users } from 'lucide-react';
+import { ExamsPanel } from '../components/exams/ExamsPanel';
+import { ArrowLeft, BookOpen, Users, ClipboardList } from 'lucide-react';
 import toast from 'react-hot-toast';
 
-type Tab = 'topics' | 'groups';
+type Tab = 'topics' | 'groups' | 'exams';
 
 export const ClassDetailPage = () => {
   const { id } = useParams<{ id: string }>();
@@ -16,7 +17,12 @@ export const ClassDetailPage = () => {
   const { user } = useAuthStore();
   const [classData, setClassData] = useState<ClassWithDetails | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<Tab>('topics');
+  const [activeTab, setActiveTab] = useState<Tab>(() => {
+    const params = new URLSearchParams(window.location.search);
+    const t = params.get('tab');
+    if (t === 'groups' || t === 'exams') return t;
+    return 'topics';
+  });
 
   const isTeacher = user?.role === 'teacher' || user?.role === 'admin';
   const isOwner = classData?.teacher_id === user?.id || user?.role === 'admin';
@@ -133,6 +139,17 @@ export const ClassDetailPage = () => {
                 <Users className="w-5 h-5" />
                 Grupos
               </button>
+              <button
+                onClick={() => setActiveTab('exams')}
+                className={`flex-1 sm:flex-none flex justify-center sm:justify-start items-center gap-2 px-6 py-4 font-bold transition ${
+                  activeTab === 'exams'
+                    ? 'text-indigo-600 dark:text-indigo-400 border-b-2 border-indigo-600 dark:border-indigo-400 bg-indigo-50/50 dark:bg-indigo-500/5'
+                    : 'text-gray-600 dark:text-slate-400 hover:text-gray-900 dark:hover:text-slate-200 hover:bg-gray-50 dark:hover:bg-slate-800/50'
+                }`}
+              >
+                <ClipboardList className="w-5 h-5" />
+                Exámenes
+              </button>
             </div>
           </div>
         )}
@@ -149,6 +166,11 @@ export const ClassDetailPage = () => {
           {/* Groups Tab (Teacher only) */}
           {activeTab === 'groups' && isTeacher && isOwner && id && (
             <GroupsPanel classId={id} className={classData.title} />
+          )}
+
+          {/* Exams Tab (Teacher only) */}
+          {activeTab === 'exams' && isTeacher && isOwner && id && (
+            <ExamsPanel classId={id} />
           )}
         </div>
       </div>
