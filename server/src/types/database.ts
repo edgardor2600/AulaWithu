@@ -151,3 +151,62 @@ export interface AcademicLevel {
   description: string | null;
   created_at: string;
 }
+
+// ============================================
+// EXAM SYSTEM (added in migration 010)
+// ============================================
+
+export interface Exam {
+  id: string;
+  class_id: string;
+  group_id: string | null;     // Optional group restriction
+  title: string;
+  description: string | null;
+  duration_minutes: number;
+  passing_score: number;       // 0-100 percentage
+  status: 'draft' | 'active' | 'closed';
+  available_from: string | null;
+  available_to: string | null;
+  scale_max: number;           // Max score scale (default 5.0)
+  skill_type: string;          // Main skill type (e.g. writing, complete)
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ExamQuestion {
+  id: string;
+  exam_id: string;
+  question_number: number;
+  type: 'multiple_choice' | 'short_answer';
+  text: string;
+  options: string[] | null;    // Parsed from JSONB — ["Opt A", "Opt B", ...]
+  correct_answer: string | null; // Index string "0","1","2","3" for MC; null for SA
+  points: number;
+  skill_category: string;      // Category of the question (e.g. listening)
+  media_url: string | null;    // Associated audio/image file URL
+  created_at: string;
+}
+
+export interface ExamAttempt {
+  id: string;
+  exam_id: string;
+  student_id: string;
+  status: 'in_progress' | 'submitted' | 'graded';
+  started_at: string;
+  submitted_at: string | null;
+  score: number | null;          // Percentage 0.00-100.00
+  total_points: number | null;
+  earned_points: number | null;
+  teacher_feedback: string | null;
+}
+
+export interface ExamAnswer {
+  id: string;
+  attempt_id: string;
+  question_id: string;
+  answer_text: string | null;
+  is_correct: boolean | null;
+  points_earned: number | null;
+  answered_at: string;
+}
