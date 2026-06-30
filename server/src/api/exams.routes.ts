@@ -222,6 +222,45 @@ router.get(
   })
 );
 
+/**
+ * GET /api/exams/attempts/:attemptId/detail
+ * Get full attempt with all answered questions for teacher review/grading.
+ */
+router.get(
+  '/exams/attempts/:attemptId/detail',
+  requireRole(['teacher', 'admin']),
+  asyncHandler(async (req: any, res: any) => {
+    const data = await ExamsService.getAttemptDetail(req.params.attemptId, req.user.userId);
+    res.status(200).json({ success: true, ...data });
+  })
+);
+
+/**
+ * PUT /api/exams/attempts/:attemptId/grade
+ * Teacher manually grades one answer (short_answer/writing questions).
+ * Body: { questionId, pointsEarned }
+ */
+router.put(
+  '/exams/attempts/:attemptId/grade',
+  requireRole(['teacher', 'admin']),
+  [
+    param('attemptId').notEmpty(),
+    body('questionId').notEmpty().withMessage('questionId es requerido'),
+    body('pointsEarned').isFloat({ min: 0 }).withMessage('pointsEarned debe ser >= 0'),
+  ],
+  validate,
+  asyncHandler(async (req: any, res: any) => {
+    const { questionId, pointsEarned } = req.body;
+    const attempt = await ExamsService.gradeAttemptAnswer(
+      req.params.attemptId,
+      questionId,
+      Number(pointsEarned),
+      req.user.userId
+    );
+    res.status(200).json({ success: true, attempt });
+  })
+);
+
 // ============================================
 // STUDENT: Take Exam
 // ============================================

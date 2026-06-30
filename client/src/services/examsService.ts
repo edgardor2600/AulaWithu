@@ -40,6 +40,8 @@ export interface ExamAttempt {
   id: string;
   exam_id: string;
   student_id: string;
+  student_name?: string;   // Joined from users table (teacher view)
+  student_email?: string;  // Joined from users table (teacher view)
   status: 'in_progress' | 'submitted' | 'graded';
   started_at: string;
   submitted_at: string | null;
@@ -57,6 +59,12 @@ export interface ExamAnswer {
   is_correct: boolean | null;
   points_earned: number | null;
   answered_at: string;
+  // Teacher view: joined from exam_questions
+  question_text?: string;
+  question_type?: string;
+  correct_answer?: string | null;
+  points?: number;
+  skill_category?: string;
 }
 
 // ============================================
@@ -184,6 +192,18 @@ export const examsService = {
 
   async submitAttempt(attemptId: string): Promise<ExamAttempt> {
     const res = await api.post(`/exams/attempts/${attemptId}/submit`);
+    return res.data.attempt;
+  },
+
+  // --- TEACHER: Manual Grading ---
+
+  async getAttemptDetail(attemptId: string): Promise<{ attempt: ExamAttempt; answers: ExamAnswer[] }> {
+    const res = await api.get(`/exams/attempts/${attemptId}/detail`);
+    return { attempt: res.data.attempt, answers: res.data.answers ?? [] };
+  },
+
+  async gradeAnswer(attemptId: string, questionId: string, pointsEarned: number): Promise<ExamAttempt> {
+    const res = await api.put(`/exams/attempts/${attemptId}/grade`, { questionId, pointsEarned });
     return res.data.attempt;
   },
 };

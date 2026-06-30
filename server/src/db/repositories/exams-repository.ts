@@ -271,11 +271,66 @@ export class ExamsRepository {
     );
   }
 
-  static async getAttemptsByExam(examId: string): Promise<ExamAttempt[]> {
-    return await getAll<ExamAttempt>(
-      `SELECT * FROM exam_attempts WHERE exam_id = $1 ORDER BY started_at DESC`,
+  static async getAttemptsByExam(examId: string): Promise<(ExamAttempt & { student_name: string; student_email: string })[]> {
+    return await getAll<ExamAttempt & { student_name: string; student_email: string }>(
+      `SELECT ea.*, u.name as student_name, u.email as student_email
+       FROM exam_attempts ea
+       LEFT JOIN users u ON u.id = ea.student_id
+       WHERE ea.exam_id = $1 ORDER BY ea.started_at DESC`,
       [examId]
     );
+  }
+
+  static async getAttemptWithAnswers(attemptId: string): Promise<{ attempt: ExamAttempt & { student_name: string }; answers: (ExamAnswer & { question_text: string; question_type: string; correct_answer: string | null; points: number; skill_category: string })[] } | null> {
+    const attempt = await getOne<ExamAttempt & { student_name: string }>(
+      `SELECT ea.*, u.name as student_name FROM exam_attempts ea
+       LEFT JOIN users u ON u.id = ea.student_id
+       WHERE ea.id = $1`,
+      [attemptId]
+    );
+    if (!attempt) return null;
+
+    const answers = await getAll<ExamAnswer & { question_text: string; question_type: string; correct_answer: string | null; points: number; skill_category: string }>(
+      `SELECT ans.*, q.text as question_text, q.type as question_type, q.correct_answer, q.points, q.skill_category
+       FROM exam_answers ans
+       JOIN exam_questions q ON q.id = ans.question_id
+       WHERE ans.attempt_id = $1
+       ORDER BY q.question_number ASC`,
+      [attemptId]
+    );
+    return { attempt, answers };
+  }
+
+  static async gradeAnswer(attemptId: string, questionId: string, pointsEarned: number, teacherComment?: string | null): Promise<void> {
+    await runQuery(
+      `UPDATE exam_answers SET points_earned = $1, is_correct = ($1 > 0)
+       WHERE attempt_id = $2 AND question_id = $3`,
+      [pointsEarned, attemptId, questionId]
+    );
+  }
+
+  static async finalizeGrading(attemptId: string): Promise<ExamAttempt | undefined> {
+    // Recalculate score from all answers
+    const result = await getOne<{ total: number; earned: number; exam_scale_max: number }>(
+      `SELECT
+        (SELECT SUM(q.points) FROM exam_questions q WHERE q.exam_id = ea.exam_id) as total,
+        COALESCE(SUM(ans.points_earned), 0) as earned,
+        COALESCE(e.scale_max, 5.0) as exam_scale_max
+       FROM exam_attempts ea
+       JOIN exams e ON e.id = ea.exam_id
+       LEFT JOIN exam_answers ans ON ans.attempt_id = ea.id
+       WHERE ea.id = $1
+       GROUP BY ea.exam_id, e.scale_max`,
+      [attemptId]
+    );
+    if (!result) return undefined;
+
+    const score = result.total > 0 ? Math.round((result.earned / result.total) * result.exam_scale_max * 100) / 100 : 0;
+    await runQuery(
+      `UPDATE exam_attempts SET status = 'graded', score = $1, earned_points = $2, total_points = $3 WHERE id = $4`,
+      [score, result.earned, result.total, attemptId]
+    );
+    return await this.getAttemptById(attemptId);
   }
 
   static async submitAttempt(
