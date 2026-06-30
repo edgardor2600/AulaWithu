@@ -339,9 +339,10 @@ export const ExamBuilderPage = () => {
 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-1">Nota Máxima</label>
-                    <input type="text" disabled value="5.0 Puntos"
-                      className="w-full px-4 py-2 bg-slate-100 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700 rounded-xl text-sm text-center font-black text-slate-500 dark:text-slate-400" />
+                    <label className="block text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-1">Duración (min)</label>
+                    <input type="number" min="1" max="480" value={durationMinutes} onChange={e => setDurationMinutes(parseInt(e.target.value) || 60)}
+                      disabled={!isDraft}
+                      className="w-full px-4 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm outline-none text-center font-black focus:border-indigo-500 text-slate-800 dark:text-white disabled:opacity-60" />
                   </div>
                   <div>
                     <label className="block text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-1">Min. Aprobación (%)</label>

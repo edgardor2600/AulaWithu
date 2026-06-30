@@ -13,6 +13,7 @@ const useTimer = (totalSeconds: number, onExpire: () => void) => {
   useEffect(() => {
     if (totalSeconds <= 0) return;
     setRemaining(totalSeconds);
+    expired.current = false;
     const interval = setInterval(() => {
       setRemaining(prev => {
         if (prev <= 1) {
@@ -26,9 +27,13 @@ const useTimer = (totalSeconds: number, onExpire: () => void) => {
     return () => clearInterval(interval);
   }, [totalSeconds]);
 
-  const mm = String(Math.floor(remaining / 60)).padStart(2, '0');
-  const ss = String(remaining % 60).padStart(2, '0');
-  return { display: `${mm}:${ss}`, isLow: remaining < 120, remaining };
+  const hh = Math.floor(remaining / 3600);
+  const mm = Math.floor((remaining % 3600) / 60);
+  const ss = remaining % 60;
+  const display = hh > 0
+    ? `${String(hh).padStart(2,'0')}:${String(mm).padStart(2,'0')}:${String(ss).padStart(2,'0')}`
+    : `${String(mm).padStart(2,'0')}:${String(ss).padStart(2,'0')}`;
+  return { display, isLow: remaining < 120, remaining };
 };
 
 // ── Main Page ────────────────────────────────────────────────
@@ -141,7 +146,9 @@ export const TakeExamPage = () => {
 
   // ── Result screen ──
   if (submitted && attempt) {
-    const passed = attempt.score !== null && exam ? attempt.score >= exam.passing_score : false;
+    const scaleMax = exam?.scale_max ?? 5;
+    const passingNote = scaleMax * ((exam?.passing_score ?? 60) / 100);
+    const passed = attempt.score !== null && attempt.score >= passingNote;
     return (
       <Layout>
         <div className="max-w-lg mx-auto px-4 py-16 text-center">
@@ -158,22 +165,27 @@ export const TakeExamPage = () => {
           {attempt.score !== null && (
             <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-6 mb-6 space-y-3">
               <div className="text-5xl font-black text-indigo-600 dark:text-indigo-400">
-                {Math.round(attempt.score)}%
+                {attempt.score.toFixed(2)} <span className="text-2xl text-slate-400">/ {scaleMax}</span>
               </div>
               <div className="w-full bg-slate-100 dark:bg-slate-800 rounded-full h-3">
                 <div className={`h-3 rounded-full transition-all duration-700 ${passed ? 'bg-emerald-500' : 'bg-rose-500'}`}
-                  style={{ width: `${Math.min(attempt.score, 100)}%` }} />
+                  style={{ width: `${Math.min((attempt.score / scaleMax) * 100, 100)}%` }} />
               </div>
               <div className="flex justify-between text-xs text-slate-500 dark:text-slate-400 font-bold">
-                <span>{attempt.earned_points ?? 0} / {attempt.total_points ?? 0} puntos</span>
-                <span>Mín. para aprobar: {exam?.passing_score}%</span>
+                <span>{attempt.earned_points?.toFixed(2) ?? 0} / {attempt.total_points?.toFixed(2) ?? 0} puntos</span>
+                <span>Mín. para aprobar: {passingNote.toFixed(2)}</span>
               </div>
+              {attempt.status === 'submitted' && (
+                <p className="text-xs text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-500/10 rounded-lg px-3 py-2 font-medium">
+                  ⏳ Tu profesor revisará las respuestas de escritura/habla y actualizará la nota final.
+                </p>
+              )}
             </div>
           )}
 
           <button onClick={() => navigate(-1)}
             className="px-6 py-3 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 transition">
-            Volver al Dashboard
+            Volver
           </button>
         </div>
       </Layout>

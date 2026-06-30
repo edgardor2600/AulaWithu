@@ -1,34 +1,82 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Layout } from '../components/Layout';
-import { examsService, type Exam, type ExamQuestion, type ExamAttempt } from '../services/examsService';
+import { examsService, type Exam, type ExamQuestion, type ExamAttempt, type ExamAnswer } from '../services/examsService';
 import toast from 'react-hot-toast';
-import { ArrowLeft, Users, CheckCircle2, XCircle, Clock, Loader2, TrendingUp, Award } from 'lucide-react';
+import {
+  ArrowLeft, Users, CheckCircle2, XCircle, Clock, Loader2, TrendingUp, Award,
+  Eye, X, AlignLeft, CheckSquare, Edit3, Save, ChevronDown, ChevronRight, Star
+} from 'lucide-react';
+
+const STATUS_BADGE: Record<string, string> = {
+  in_progress: 'bg-amber-100 dark:bg-amber-500/20 text-amber-700 dark:text-amber-400',
+  submitted:   'bg-blue-100 dark:bg-blue-500/20 text-blue-700 dark:text-blue-400',
+  graded:      'bg-emerald-100 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-400',
+};
+const STATUS_LABEL: Record<string, string> = {
+  in_progress: 'En curso', submitted: 'Enviado', graded: 'Calificado',
+};
 
 export const ExamResultsPage = () => {
   const { examId } = useParams<{ examId: string }>();
   const navigate = useNavigate();
 
-  const [exam, setExam] = useState<Exam | null>(null);
+  const [exam, setExam]           = useState<Exam | null>(null);
   const [questions, setQuestions] = useState<ExamQuestion[]>([]);
-  const [attempts, setAttempts] = useState<ExamAttempt[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [attempts, setAttempts]   = useState<ExamAttempt[]>([]);
+  const [loading, setLoading]     = useState(true);
+
+  // Detail modal state
+  const [selectedAttempt, setSelectedAttempt] = useState<ExamAttempt | null>(null);
+  const [detailAnswers, setDetailAnswers]       = useState<ExamAnswer[]>([]);
+  const [loadingDetail, setLoadingDetail]       = useState(false);
+  const [gradingId, setGradingId]               = useState<string | null>(null); // questionId being graded
+  const [gradeInput, setGradeInput]             = useState<Record<string, string>>({});
+  const [savingGrade, setSavingGrade]           = useState<string | null>(null);
 
   useEffect(() => {
     if (!examId) return;
     examsService.getExamResults(examId)
       .then(({ exam: e, questions: qs, attempts: atts }) => {
-        setExam(e); setQuestions(qs); setAttempts(atts);
+        setExam(e); setQuestions(qs); setAttempts(atts as any);
       })
       .catch(() => { toast.error('Error al cargar resultados'); navigate(-1); })
       .finally(() => setLoading(false));
   }, [examId]);
 
-  const submitted = attempts.filter(a => a.status !== 'in_progress');
-  const passed = submitted.filter(a => a.score !== null && exam && a.score >= exam.passing_score);
-  const avgScore = submitted.length > 0
-    ? submitted.reduce((s, a) => s + (a.score ?? 0), 0) / submitted.length : 0;
+  const openDetail = async (att: ExamAttempt) => {
+    setSelectedAttempt(att);
+    setLoadingDetail(true);
+    try {
+      const { answers } = await examsService.getAttemptDetail(att.id);
+      setDetailAnswers(answers);
+      // Pre-fill grade inputs from existing points_earned
+      const init: Record<string, string> = {};
+      answers.forEach(a => { if (a.points_earned !== null) init[a.question_id] = String(a.points_earned); });
+      setGradeInput(init);
+    } catch { toast.error('Error al cargar respuestas'); }
+    finally { setLoadingDetail(false); }
+  };
 
+  const handleSaveGrade = async (attemptId: string, questionId: string) => {
+    const val = parseFloat(gradeInput[questionId] ?? '0');
+    if (isNaN(val) || val < 0) { toast.error('Valor inválido'); return; }
+    setSavingGrade(questionId);
+    try {
+      const updated = await examsService.gradeAnswer(attemptId, questionId, val);
+      // Refresh attempt in list
+      setAttempts(prev => prev.map(a => a.id === updated.id ? { ...a, ...updated } : a));
+      setSelectedAttempt(prev => prev ? { ...prev, ...updated } : prev);
+      toast.success('Calificación guardada');
+      setGradingId(null);
+    } catch (e: any) {
+      toast.error(e.response?.data?.error?.message || 'Error al guardar');
+    } finally { setSavingGrade(null); }
+  };
+
+  const submitted = attempts.filter(a => a.status !== 'in_progress');
+  const passed    = submitted.filter(a => a.score !== null && exam && a.score >= (exam.scale_max * (exam.passing_score / 100)));
+  const avgScore  = submitted.length > 0 ? submitted.reduce((s, a) => s + (a.score ?? 0), 0) / submitted.length : 0;
   const formatDate = (d: string | null) => d
     ? new Date(d).toLocaleString('es-CO', { dateStyle: 'short', timeStyle: 'short' }) : '—';
 
@@ -47,21 +95,21 @@ export const ExamResultsPage = () => {
           </button>
           <div>
             <h1 className="text-2xl font-black text-slate-900 dark:text-white">{exam?.title}</h1>
-            <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">Resultados del examen</p>
+            <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">Resultados y calificación del examen</p>
           </div>
         </div>
 
-        {/* Stats cards */}
+        {/* Stats */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           {[
-            { label: 'Intentos', value: attempts.length, icon: Users, color: 'blue' },
-            { label: 'Enviados', value: submitted.length, icon: CheckCircle2, color: 'indigo' },
-            { label: 'Aprobados', value: passed.length, icon: Award, color: 'emerald' },
-            { label: 'Promedio', value: `${Math.round(avgScore)}%`, icon: TrendingUp, color: 'purple' },
+            { label: 'Intentos',  value: attempts.length,                       Icon: Users,       color: 'blue' },
+            { label: 'Enviados',  value: submitted.length,                      Icon: CheckCircle2, color: 'indigo' },
+            { label: 'Aprobados', value: passed.length,                         Icon: Award,       color: 'emerald' },
+            { label: 'Promedio',  value: `${avgScore.toFixed(2)} / ${exam?.scale_max ?? 5}`, Icon: TrendingUp, color: 'purple' },
           ].map(s => (
             <div key={s.label} className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm p-5">
               <div className={`w-9 h-9 rounded-xl bg-${s.color}-100 dark:bg-${s.color}-500/20 flex items-center justify-center mb-3`}>
-                <s.icon className={`w-5 h-5 text-${s.color}-600 dark:text-${s.color}-400`} />
+                <s.Icon className={`w-5 h-5 text-${s.color}-600 dark:text-${s.color}-400`} />
               </div>
               <p className="text-2xl font-black text-slate-900 dark:text-white">{s.value}</p>
               <p className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mt-0.5">{s.label}</p>
@@ -69,42 +117,11 @@ export const ExamResultsPage = () => {
           ))}
         </div>
 
-        {/* Score distribution bar */}
-        {submitted.length > 0 && exam && (
-          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 shadow-sm">
-            <h2 className="font-bold text-slate-800 dark:text-white mb-4 flex items-center gap-2">
-              <TrendingUp className="w-4 h-4 text-indigo-500" /> Distribución de puntajes
-            </h2>
-            <div className="flex items-end gap-1 h-20">
-              {[0,10,20,30,40,50,60,70,80,90].map(range => {
-                const count = submitted.filter(a => (a.score ?? 0) >= range && (a.score ?? 0) < range + 10).length;
-                const height = submitted.length > 0 ? (count / submitted.length) * 100 : 0;
-                const isPassing = range >= exam.passing_score;
-                return (
-                  <div key={range} className="flex-1 flex flex-col items-center gap-1">
-                    <div className="w-full flex items-end justify-center" style={{ height: '64px' }}>
-                      <div className={`w-full rounded-t-md transition-all ${isPassing ? 'bg-emerald-400 dark:bg-emerald-500' : 'bg-rose-300 dark:bg-rose-500'}`}
-                        style={{ height: `${height}%`, minHeight: count > 0 ? '4px' : '0' }} />
-                    </div>
-                    <span className="text-[10px] text-slate-400 font-bold">{range}</span>
-                  </div>
-                );
-              })}
-            </div>
-            <p className="text-xs text-slate-400 dark:text-slate-500 mt-2">
-              <span className="inline-block w-3 h-3 rounded-sm bg-emerald-400 mr-1" />aprueba
-              <span className="inline-block w-3 h-3 rounded-sm bg-rose-300 ml-3 mr-1" />no aprueba
-              · nota mínima: {exam.passing_score}%
-            </p>
-          </div>
-        )}
-
         {/* Attempts table */}
         <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
-          <div className="px-5 py-4 border-b border-slate-100 dark:border-slate-800">
-            <h2 className="font-bold text-slate-800 dark:text-white flex items-center gap-2">
-              <Users className="w-4 h-4 text-indigo-500" /> Detalle por estudiante
-            </h2>
+          <div className="px-5 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center gap-2">
+            <Users className="w-4 h-4 text-indigo-500" />
+            <h2 className="font-bold text-slate-800 dark:text-white">Detalle por estudiante</h2>
           </div>
 
           {attempts.length === 0 ? (
@@ -119,40 +136,39 @@ export const ExamResultsPage = () => {
                   <tr className="bg-slate-50 dark:bg-slate-800/50 text-xs font-black text-slate-500 dark:text-slate-400 uppercase tracking-wider">
                     <th className="text-left px-5 py-3">Estudiante</th>
                     <th className="text-center px-4 py-3">Estado</th>
-                    <th className="text-center px-4 py-3">Puntaje</th>
+                    <th className="text-center px-4 py-3">Nota</th>
                     <th className="text-center px-4 py-3">Pts</th>
                     <th className="text-center px-4 py-3">Resultado</th>
                     <th className="text-left px-4 py-3">Enviado</th>
+                    <th className="text-center px-4 py-3">Acción</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                   {attempts.map(att => {
-                    const hasPassed = att.score !== null && exam && att.score >= exam.passing_score;
+                    const passingNote = exam ? exam.scale_max * (exam.passing_score / 100) : 3;
+                    const hasPassed = att.score !== null && att.score >= passingNote;
+                    const studentLabel = (att as any).student_name || att.student_id.slice(0, 8) + '…';
+                    const studentEmail = (att as any).student_email || '';
                     return (
                       <tr key={att.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors">
                         <td className="px-5 py-3.5">
-                          <span className="font-semibold text-slate-700 dark:text-slate-200 font-mono text-xs">
-                            {att.student_id.slice(0, 8)}…
-                          </span>
+                          <p className="font-bold text-slate-800 dark:text-slate-200 text-sm">{studentLabel}</p>
+                          {studentEmail && <p className="text-xs text-slate-400">{studentEmail}</p>}
                         </td>
                         <td className="px-4 py-3.5 text-center">
-                          <span className={`text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full ${
-                            att.status === 'in_progress' ? 'bg-amber-100 dark:bg-amber-500/20 text-amber-700 dark:text-amber-400' :
-                            att.status === 'submitted' ? 'bg-blue-100 dark:bg-blue-500/20 text-blue-700 dark:text-blue-400' :
-                            'bg-emerald-100 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-400'
-                          }`}>
-                            {att.status === 'in_progress' ? 'En curso' : att.status === 'submitted' ? 'Enviado' : 'Calificado'}
+                          <span className={`text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full ${STATUS_BADGE[att.status]}`}>
+                            {STATUS_LABEL[att.status]}
                           </span>
                         </td>
                         <td className="px-4 py-3.5 text-center">
                           {att.score !== null
                             ? <span className={`font-black text-base ${hasPassed ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
-                                {Math.round(att.score)}%
+                                {att.score.toFixed(2)}
                               </span>
                             : <span className="text-slate-400">—</span>}
                         </td>
                         <td className="px-4 py-3.5 text-center text-slate-500 dark:text-slate-400 text-xs font-bold">
-                          {att.earned_points ?? '—'}/{att.total_points ?? '—'}
+                          {att.earned_points !== null ? att.earned_points.toFixed(2) : '—'}/{att.total_points !== null ? att.total_points.toFixed(2) : '—'}
                         </td>
                         <td className="px-4 py-3.5 text-center">
                           {att.status === 'in_progress'
@@ -163,6 +179,14 @@ export const ExamResultsPage = () => {
                         </td>
                         <td className="px-4 py-3.5 text-xs text-slate-500 dark:text-slate-400">
                           {formatDate(att.submitted_at)}
+                        </td>
+                        <td className="px-4 py-3.5 text-center">
+                          {att.status !== 'in_progress' && (
+                            <button onClick={() => openDetail(att)}
+                              className="flex items-center gap-1 px-3 py-1.5 bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 rounded-lg text-xs font-bold hover:bg-indigo-100 dark:hover:bg-indigo-500/20 transition mx-auto">
+                              <Eye className="w-3.5 h-3.5" /> Ver / Calificar
+                            </button>
+                          )}
                         </td>
                       </tr>
                     );
@@ -182,14 +206,137 @@ export const ExamResultsPage = () => {
                 <span className="flex-none w-6 h-6 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 text-xs font-black flex items-center justify-center">{i + 1}</span>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm text-slate-700 dark:text-slate-300 leading-snug">{q.text}</p>
-                  <p className="text-xs text-slate-400 mt-0.5">{q.points} pts · {q.type === 'multiple_choice' ? 'Opción múltiple' : 'Respuesta corta'}</p>
+                  <div className="flex items-center gap-3 mt-0.5">
+                    <p className="text-xs text-slate-400">{q.points} pts · {q.type === 'multiple_choice' ? 'Opción múltiple (auto)' : 'Respuesta corta (manual)'}</p>
+                    {q.type === 'short_answer' && <span className="text-[10px] font-bold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-500/10 px-1.5 py-0.5 rounded-md">Requiere calificación</span>}
+                  </div>
                 </div>
               </div>
             ))}
           </div>
         </div>
-
       </div>
+
+      {/* === GRADING DETAIL MODAL === */}
+      {selectedAttempt && (
+        <div className="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-slate-900 rounded-3xl w-full max-w-3xl max-h-[88vh] flex flex-col shadow-2xl border border-slate-200 dark:border-slate-800">
+
+            {/* Modal header */}
+            <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between flex-shrink-0">
+              <div>
+                <h3 className="font-black text-slate-900 dark:text-white">
+                  Respuestas de {(selectedAttempt as any).student_name || 'Estudiante'}
+                </h3>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  Estado: <span className={`font-bold ${STATUS_BADGE[selectedAttempt.status].split(' ')[2]}`}>{STATUS_LABEL[selectedAttempt.status]}</span>
+                  {selectedAttempt.score !== null && <> · Nota: <span className="font-bold text-indigo-600 dark:text-indigo-400">{selectedAttempt.score.toFixed(2)} / {exam?.scale_max}</span></>}
+                </p>
+              </div>
+              <button onClick={() => setSelectedAttempt(null)} className="p-2 bg-slate-100 dark:bg-slate-800 rounded-xl text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-700 transition">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Modal body */}
+            <div className="flex-1 overflow-y-auto p-6 space-y-5">
+              {loadingDetail ? (
+                <div className="flex items-center justify-center py-16">
+                  <Loader2 className="w-8 h-8 animate-spin text-indigo-500" />
+                </div>
+              ) : detailAnswers.length === 0 ? (
+                <div className="text-center py-12 text-slate-400">
+                  <AlignLeft className="w-10 h-10 mx-auto mb-3 opacity-40" />
+                  <p>Este estudiante no respondió ninguna pregunta</p>
+                </div>
+              ) : detailAnswers.map((ans, idx) => {
+                const isManual = ans.question_type === 'short_answer';
+                const isEditing = gradingId === ans.question_id;
+                const maxPts = ans.points ?? 1;
+                const currentPts = ans.points_earned;
+                const isCorrect = ans.is_correct;
+
+                return (
+                  <div key={ans.id} className={`rounded-2xl border p-5 ${isManual ? 'border-amber-200 dark:border-amber-500/30 bg-amber-50/30 dark:bg-amber-500/5' : isCorrect ? 'border-emerald-200 dark:border-emerald-500/30 bg-emerald-50/20 dark:bg-emerald-500/5' : 'border-rose-200 dark:border-rose-500/30 bg-rose-50/20 dark:bg-rose-500/5'}`}>
+
+                    {/* Question header */}
+                    <div className="flex items-start justify-between gap-3 mb-3">
+                      <div className="flex items-start gap-3">
+                        <span className="flex-none w-7 h-7 rounded-lg bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-black flex items-center justify-center">{idx + 1}</span>
+                        <div>
+                          <p className="text-sm font-semibold text-slate-800 dark:text-slate-200 leading-snug">{ans.question_text}</p>
+                          <div className="flex items-center gap-2 mt-1">
+                            <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">{ans.skill_category}</span>
+                            {isManual
+                              ? <span className="text-[10px] font-black uppercase px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-500/20 text-amber-600 dark:text-amber-400">Writing/Oral — Calificación manual</span>
+                              : <span className="text-[10px] font-black uppercase px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-500">Opción múltiple — Auto</span>}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Points badge */}
+                      <div className={`flex-none text-right text-xs font-black rounded-xl px-3 py-1.5 ${isManual ? 'bg-amber-100 dark:bg-amber-500/20 text-amber-700 dark:text-amber-400' : isCorrect ? 'bg-emerald-100 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-400' : 'bg-rose-100 dark:bg-rose-500/20 text-rose-600 dark:text-rose-400'}`}>
+                        {currentPts !== null ? `${currentPts} / ${maxPts}` : `— / ${maxPts}`} pts
+                      </div>
+                    </div>
+
+                    {/* Student answer */}
+                    <div className="bg-white dark:bg-slate-800 rounded-xl p-3 border border-slate-100 dark:border-slate-700 mb-3">
+                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Respuesta del estudiante</p>
+                      <p className="text-sm text-slate-700 dark:text-slate-300 whitespace-pre-wrap leading-relaxed">
+                        {ans.answer_text || <span className="italic text-slate-400">Sin respuesta</span>}
+                      </p>
+                    </div>
+
+                    {/* Correct answer (MC only) */}
+                    {!isManual && ans.correct_answer !== null && (
+                      <div className="bg-emerald-50 dark:bg-emerald-500/10 rounded-xl p-3 border border-emerald-100 dark:border-emerald-500/20 mb-3">
+                        <p className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider mb-0.5">Respuesta correcta</p>
+                        <p className="text-sm text-emerald-800 dark:text-emerald-300 font-semibold">Opción {String.fromCharCode(65 + parseInt(ans.correct_answer ?? '0'))}</p>
+                      </div>
+                    )}
+
+                    {/* Manual grading controls */}
+                    {isManual && selectedAttempt.status !== 'in_progress' && (
+                      <div className="border-t border-amber-200 dark:border-amber-500/20 pt-3 mt-1">
+                        {isEditing ? (
+                          <div className="flex items-center gap-3">
+                            <label className="text-xs font-bold text-slate-500">Puntos (0–{maxPts}):</label>
+                            <input type="number" min="0" max={maxPts} step="0.25"
+                              value={gradeInput[ans.question_id] ?? ''}
+                              onChange={e => setGradeInput(prev => ({ ...prev, [ans.question_id]: e.target.value }))}
+                              className="w-24 px-3 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-bold text-center outline-none focus:border-indigo-500" />
+                            <button onClick={() => handleSaveGrade(selectedAttempt.id, ans.question_id)}
+                              disabled={savingGrade === ans.question_id}
+                              className="flex items-center gap-1.5 px-4 py-1.5 bg-indigo-600 text-white rounded-xl text-xs font-bold hover:bg-indigo-700 transition disabled:opacity-50">
+                              {savingGrade === ans.question_id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />} Guardar
+                            </button>
+                            <button onClick={() => setGradingId(null)} className="text-xs text-slate-400 hover:text-slate-600 font-bold">Cancelar</button>
+                          </div>
+                        ) : (
+                          <button onClick={() => { setGradingId(ans.question_id); setGradeInput(prev => ({ ...prev, [ans.question_id]: String(currentPts ?? '') })); }}
+                            className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-100 dark:bg-amber-500/20 text-amber-700 dark:text-amber-300 rounded-xl text-xs font-bold hover:bg-amber-200 dark:hover:bg-amber-500/30 transition">
+                            <Edit3 className="w-3.5 h-3.5" />
+                            {currentPts !== null ? 'Modificar calificación' : 'Calificar esta respuesta'}
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Modal footer */}
+            <div className="px-6 py-4 border-t border-slate-200 dark:border-slate-800 flex justify-end flex-shrink-0 bg-slate-50 dark:bg-slate-800/40 rounded-b-3xl">
+              <button onClick={() => setSelectedAttempt(null)}
+                className="px-5 py-2.5 bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-xl font-bold text-sm hover:bg-slate-300 dark:hover:bg-slate-600 transition">
+                Cerrar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </Layout>
   );
 };
