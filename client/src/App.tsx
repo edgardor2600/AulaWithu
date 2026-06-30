@@ -195,7 +195,7 @@ function App() {
           <Route
             path="/exams/:examId/take"
             element={
-              <ProtectedRoute requiredRole="student">
+              <ProtectedRoute>
                 <TakeExamPage />
               </ProtectedRoute>
             }

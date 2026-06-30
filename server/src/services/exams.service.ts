@@ -540,7 +540,7 @@ export class ExamsService {
   static async getExamResults(
     examId: string,
     teacherId: string
-  ): Promise<{ exam: Exam; questions: ExamQuestion[]; attempts: ExamAttempt[] }> {
+  ): Promise<{ exam: Exam; questions: ExamQuestion[]; attempts: any[] }> {
     const exam = await ExamsRepository.getById(examId);
     if (!exam) throw new NotFoundError('Examen no encontrado');
 
@@ -550,6 +550,53 @@ export class ExamsService {
     const attempts  = await ExamsRepository.getAttemptsByExam(examId);
 
     return { exam, questions, attempts };
+  }
+
+  static async getAttemptDetail(
+    attemptId: string,
+    teacherId: string
+  ): Promise<{ attempt: any; answers: any[] }> {
+    const data = await ExamsRepository.getAttemptWithAnswers(attemptId);
+    if (!data) throw new NotFoundError('Intento no encontrado');
+
+    // Verify teacher owns the exam
+    const exam = await ExamsRepository.getById(data.attempt.exam_id);
+    if (!exam) throw new NotFoundError('Examen no encontrado');
+    await this.assertTeacherOwnsClass(exam.class_id, teacherId);
+
+    return data;
+  }
+
+  static async gradeAttemptAnswer(
+    attemptId: string,
+    questionId: string,
+    pointsEarned: number,
+    teacherId: string
+  ): Promise<ExamAttempt> {
+    const data = await ExamsRepository.getAttemptWithAnswers(attemptId);
+    if (!data) throw new NotFoundError('Intento no encontrado');
+
+    const exam = await ExamsRepository.getById(data.attempt.exam_id);
+    if (!exam) throw new NotFoundError('Examen no encontrado');
+    await this.assertTeacherOwnsClass(exam.class_id, teacherId);
+
+    if (data.attempt.status === 'in_progress') {
+      throw new ValidationError('El estudiante aún no ha enviado el examen');
+    }
+
+    // Validate points against question max
+    const question = await ExamsRepository.getQuestionById(questionId);
+    if (!question) throw new NotFoundError('Pregunta no encontrada');
+    if (pointsEarned < 0 || pointsEarned > question.points) {
+      throw new ValidationError(`Los puntos deben estar entre 0 y ${question.points}`);
+    }
+
+    await ExamsRepository.gradeAnswer(attemptId, questionId, pointsEarned);
+
+    // Recalculate and finalize grading
+    const updated = await ExamsRepository.finalizeGrading(attemptId);
+    if (!updated) throw new NotFoundError('Error al actualizar la calificación');
+    return updated;
   }
 
   // ============================================

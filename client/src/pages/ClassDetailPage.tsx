@@ -113,21 +113,21 @@ export const ClassDetailPage = () => {
           </div>
         </div>
 
-        {/* Tabs (Only for teachers/admins) */}
-        {isTeacher && isOwner && (
-          <div className="bg-white dark:bg-slate-900 rounded-t-2xl shadow-sm border border-b-0 border-gray-200 dark:border-slate-800/60 overflow-hidden">
-            <div className="flex border-b border-gray-200 dark:border-slate-800/60 flex-wrap">
-              <button
-                onClick={() => setActiveTab('topics')}
-                className={`flex-1 sm:flex-none flex justify-center sm:justify-start items-center gap-2 px-6 py-4 font-bold transition ${
-                  activeTab === 'topics'
-                    ? 'text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400 bg-blue-50/50 dark:bg-blue-500/5'
-                    : 'text-gray-600 dark:text-slate-400 hover:text-gray-900 dark:hover:text-slate-200 hover:bg-gray-50 dark:hover:bg-slate-800/50'
-                }`}
-              >
-                <BookOpen className="w-5 h-5" />
-                Temas
-              </button>
+        {/* Tabs */}
+        <div className="bg-white dark:bg-slate-900 rounded-t-2xl shadow-sm border border-b-0 border-gray-200 dark:border-slate-800/60 overflow-hidden">
+          <div className="flex border-b border-gray-200 dark:border-slate-800/60 flex-wrap">
+            <button
+              onClick={() => setActiveTab('topics')}
+              className={`flex-1 sm:flex-none flex justify-center sm:justify-start items-center gap-2 px-6 py-4 font-bold transition ${
+                activeTab === 'topics'
+                  ? 'text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400 bg-blue-50/50 dark:bg-blue-500/5'
+                  : 'text-gray-600 dark:text-slate-400 hover:text-gray-900 dark:hover:text-slate-200 hover:bg-gray-50 dark:hover:bg-slate-800/50'
+              }`}
+            >
+              <BookOpen className="w-5 h-5" />
+              Temas
+            </button>
+            {isTeacher && isOwner && (
               <button
                 onClick={() => setActiveTab('groups')}
                 className={`flex-1 sm:flex-none flex justify-center sm:justify-start items-center gap-2 px-6 py-4 font-bold transition ${
@@ -139,25 +139,23 @@ export const ClassDetailPage = () => {
                 <Users className="w-5 h-5" />
                 Grupos
               </button>
-              <button
-                onClick={() => setActiveTab('exams')}
-                className={`flex-1 sm:flex-none flex justify-center sm:justify-start items-center gap-2 px-6 py-4 font-bold transition ${
-                  activeTab === 'exams'
-                    ? 'text-indigo-600 dark:text-indigo-400 border-b-2 border-indigo-600 dark:border-indigo-400 bg-indigo-50/50 dark:bg-indigo-500/5'
-                    : 'text-gray-600 dark:text-slate-400 hover:text-gray-900 dark:hover:text-slate-200 hover:bg-gray-50 dark:hover:bg-slate-800/50'
-                }`}
-              >
-                <ClipboardList className="w-5 h-5" />
-                Exámenes
-              </button>
-            </div>
+            )}
+            <button
+              onClick={() => setActiveTab('exams')}
+              className={`flex-1 sm:flex-none flex justify-center sm:justify-start items-center gap-2 px-6 py-4 font-bold transition ${
+                activeTab === 'exams'
+                  ? 'text-indigo-600 dark:text-indigo-400 border-b-2 border-indigo-600 dark:border-indigo-400 bg-indigo-50/50 dark:bg-indigo-500/5'
+                  : 'text-gray-600 dark:text-slate-400 hover:text-gray-900 dark:hover:text-slate-200 hover:bg-gray-50 dark:hover:bg-slate-800/50'
+              }`}
+            >
+              <ClipboardList className="w-5 h-5" />
+              Exámenes
+            </button>
           </div>
-        )}
+        </div>
 
         {/* Content Area */}
-        <div className={`bg-white dark:bg-slate-900 shadow-sm border border-gray-200 dark:border-slate-800/60 min-h-[400px] p-6 md:p-8 ${
-          (isTeacher && isOwner) ? 'rounded-b-2xl border-t-0' : 'rounded-2xl'
-        }`}>
+        <div className={`bg-white dark:bg-slate-900 shadow-sm border border-gray-200 dark:border-slate-800/60 min-h-[400px] p-6 md:p-8 rounded-b-2xl border-t-0`}>
           {/* Topics Tab */}
           {activeTab === 'topics' && id && (
             <TopicsPanel classId={id} className={classData.title} />
@@ -168,9 +166,9 @@ export const ClassDetailPage = () => {
             <GroupsPanel classId={id} className={classData.title} />
           )}
 
-          {/* Exams Tab (Teacher only) */}
-          {activeTab === 'exams' && isTeacher && isOwner && id && (
-            <ExamsPanel classId={id} />
+          {/* Exams Tab */}
+          {activeTab === 'exams' && id && (
+            <ExamsPanel classId={id} isTeacher={isTeacher && isOwner} />
           )}
         </div>
       </div>
