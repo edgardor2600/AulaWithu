@@ -14,7 +14,23 @@
 import { Pool, QueryResult } from 'pg';
 import dotenv from 'dotenv';
 
+import { types } from 'pg';
+
 dotenv.config();
+
+/**
+ * Fix: pg by default parses TIMESTAMP WITHOUT TIME ZONE (OID 1114) into a
+ * JavaScript Date, treating the raw DB string (e.g. "13:40:00") as LOCAL time.
+ * In America/Bogota (UTC-5) this shifts the value by +5h when serialised to UTC.
+ *
+ * Solution: return raw ISO strings so the server never misinterprets them.
+ * The client receives e.g. "2026-07-01T13:40:00" and new Date() on the client
+ * treats it as local (Colombia) time — exactly what we want.
+ */
+// OID 1114 = TIMESTAMP WITHOUT TIME ZONE
+types.setTypeParser(1114, (val: string) => val);
+// OID 1184 = TIMESTAMP WITH TIME ZONE (keep consistent)
+types.setTypeParser(1184, (val: string) => val);
 
 let pool: Pool | null = null;
 

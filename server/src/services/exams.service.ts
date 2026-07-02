@@ -290,7 +290,7 @@ export class ExamsService {
     return exam;
   }
 
-  static async getExamsByClass(classId: string, requesterId: string): Promise<Exam[]> {
+  static async getExamsByClass(classId: string, requesterId: string): Promise<(Exam & { my_attempt_status?: string | null })[]> {
     const user = await UsersRepository.getById(requesterId);
     if (!user) throw new NotFoundError('User not found');
 
@@ -305,7 +305,17 @@ export class ExamsService {
         [requesterId, classId]
       );
       const studentGroupIds = enrollments.map(e => e.group_id);
-      return await ExamsRepository.getByClassAndGroups(classId, studentGroupIds);
+      const exams = await ExamsRepository.getByClassAndGroups(classId, studentGroupIds);
+
+      // Attach attempt status so the student UI knows if the exam was already taken
+      const withAttempts = await Promise.all(exams.map(async (exam) => {
+        const att = await getOne<{ status: string }>(
+          `SELECT status FROM exam_attempts WHERE exam_id = $1 AND student_id = $2 ORDER BY started_at DESC LIMIT 1`,
+          [exam.id, requesterId]
+        );
+        return { ...exam, my_attempt_status: att?.status ?? null };
+      }));
+      return withAttempts;
     }
 
     // Teacher/Admin: see all exams including drafts
@@ -359,14 +369,9 @@ export class ExamsService {
     const exam = await ExamsRepository.getById(examId);
     if (!exam) throw new NotFoundError('Examen no encontrado');
 
-    // Can only edit drafts — once published, use specific endpoints
-    if (exam.status !== 'draft') {
-      throw new ValidationError('Solo se pueden editar exámenes en estado borrador (draft). Para modificar uno activo, ciérralo primero.');
-    }
-
     await this.assertTeacherOwnsClass(exam.class_id, teacherId);
 
-    // Validate time window
+    // Validate time window if both dates provided
     if (data.availableFrom && data.availableTo) {
       const from = new Date(data.availableFrom);
       const to   = new Date(data.availableTo);

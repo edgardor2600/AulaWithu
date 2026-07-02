@@ -271,9 +271,9 @@ export class ExamsRepository {
     );
   }
 
-  static async getAttemptsByExam(examId: string): Promise<(ExamAttempt & { student_name: string; student_email: string })[]> {
-    return await getAll<ExamAttempt & { student_name: string; student_email: string }>(
-      `SELECT ea.*, u.name as student_name, u.email as student_email
+  static async getAttemptsByExam(examId: string): Promise<(ExamAttempt & { student_name: string; student_username: string })[]> {
+    return await getAll<ExamAttempt & { student_name: string; student_username: string }>(
+      `SELECT ea.*, u.name as student_name, u.username as student_username
        FROM exam_attempts ea
        LEFT JOIN users u ON u.id = ea.student_id
        WHERE ea.exam_id = $1 ORDER BY ea.started_at DESC`,
