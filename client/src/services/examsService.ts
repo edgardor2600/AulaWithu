@@ -20,6 +20,8 @@ export interface Exam {
   created_by: string;
   created_at: string;
   updated_at: string;
+  // Student-only: attempt status for this user (null = not started)
+  my_attempt_status?: 'in_progress' | 'submitted' | 'graded' | null;
 }
 
 export interface ExamQuestion {
@@ -41,7 +43,7 @@ export interface ExamAttempt {
   exam_id: string;
   student_id: string;
   student_name?: string;   // Joined from users table (teacher view)
-  student_email?: string;  // Joined from users table (teacher view)
+  student_username?: string;  // Joined from users table (teacher view)
   status: 'in_progress' | 'submitted' | 'graded';
   started_at: string;
   submitted_at: string | null;

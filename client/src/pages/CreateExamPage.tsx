@@ -8,6 +8,42 @@ import {
   ArrowLeft, Save, Loader2, BookOpen, HelpCircle, Users
 } from 'lucide-react';
 
+/**
+ * Parse a raw DB timestamp string to a JS Date in Colombia time.
+ * DB column is TIMESTAMP WITHOUT TZ → returns strings like "2026-07-01 13:40:00" (no Z).
+ * We append -05:00 so JS treats the value as Colombia time, not UTC.
+ */
+const parseDbDate = (raw: string): Date => {
+  if (raw.endsWith('Z') || /[+-]\d{2}:?\d{2}$/.test(raw)) return new Date(raw);
+  return new Date(raw.replace(' ', 'T') + '-05:00');
+};
+
+/**
+ * Convert a DB timestamp string to the "YYYY-MM-DDTHH:mm" format
+ * expected by <input type="datetime-local">, showing Colombia local time.
+ */
+const toLocalInput = (raw: string): string => {
+  const d = parseDbDate(raw);
+  const fmt = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Bogota',
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', hour12: false,
+  });
+  const parts = Object.fromEntries(fmt.formatToParts(d).map(p => [p.type, p.value]));
+  const h = parts.hour === '24' ? '00' : parts.hour;
+  return `${parts.year}-${parts.month}-${parts.day}T${h}:${parts.minute}`;
+};
+
+/**
+ * Convert a "YYYY-MM-DDTHH:mm" datetime-local input value (Colombia time)
+ * to a plain local string stored in the DB (no TZ conversion needed since
+ * DB column is TIMESTAMP WITHOUT TZ).
+ * We store Colombia wall-clock time directly so the DB is consistent.
+ */
+const colombiaToDb = (localStr: string): string =>
+  // "2026-07-01T08:40" → "2026-07-01 08:40:00"
+  localStr.replace('T', ' ') + ':00';
+
 export const CreateExamPage = () => {
   const { classId, examId } = useParams<{ classId: string; examId?: string }>();
   const navigate = useNavigate();
@@ -49,8 +85,8 @@ export const CreateExamPage = () => {
         setDescription(e.description || '');
         setDurationMinutes(e.duration_minutes);
         setPassingScore(e.passing_score);
-        setAvailableFrom(e.available_from ? e.available_from.slice(0, 16) : '');
-        setAvailableTo(e.available_to ? e.available_to.slice(0, 16) : '');
+        setAvailableFrom(e.available_from ? toLocalInput(e.available_from) : '');
+        setAvailableTo(e.available_to   ? toLocalInput(e.available_to)   : '');
         setSkillType(e.skill_type || 'complete');
         setGroupId(e.group_id || '');
         setLoading(false);
@@ -66,8 +102,8 @@ export const CreateExamPage = () => {
     }
     setSaving(true);
 
-    const isoAvailableFrom = availableFrom ? new Date(availableFrom).toISOString() : null;
-    const isoAvailableTo = availableTo ? new Date(availableTo).toISOString() : null;
+    const dbAvailableFrom = availableFrom ? colombiaToDb(availableFrom) : null;
+    const dbAvailableTo   = availableTo   ? colombiaToDb(availableTo)   : null;
 
     try {
       if (isEditing && exam) {
@@ -78,12 +114,17 @@ export const CreateExamPage = () => {
           durationMinutes,
           passingScore,
           skillType,
-          availableFrom: isoAvailableFrom,
-          availableTo: isoAvailableTo,
+          availableFrom: dbAvailableFrom,
+          availableTo: dbAvailableTo,
         });
         setExam(updated);
         toast.success('Examen actualizado');
-        navigate(`/exams/${exam.id}/builder`);
+        // Only go to builder if still in draft; otherwise go back
+        if (updated.status === 'draft') {
+          navigate(`/exams/${exam.id}/builder`);
+        } else {
+          navigate(-1);
+        }
       } else {
         const created = await examsService.createExam({
           classId: classId!,
@@ -94,8 +135,8 @@ export const CreateExamPage = () => {
           passingScore,
           skillType,
           questionCount,
-          availableFrom: isoAvailableFrom,
-          availableTo: isoAvailableTo,
+          availableFrom: dbAvailableFrom,
+          availableTo: dbAvailableTo,
         });
         toast.success('Examen creado con éxito — redirigiendo al constructor');
         navigate(`/exams/${created.id}/builder`, { replace: true });
@@ -131,6 +172,21 @@ export const CreateExamPage = () => {
             </p>
           </div>
         </div>
+
+        {/* Banner for active/closed exams */}
+        {isEditing && exam && exam.status !== 'draft' && (
+          <div className="flex items-start gap-3 bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/30 rounded-2xl px-5 py-4">
+            <span className="text-amber-500 text-lg">⚠️</span>
+            <div>
+              <p className="text-sm font-bold text-amber-700 dark:text-amber-400">
+                Examen {exam.status === 'active' ? 'activo' : 'cerrado'} — edición restringida
+              </p>
+              <p className="text-xs text-amber-600/80 dark:text-amber-400/70 mt-0.5">
+                Solo puedes modificar el horario, título, descripción y grupo. Las preguntas no se pueden cambiar.
+              </p>
+            </div>
+          </div>
+        )}
 
         {/* Exam metadata form */}
         <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800/80 shadow-sm p-8 space-y-6">
@@ -223,7 +279,9 @@ export const CreateExamPage = () => {
             <button onClick={handleSaveMeta} disabled={saving}
               className="flex items-center gap-2 px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl font-black text-sm transition disabled:opacity-50 shadow-md shadow-indigo-100 dark:shadow-none">
               {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-              {isEditing ? 'Guardar y Continuar al Constructor' : 'Comenzar Diseño de Preguntas'}
+              {isEditing
+                ? (exam?.status === 'draft' ? 'Guardar y Continuar al Constructor' : 'Guardar Cambios')
+                : 'Comenzar Diseño de Preguntas'}
             </button>
           </div>
         </div>

@@ -148,12 +148,12 @@ export const ExamResultsPage = () => {
                     const passingNote = exam ? exam.scale_max * (exam.passing_score / 100) : 3;
                     const hasPassed = att.score !== null && att.score >= passingNote;
                     const studentLabel = (att as any).student_name || att.student_id.slice(0, 8) + '…';
-                    const studentEmail = (att as any).student_email || '';
+                    const studentUsername = (att as any).student_username || '';
                     return (
                       <tr key={att.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors">
                         <td className="px-5 py-3.5">
                           <p className="font-bold text-slate-800 dark:text-slate-200 text-sm">{studentLabel}</p>
-                          {studentEmail && <p className="text-xs text-slate-400">{studentEmail}</p>}
+                          {studentUsername && <p className="text-xs text-slate-400">@{studentUsername}</p>}
                         </td>
                         <td className="px-4 py-3.5 text-center">
                           <span className={`text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full ${STATUS_BADGE[att.status]}`}>
