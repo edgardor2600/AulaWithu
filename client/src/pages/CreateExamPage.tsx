@@ -36,13 +36,12 @@ const toLocalInput = (raw: string): string => {
 
 /**
  * Convert a "YYYY-MM-DDTHH:mm" datetime-local input value (Colombia time)
- * to a plain local string stored in the DB (no TZ conversion needed since
- * DB column is TIMESTAMP WITHOUT TZ).
- * We store Colombia wall-clock time directly so the DB is consistent.
+ * to an ISO8601 string with the Colombia UTC offset (-05:00).
+ * This passes the server's .isISO8601() validator and is unambiguous.
+ * "2026-07-01T08:40" → "2026-07-01T08:40:00-05:00"
  */
 const colombiaToDb = (localStr: string): string =>
-  // "2026-07-01T08:40" → "2026-07-01 08:40:00"
-  localStr.replace('T', ' ') + ':00';
+  localStr + ':00-05:00';
 
 export const CreateExamPage = () => {
   const { classId, examId } = useParams<{ classId: string; examId?: string }>();

@@ -166,17 +166,26 @@ export const ExamsPanel = ({ classId, isTeacher = false }: ExamsPanelProps) => {
                       ? 'border-rose-200 dark:border-rose-500/30'
                       : 'border-slate-200 dark:border-slate-800'
                   }`}>
+                  {/* Banner for expired-but-not-closed exams */}
+                  {expired && (
+                    <div className="flex items-center justify-between gap-3 mb-3 px-3 py-2 bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/30 rounded-xl text-xs text-rose-600 dark:text-rose-400 font-semibold">
+                      <span>⚠️ Este examen ya expiró. Ciérralo para que quede registrado correctamente.</span>
+                      <button
+                        onClick={() => handleClose(exam)}
+                        disabled={closingId === exam.id}
+                        className="flex items-center gap-1 px-2.5 py-1 bg-rose-600 hover:bg-rose-700 text-white rounded-lg font-bold text-[10px] uppercase tracking-wider transition disabled:opacity-50 whitespace-nowrap"
+                      >
+                        {closingId === exam.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <X className="w-3 h-3" />}
+                        Cerrar ahora
+                      </button>
+                    </div>
+                  )}
                   <div className="flex items-start justify-between gap-4">
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-1 flex-wrap">
                         <h3 className="font-bold text-slate-900 dark:text-white truncate">{exam.title}</h3>
                         <TeacherStatusPill exam={exam} />
-                        {/* Warning for expired-but-not-closed */}
-                        {expired && (
-                          <span className="text-[10px] text-rose-500 dark:text-rose-400 font-semibold">
-                            — Cierra automáticamente al refrescar
-                          </span>
-                        )}
+
                       </div>
                       {exam.description && (
                         <p className="text-sm text-slate-500 dark:text-slate-400 line-clamp-1 mb-2">{exam.description}</p>
@@ -215,10 +224,10 @@ export const ExamsPanel = ({ classId, isTeacher = false }: ExamsPanelProps) => {
                         <button onClick={() => handleClose(exam)} disabled={closingId === exam.id}
                           className={`p-2 rounded-xl transition disabled:opacity-50 ${
                             expired
-                              ? 'text-rose-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-500/10'
+                              ? 'text-rose-500 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-500/10 ring-1 ring-rose-300 dark:ring-rose-500/40'
                               : 'text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-500/10'
                           }`}
-                          title={expired ? 'Finalizar examen (expirado)' : 'Cerrar examen'}>
+                          title={expired ? 'Finalizar y cerrar examen expirado' : 'Cerrar examen'}>
                           {closingId === exam.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <X className="w-4 h-4" />}
                         </button>
                       )}
@@ -234,7 +243,14 @@ export const ExamsPanel = ({ classId, isTeacher = false }: ExamsPanelProps) => {
   }
 
   // ── STUDENT VIEW ───────────────────────────────────────────────
-  const availableExams = exams.filter(e => e.status !== 'draft');
+  // Hide: drafts, and expired exams the student hasn't submitted
+  // (no point showing them — they can't take them, and nothing useful to display)
+  const availableExams = exams.filter(e => {
+    if (e.status === 'draft') return false;
+    // If expired and student hasn't completed it → hide
+    if (isExpired(e) && e.my_attempt_status !== 'submitted' && e.my_attempt_status !== 'graded') return false;
+    return true;
+  });
 
   return (
     <div className="space-y-5">

@@ -13,6 +13,18 @@ import {
   ForbiddenError,
 } from '../utils/AppError';
 
+/**
+ * Parse a DB timestamp string correctly regardless of whether it has a TZ suffix.
+ * The pg type-parser (OID 1114) returns raw strings like "2026-07-03T11:32:00"
+ * without any timezone info. Node.js treats those as UTC, which is wrong —
+ * the values were stored as Colombia wall-clock time (UTC-5).
+ * We append the Colombia offset so Date comparisons are accurate.
+ */
+const parseColombiaTs = (raw: string): Date => {
+  if (raw.endsWith('Z') || /[+-]\d{2}:?\d{2}$/.test(raw)) return new Date(raw);
+  return new Date(raw.replace(' ', 'T') + '-05:00');
+};
+
 
 // ============================================================
 // ACADEMIC TEMPLATES (Harvard / TOEFL / IELTS style)
@@ -619,10 +631,10 @@ export class ExamsService {
 
     // Check time window
     const now = new Date();
-    if (exam.available_from && new Date(exam.available_from) > now) {
-      throw new ValidationError(`El examen aún no ha abierto. Disponible desde: ${new Date(exam.available_from).toLocaleString('es-CO')}`);
+    if (exam.available_from && parseColombiaTs(exam.available_from) > now) {
+      throw new ValidationError(`El examen aún no ha abierto. Disponible desde: ${parseColombiaTs(exam.available_from).toLocaleString('es-CO', { timeZone: 'America/Bogota' })}`);
     }
-    if (exam.available_to && new Date(exam.available_to) < now) {
+    if (exam.available_to && parseColombiaTs(exam.available_to) < now) {
       throw new ValidationError('El período de este examen ya ha cerrado');
     }
 
@@ -673,7 +685,7 @@ export class ExamsService {
 
     // Validate time hasn't expired
     const exam = await ExamsRepository.getById(attempt.exam_id);
-    if (exam?.available_to && new Date(exam.available_to) < new Date()) {
+    if (exam?.available_to && parseColombiaTs(exam.available_to) < new Date()) {
       // Auto-submit if time expired
       await this.submitAttempt(attemptId, studentId);
       throw new ValidationError('El tiempo del examen ha expirado. Tu examen fue enviado automáticamente.');
