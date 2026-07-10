@@ -8,8 +8,18 @@ import {
 import toast from 'react-hot-toast';
 import {
   Clock, ChevronLeft, ChevronRight, Send, Loader2,
-  CheckCircle2, XCircle, BookOpen, AlertTriangle, Eye, ArrowRight,
+  CheckCircle2, XCircle, BookOpen, AlertTriangle, Eye, ArrowRight, WifiOff,
 } from 'lucide-react';
+
+/**
+ * Parse a DB timestamp (may or may not have TZ suffix) as Colombia wall-clock time.
+ * The pg driver returns bare strings like "2026-07-10T10:00:00" without a TZ.
+ * JS Date treats those as UTC, which is wrong. We force -05:00.
+ */
+const parseDbDate = (raw: string): Date => {
+  if (raw.endsWith('Z') || /[+-]\d{2}:?\d{2}$/.test(raw)) return new Date(raw);
+  return new Date(raw.replace(' ', 'T') + '-05:00');
+};
 
 // ── Timer ─────────────────────────────────────────────────────────────────────
 const useTimer = (totalSeconds: number, onExpire: () => void) => {
@@ -259,6 +269,8 @@ export const TakeExamPage = () => {
   const [currentIdx, setCurrentIdx] = useState(0);
   const [submitting, setSubmitting] = useState(false);
   const [savingId, setSavingId] = useState<string | null>(null);
+  // Track questions whose last save attempt failed (network error)
+  const [failedSaves, setFailedSaves] = useState<Set<string>>(new Set());
 
   useEffect(() => { init(); }, [examId]);
 
@@ -300,8 +312,10 @@ export const TakeExamPage = () => {
     await doSubmit();
   }, [attempt, phase]);
 
+  // Bug A fix: parse started_at using Colombia offset (-05:00) to avoid
+  // timezone drift on devices set to a different local timezone.
   const elapsedSeconds = attempt
-    ? Math.floor((Date.now() - new Date(attempt.started_at).getTime()) / 1000)
+    ? Math.floor((Date.now() - parseDbDate(attempt.started_at).getTime()) / 1000)
     : 0;
   const totalSeconds = (exam?.duration_minutes ?? 0) * 60;
   const remainingSeconds = Math.max(0, totalSeconds - elapsedSeconds);
@@ -309,12 +323,20 @@ export const TakeExamPage = () => {
 
   const saveAnswer = async (questionId: string, value: string) => {
     if (!attempt || phase !== 'taking') return;
+    // Optimistic update: show the answer immediately in the UI
     setAnswers(prev => ({ ...prev, [questionId]: value }));
+    // Clear any previous failure flag for this question
+    setFailedSaves(prev => { const next = new Set(prev); next.delete(questionId); return next; });
     setSavingId(questionId);
     try {
       await examsService.saveAnswer(attempt.id, questionId, value);
     } catch {
-      // Silent – answer kept in local state
+      // Bug B fix: mark this question as failed so the student can see it
+      setFailedSaves(prev => new Set(prev).add(questionId));
+      toast.error('⚠️ No se pudo guardar la respuesta. Verifica tu conexión e inténtalo de nuevo.', {
+        id: `save-fail-${questionId}`,
+        duration: 5000,
+      });
     } finally { setSavingId(null); }
   };
 
@@ -400,19 +422,43 @@ export const TakeExamPage = () => {
 
         {/* Question navigator */}
         <div className="flex flex-wrap gap-2">
-          {questions.map((q, i) => (
-            <button key={q.id} onClick={() => setCurrentIdx(i)}
-              className={`w-9 h-9 rounded-xl text-sm font-bold transition-all ${
-                i === currentIdx
-                  ? 'bg-indigo-600 text-white shadow-md'
-                  : answers[q.id]
-                    ? 'bg-emerald-100 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-500/30'
-                    : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'
-              }`}>
-              {i + 1}
-            </button>
-          ))}
+          {questions.map((q, i) => {
+            const hasFailed = failedSaves.has(q.id);
+            return (
+              <button key={q.id} onClick={() => setCurrentIdx(i)}
+                title={hasFailed ? 'Respuesta NO guardada – revisa tu conexión' : undefined}
+                className={`w-9 h-9 rounded-xl text-sm font-bold transition-all relative ${
+                  i === currentIdx
+                    ? 'bg-indigo-600 text-white shadow-md'
+                    : hasFailed
+                      ? 'bg-rose-100 dark:bg-rose-500/20 text-rose-700 dark:text-rose-400 border-2 border-rose-400 dark:border-rose-500'
+                      : answers[q.id]
+                        ? 'bg-emerald-100 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-500/30'
+                        : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'
+                }`}>
+                {i + 1}
+                {hasFailed && (
+                  <span className="absolute -top-1 -right-1 w-3 h-3 bg-rose-500 rounded-full border border-white dark:border-slate-900" />
+                )}
+              </button>
+            );
+          })}
         </div>
+
+        {/* Unsaved warning banner */}
+        {failedSaves.size > 0 && (
+          <div className="flex items-center gap-3 bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/30 rounded-2xl px-4 py-3">
+            <WifiOff className="w-5 h-5 text-rose-500 flex-none" />
+            <div>
+              <p className="text-sm font-bold text-rose-700 dark:text-rose-400">
+                {failedSaves.size} respuesta{failedSaves.size > 1 ? 's' : ''} no sincronizada{failedSaves.size > 1 ? 's' : ''}
+              </p>
+              <p className="text-xs text-rose-600/80 dark:text-rose-400/70 mt-0.5">
+                Haz clic en las preguntas marcadas en rojo y vuelve a seleccionar tu respuesta para reintentarlo.
+              </p>
+            </div>
+          </div>
+        )}
 
         {/* Question card */}
         <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm p-6 space-y-5">
@@ -424,7 +470,11 @@ export const TakeExamPage = () => {
               <p className="font-semibold text-slate-800 dark:text-white leading-relaxed">{currentQ.text}</p>
               <p className="text-xs text-slate-400 mt-1">{currentQ.points} {currentQ.points === 1 ? 'punto' : 'puntos'}</p>
             </div>
-            {savingId === currentQ.id && <Loader2 className="w-4 h-4 animate-spin text-indigo-400 flex-none mt-1" />}
+            {savingId === currentQ.id
+              ? <Loader2 className="w-4 h-4 animate-spin text-indigo-400 flex-none mt-1" />
+              : failedSaves.has(currentQ.id)
+                ? <WifiOff className="w-4 h-4 text-rose-500 flex-none mt-1" title="No guardado" />
+                : null}
           </div>
 
           {/* Multiple choice */}
