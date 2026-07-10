@@ -421,4 +421,53 @@ export class ExamsRepository {
       }
     }
   }
+
+  /**
+   * Get the grade-book for a class.
+   * Returns:
+   *   - exams: all non-draft exams for the class
+   *   - rows:  one entry per (student, exam) where an attempt exists
+   *
+   * @param classId   The class to query
+   * @param studentId If provided, only return rows for this student (student view)
+   */
+  static async getGradesByClass(
+    classId: string,
+    studentId?: string
+  ): Promise<{
+    exams: { id: string; title: string; scale_max: number; passing_score: number; status: string; skill_type: string | null }[];
+    rows: { student_id: string; student_name: string; student_username: string; exam_id: string; score: number | null; status: string; submitted_at: string | null }[];
+  }> {
+    const exams = await getAll<any>(
+      `SELECT id, title, scale_max, passing_score, status, skill_type
+       FROM exams
+       WHERE class_id = $1 AND status != 'draft'
+       ORDER BY created_at ASC`,
+      [classId]
+    );
+
+    const studentFilter = studentId ? `AND ea.student_id = $2` : '';
+    const params: any[] = studentId ? [classId, studentId] : [classId];
+
+    const rows = await getAll<any>(
+      `SELECT
+         ea.student_id,
+         COALESCE(u.name, u.username) AS student_name,
+         u.username                    AS student_username,
+         ea.exam_id,
+         ea.score,
+         ea.status,
+         ea.submitted_at
+       FROM exam_attempts ea
+       JOIN exams e ON e.id = ea.exam_id
+       JOIN users u ON u.id = ea.student_id
+       WHERE e.class_id = $1
+         AND ea.status != 'in_progress'
+         ${studentFilter}
+       ORDER BY student_name ASC, e.created_at ASC`,
+      params
+    );
+
+    return { exams, rows };
+  }
 }

@@ -331,4 +331,20 @@ router.post(
   })
 );
 
+/**
+ * GET /api/classes/:classId/grades
+ * Grade-book for a class.
+ * - Teacher/admin: all students + scores per exam.
+ * - Student: only their own scores.
+ */
+router.get(
+  '/classes/:classId/grades',
+  [param('classId').notEmpty()],
+  validate,
+  asyncHandler(async (req: any, res: any) => {
+    const data = await ExamsService.getGradesByClass(req.params.classId, req.user.userId);
+    res.status(200).json({ success: true, ...data });
+  })
+);
+
 export default router;

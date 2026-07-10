@@ -6,10 +6,11 @@ import { Layout } from '../components/Layout';
 import { TopicsPanel } from '../components/topics/TopicsPanel';
 import { GroupsPanel } from '../components/groups/GroupsPanel';
 import { ExamsPanel } from '../components/exams/ExamsPanel';
-import { ArrowLeft, BookOpen, Users, ClipboardList } from 'lucide-react';
+import { GradesPanel } from '../components/exams/GradesPanel';
+import { ArrowLeft, BookOpen, Users, ClipboardList, BarChart3 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
-type Tab = 'topics' | 'groups' | 'exams';
+type Tab = 'topics' | 'groups' | 'exams' | 'grades';
 
 export const ClassDetailPage = () => {
   const { id } = useParams<{ id: string }>();
@@ -20,7 +21,7 @@ export const ClassDetailPage = () => {
   const [activeTab, setActiveTab] = useState<Tab>(() => {
     const params = new URLSearchParams(window.location.search);
     const t = params.get('tab');
-    if (t === 'groups' || t === 'exams') return t;
+    if (t === 'groups' || t === 'exams' || t === 'grades') return t;
     return 'topics';
   });
 
@@ -151,6 +152,17 @@ export const ClassDetailPage = () => {
               <ClipboardList className="w-5 h-5" />
               Exámenes
             </button>
+            <button
+              onClick={() => setActiveTab('grades')}
+              className={`flex-1 sm:flex-none flex justify-center sm:justify-start items-center gap-2 px-6 py-4 font-bold transition ${
+                activeTab === 'grades'
+                  ? 'text-emerald-600 dark:text-emerald-400 border-b-2 border-emerald-600 dark:border-emerald-400 bg-emerald-50/50 dark:bg-emerald-500/5'
+                  : 'text-gray-600 dark:text-slate-400 hover:text-gray-900 dark:hover:text-slate-200 hover:bg-gray-50 dark:hover:bg-slate-800/50'
+              }`}
+            >
+              <BarChart3 className="w-5 h-5" />
+              Notas
+            </button>
           </div>
         </div>
 
@@ -169,6 +181,11 @@ export const ClassDetailPage = () => {
           {/* Exams Tab */}
           {activeTab === 'exams' && id && (
             <ExamsPanel classId={id} isTeacher={isTeacher && isOwner} />
+          )}
+
+          {/* Grades Tab */}
+          {activeTab === 'grades' && id && (
+            <GradesPanel classId={id} isTeacher={isTeacher && isOwner} />
           )}
         </div>
       </div>

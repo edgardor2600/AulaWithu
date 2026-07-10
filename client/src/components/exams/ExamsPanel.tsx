@@ -332,10 +332,9 @@ export const ExamsPanel = ({ classId, isTeacher = false }: ExamsPanelProps) => {
                   {/* CTA */}
                   <div className="flex-none">
                     {completed ? (
-                      <button onClick={() => navigate(`/exams/${exam.id}/take`)}
-                        className="flex items-center gap-2 px-4 py-2.5 bg-emerald-100 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-400 rounded-xl font-bold text-sm hover:bg-emerald-200 dark:hover:bg-emerald-500/30 transition whitespace-nowrap">
-                        <CheckCircle2 className="w-4 h-4" /> Ver resultado
-                      </button>
+                      <div className="flex items-center gap-2 px-4 py-2.5 bg-emerald-100 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-400 rounded-xl font-bold text-sm">
+                        <CheckCircle2 className="w-4 h-4" /> Realizado
+                      </div>
                     ) : inProgress && open ? (
                       <button onClick={() => navigate(`/exams/${exam.id}/take`)}
                         className="flex items-center gap-2 px-5 py-2.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl font-bold text-sm transition shadow-md whitespace-nowrap">

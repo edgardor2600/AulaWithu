@@ -58,15 +58,34 @@ export interface ExamAnswer {
   attempt_id: string;
   question_id: string;
   answer_text: string | null;
-  is_correct: boolean | null;
-  points_earned: number | null;
-  answered_at: string;
-  // Teacher view: joined from exam_questions
   question_text?: string;
   question_type?: string;
-  correct_answer?: string | null;
-  points?: number;
   skill_category?: string;
+  is_correct: boolean | null;
+  points_earned: number | null;
+  points?: number;
+  correct_answer?: string | null;
+}
+
+/** Represents one exam column in the grade-book */
+export interface GradeExam {
+  id: string;
+  title: string;
+  scale_max: number;
+  passing_score: number;
+  status: string;
+  skill_type: string | null;
+}
+
+/** Represents one (student × exam) cell in the grade-book */
+export interface GradeRow {
+  student_id: string;
+  student_name: string;
+  student_username: string;
+  exam_id: string;
+  score: number | null;
+  status: string;
+  submitted_at: string | null;
 }
 
 // ============================================
@@ -207,5 +226,12 @@ export const examsService = {
   async gradeAnswer(attemptId: string, questionId: string, pointsEarned: number): Promise<ExamAttempt> {
     const res = await api.put(`/exams/attempts/${attemptId}/grade`, { questionId, pointsEarned });
     return res.data.attempt;
+  },
+
+  // --- GRADES (book of grades) ---
+
+  async getGradesByClass(classId: string): Promise<{ exams: GradeExam[]; rows: GradeRow[] }> {
+    const res = await api.get(`/classes/${classId}/grades`);
+    return { exams: res.data.exams, rows: res.data.rows };
   },
 };

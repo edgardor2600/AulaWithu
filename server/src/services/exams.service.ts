@@ -442,9 +442,50 @@ export class ExamsService {
 
     await this.assertTeacherOwnsClass(exam.class_id, teacherId);
 
+    // Auto-submit any in_progress attempts so no student is left without a grade
+    const allAttempts = await ExamsRepository.getAttemptsByExam(examId);
+    const orphaned = allAttempts.filter((a) => a.status === 'in_progress');
+    for (const att of orphaned) {
+      try {
+        await this.forceSubmitAttempt(att.id);
+      } catch {
+        // Best-effort: skip if something fails for a specific attempt
+      }
+    }
+
     const updated = await ExamsRepository.updateStatus(examId, 'closed');
     if (!updated) throw new NotFoundError('Error al cerrar el examen');
     return updated;
+  }
+
+  /**
+   * Internal helper: force-submit an in_progress attempt without student auth check.
+   * Used when the teacher closes an exam to grade orphaned attempts automatically.
+   */
+  private static async forceSubmitAttempt(attemptId: string): Promise<void> {
+    const attempt = await ExamsRepository.getAttemptById(attemptId);
+    if (!attempt || attempt.status !== 'in_progress') return;
+
+    const questions = await ExamsRepository.getQuestionsByExam(attempt.exam_id);
+    const answers   = await ExamsRepository.getAnswersByAttempt(attemptId);
+
+    await ExamsRepository.gradeAndSaveAnswers(attemptId, questions, answers);
+
+    const totalPoints = questions.reduce((sum, q) => sum + q.points, 0);
+    const mcQuestions = questions.filter((q) => q.type === 'multiple_choice');
+    let earnedPoints  = 0;
+    for (const q of mcQuestions) {
+      const answer = answers.find((a) => a.question_id === q.id);
+      if (answer?.answer_text === q.correct_answer) earnedPoints += q.points;
+    }
+
+    const exam     = await ExamsRepository.getById(attempt.exam_id);
+    const scaleMax = exam?.scale_max ? Number(exam.scale_max) : 5.0;
+    const score    = totalPoints > 0
+      ? Math.round((earnedPoints / totalPoints) * scaleMax * 100) / 100
+      : 0;
+
+    await ExamsRepository.submitAttempt(attemptId, { score, totalPoints, earnedPoints });
   }
 
   static async deleteExam(examId: string, teacherId: string): Promise<void> {
@@ -734,5 +775,28 @@ export class ExamsService {
 
     if (!submitted) throw new NotFoundError('Error al enviar el examen');
     return submitted;
+  }
+
+  /**
+   * Get the grade-book for a class.
+   * - Teacher/admin: sees all students.
+   * - Student: sees only their own grades (filtered by studentId).
+   */
+  static async getGradesByClass(classId: string, requesterId: string) {
+    const requester = await UsersRepository.getById(requesterId);
+    if (!requester) throw new ForbiddenError('Usuario no encontrado');
+
+    const isTeacher = requester.role === 'teacher' || requester.role === 'admin';
+
+    if (isTeacher) {
+      // Teacher must own the class (or be admin)
+      if (requester.role !== 'admin') {
+        await this.assertTeacherOwnsClass(classId, requesterId);
+      }
+      return ExamsRepository.getGradesByClass(classId);
+    }
+
+    // Student: only their own data
+    return ExamsRepository.getGradesByClass(classId, requesterId);
   }
 }

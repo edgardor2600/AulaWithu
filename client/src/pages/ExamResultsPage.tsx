@@ -5,7 +5,7 @@ import { examsService, type Exam, type ExamQuestion, type ExamAttempt, type Exam
 import toast from 'react-hot-toast';
 import {
   ArrowLeft, Users, CheckCircle2, XCircle, Clock, Loader2, TrendingUp, Award,
-  Eye, X, AlignLeft, CheckSquare, Edit3, Save, ChevronDown, ChevronRight, Star
+  Eye, X, AlignLeft, Edit3, Save, Star, AlertTriangle,
 } from 'lucide-react';
 
 const STATUS_BADGE: Record<string, string> = {
@@ -19,26 +19,39 @@ const STATUS_LABEL: Record<string, string> = {
 
 export const ExamResultsPage = () => {
   const { examId } = useParams<{ examId: string }>();
-  const navigate = useNavigate();
+  const navigate   = useNavigate();
 
   const [exam, setExam]           = useState<Exam | null>(null);
   const [questions, setQuestions] = useState<ExamQuestion[]>([]);
   const [attempts, setAttempts]   = useState<ExamAttempt[]>([]);
   const [loading, setLoading]     = useState(true);
 
-  // Detail modal state
+  // Detail modal
   const [selectedAttempt, setSelectedAttempt] = useState<ExamAttempt | null>(null);
-  const [detailAnswers, setDetailAnswers]       = useState<ExamAnswer[]>([]);
-  const [loadingDetail, setLoadingDetail]       = useState(false);
-  const [gradingId, setGradingId]               = useState<string | null>(null); // questionId being graded
-  const [gradeInput, setGradeInput]             = useState<Record<string, string>>({});
-  const [savingGrade, setSavingGrade]           = useState<string | null>(null);
+  const [detailAnswers, setDetailAnswers]      = useState<ExamAnswer[] | null>(null);
+  const [loadingDetail, setLoadingDetail]      = useState(false);
+  const [gradingId, setGradingId]              = useState<string | null>(null);
+  const [gradeInput, setGradeInput]            = useState<Record<string, string>>({});
+  const [savingGrade, setSavingGrade]          = useState<string | null>(null);
 
   useEffect(() => {
     if (!examId) return;
     examsService.getExamResults(examId)
       .then(({ exam: e, questions: qs, attempts: atts }) => {
-        setExam(e); setQuestions(qs); setAttempts(atts as any);
+        const mappedExam = e ? {
+          ...e,
+          scale_max: e.scale_max !== null ? Number(e.scale_max) : 5.0,
+          passing_score: e.passing_score !== null ? Number(e.passing_score) : 60,
+        } : null;
+        const mappedAttempts = atts.map((a: any) => ({
+          ...a,
+          score: a.score !== null ? Number(a.score) : null,
+          total_points: a.total_points !== null ? Number(a.total_points) : null,
+          earned_points: a.earned_points !== null ? Number(a.earned_points) : null,
+        }));
+        setExam(mappedExam);
+        setQuestions(qs);
+        setAttempts(mappedAttempts as any);
       })
       .catch(() => { toast.error('Error al cargar resultados'); navigate(-1); })
       .finally(() => setLoading(false));
@@ -46,11 +59,12 @@ export const ExamResultsPage = () => {
 
   const openDetail = async (att: ExamAttempt) => {
     setSelectedAttempt(att);
+    setDetailAnswers(null);
+    setGradingId(null);
     setLoadingDetail(true);
     try {
       const { answers } = await examsService.getAttemptDetail(att.id);
       setDetailAnswers(answers);
-      // Pre-fill grade inputs from existing points_earned
       const init: Record<string, string> = {};
       answers.forEach(a => { if (a.points_earned !== null) init[a.question_id] = String(a.points_earned); });
       setGradeInput(init);
@@ -64,9 +78,11 @@ export const ExamResultsPage = () => {
     setSavingGrade(questionId);
     try {
       const updated = await examsService.gradeAnswer(attemptId, questionId, val);
-      // Refresh attempt in list
       setAttempts(prev => prev.map(a => a.id === updated.id ? { ...a, ...updated } : a));
       setSelectedAttempt(prev => prev ? { ...prev, ...updated } : prev);
+      setDetailAnswers(prev => prev?.map(a =>
+        a.question_id === questionId ? { ...a, points_earned: val, is_correct: val > 0 } : a
+      ) || null);
       toast.success('Calificación guardada');
       setGradingId(null);
     } catch (e: any) {
@@ -74,9 +90,29 @@ export const ExamResultsPage = () => {
     } finally { setSavingGrade(null); }
   };
 
-  const submitted = attempts.filter(a => a.status !== 'in_progress');
-  const passed    = submitted.filter(a => a.score !== null && exam && a.score >= (exam.scale_max * (exam.passing_score / 100)));
-  const avgScore  = submitted.length > 0 ? submitted.reduce((s, a) => s + (a.score ?? 0), 0) / submitted.length : 0;
+  const exportCSV = () => {
+    if (!exam || attempts.length === 0) return;
+    const header = 'Estudiante,Usuario,Estado,Nota,Puntos Ganados,Puntos Totales,Enviado';
+    const rows = attempts.map(a => [
+      (a as any).student_name || a.student_id,
+      (a as any).student_username || '',
+      a.status,
+      a.score?.toFixed(2) ?? '',
+      a.earned_points?.toFixed(2) ?? '',
+      a.total_points?.toFixed(2) ?? '',
+      a.submitted_at ? new Date(a.submitted_at).toLocaleString('es-CO') : '',
+    ].join(',')).join('\n');
+    const blob = new Blob([`${header}\n${rows}`], { type: 'text/csv;charset=utf-8;' });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href = url; a.download = `${exam.title}_resultados.csv`; a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const submitted  = attempts.filter(a => a.status !== 'in_progress');
+  const passed     = submitted.filter(a => a.score !== null && exam && a.score >= (exam.scale_max * (exam.passing_score / 100)));
+  const avgScore   = submitted.length > 0 ? submitted.reduce((s, a) => s + (a.score ?? 0), 0) / submitted.length : 0;
+  const needsGrade = submitted.filter(a => a.status === 'submitted').length;
   const formatDate = (d: string | null) => d
     ? new Date(d).toLocaleString('es-CO', { dateStyle: 'short', timeStyle: 'short' }) : '—';
 
@@ -88,16 +124,33 @@ export const ExamResultsPage = () => {
     <Layout>
       <div className="max-w-5xl mx-auto px-4 py-8 space-y-6">
 
-        {/* Header */}
-        <div className="flex items-center gap-4">
-          <button onClick={() => navigate(-1)} className="p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 transition">
-            <ArrowLeft className="w-5 h-5" />
-          </button>
-          <div>
-            <h1 className="text-2xl font-black text-slate-900 dark:text-white">{exam?.title}</h1>
-            <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">Resultados y calificación del examen</p>
+        <div className="flex items-center justify-between gap-4">
+          <div className="flex items-center gap-4">
+            <button onClick={() => navigate(-1)} className="p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 transition">
+              <ArrowLeft className="w-5 h-5" />
+            </button>
+            <div>
+              <h1 className="text-2xl font-black text-slate-900 dark:text-white">{exam?.title}</h1>
+              <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">Resultados y calificación del examen</p>
+            </div>
           </div>
+          {attempts.length > 0 && (
+            <button onClick={exportCSV}
+              className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-sm transition shadow-sm">
+              <Star className="w-4 h-4" /> Exportar CSV
+            </button>
+          )}
         </div>
+
+        {/* Needs-grading warning */}
+        {needsGrade > 0 && (
+          <div className="flex items-center gap-3 bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/30 rounded-2xl px-4 py-3">
+            <AlertTriangle className="w-5 h-5 text-amber-500 flex-none" />
+            <p className="text-sm font-semibold text-amber-700 dark:text-amber-400">
+              {needsGrade} intento{needsGrade > 1 ? 's' : ''} pendiente{needsGrade > 1 ? 's' : ''} de calificación manual — revisa las respuestas cortas de tus estudiantes.
+            </p>
+          </div>
+        )}
 
         {/* Stats */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -119,9 +172,12 @@ export const ExamResultsPage = () => {
 
         {/* Attempts table */}
         <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
-          <div className="px-5 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center gap-2">
-            <Users className="w-4 h-4 text-indigo-500" />
-            <h2 className="font-bold text-slate-800 dark:text-white">Detalle por estudiante</h2>
+          <div className="px-5 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <Users className="w-4 h-4 text-indigo-500" />
+              <h2 className="font-bold text-slate-800 dark:text-white">Detalle por estudiante</h2>
+            </div>
+            <span className="text-xs text-slate-400 font-medium">{attempts.length} intento{attempts.length !== 1 ? 's' : ''}</span>
           </div>
 
           {attempts.length === 0 ? (
@@ -244,7 +300,7 @@ export const ExamResultsPage = () => {
                 <div className="flex items-center justify-center py-16">
                   <Loader2 className="w-8 h-8 animate-spin text-indigo-500" />
                 </div>
-              ) : detailAnswers.length === 0 ? (
+              ) : detailAnswers === null || detailAnswers.length === 0 ? (
                 <div className="text-center py-12 text-slate-400">
                   <AlignLeft className="w-10 h-10 mx-auto mb-3 opacity-40" />
                   <p>Este estudiante no respondió ninguna pregunta</p>
@@ -289,12 +345,19 @@ export const ExamResultsPage = () => {
                     </div>
 
                     {/* Correct answer (MC only) */}
-                    {!isManual && ans.correct_answer !== null && (
-                      <div className="bg-emerald-50 dark:bg-emerald-500/10 rounded-xl p-3 border border-emerald-100 dark:border-emerald-500/20 mb-3">
-                        <p className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider mb-0.5">Respuesta correcta</p>
-                        <p className="text-sm text-emerald-800 dark:text-emerald-300 font-semibold">Opción {String.fromCharCode(65 + parseInt(ans.correct_answer ?? '0'))}</p>
-                      </div>
-                    )}
+                    {!isManual && ans.correct_answer !== null && (() => {
+                      const q = questions.find(q => q.id === ans.question_id);
+                      const correctIdx = parseInt(ans.correct_answer ?? '0');
+                      const correctText = q?.options?.[correctIdx];
+                      return (
+                        <div className="bg-emerald-50 dark:bg-emerald-500/10 rounded-xl p-3 border border-emerald-100 dark:border-emerald-500/20 mb-3">
+                          <p className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider mb-0.5">Respuesta correcta</p>
+                          <p className="text-sm text-emerald-800 dark:text-emerald-300 font-semibold">
+                            ({String.fromCharCode(65 + correctIdx)}) {correctText || `Opción ${String.fromCharCode(65 + correctIdx)}`}
+                          </p>
+                        </div>
+                      );
+                    })()}
 
                     {/* Manual grading controls */}
                     {isManual && selectedAttempt.status !== 'in_progress' && (
