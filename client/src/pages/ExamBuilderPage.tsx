@@ -3,11 +3,12 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { Layout } from '../components/Layout';
 import { examsService, type Exam, type ExamQuestion } from '../services/examsService';
 import { groupsService, type Group } from '../services/groupsService';
+import api from '../services/api';
 import toast from 'react-hot-toast';
 import {
-  ArrowLeft, Plus, Trash2, Save, Send, Clock, CheckSquare,
-  AlignLeft, ChevronUp, ChevronDown, Loader2, Eye, X, BookOpen,
-  Copy, Sparkles, Music, Image as ImageIcon, Volume2, Globe, Check, AlertCircle, Edit3
+  ArrowLeft, Plus, Trash2, Save, Send, Upload,
+  AlignLeft, Loader2, Eye, X, 
+  Copy, Sparkles, Music, Volume2, Globe, Check, AlertCircle, Edit3,
 } from 'lucide-react';
 
 const SKILL_ICONS: Record<string, any> = {
@@ -51,6 +52,11 @@ export const ExamBuilderPage = () => {
 
   // Active question being edited in detail / media
   const [expandedMediaId, setExpandedMediaId] = useState<string | null>(null);
+  // Track which question is currently uploading an audio file
+  const [uploadingAudioId, setUploadingAudioId] = useState<string | null>(null);
+  // Hidden file input ref for audio uploads
+  const audioInputRef = useRef<HTMLInputElement>(null);
+  const uploadTargetQId = useRef<string | null>(null);
 
   // Load Exam
   const loadExam = async () => {
@@ -86,6 +92,29 @@ export const ExamBuilderPage = () => {
       groupsService.getClassGroups(exam.class_id).then(setGroups).catch(console.error);
     }
   }, [exam]);
+
+  // Handle direct audio file upload
+  const handleUploadAudio = async (file: File, questionId: string) => {
+    setUploadingAudioId(questionId);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      const res = await api.post('/uploads', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      const url = res.data.upload.url;
+      // Build absolute URL so the audio element works from any page
+      const fullUrl = url.startsWith('http') ? url : `${window.location.origin}${url}`;
+      await handleUpdateQuestionField(questionId, { media_url: fullUrl });
+      setExpandedMediaId(null);
+      toast.success('Audio subido correctamente');
+    } catch (e: any) {
+      toast.error(e.response?.data?.error?.message || 'Error al subir el audio');
+    } finally {
+      setUploadingAudioId(null);
+      if (audioInputRef.current) audioInputRef.current.value = '';
+    }
+  };
 
   // Save Meta
   const handleSaveMeta = async () => {
@@ -449,6 +478,20 @@ export const ExamBuilderPage = () => {
               </div>
             )}
 
+            {/* Single hidden file input, shared across all questions via uploadTargetQId ref */}
+            <input
+              ref={audioInputRef}
+              type="file"
+              accept="audio/mpeg,audio/wav,audio/ogg,audio/mp4,audio/*"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file && uploadTargetQId.current) {
+                  handleUploadAudio(file, uploadTargetQId.current);
+                }
+              }}
+            />
+
             {/* Questions List */}
             {questions.length === 0 ? (
               <div className="text-center py-20 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl shadow-sm">
@@ -525,29 +568,47 @@ export const ExamBuilderPage = () => {
                           </div>
                         )}
 
-                        {/* Dropdown details to add Media URL */}
+                        {/* Media / Audio section */}
                         {isDraft && (
                           <div>
                             <button onClick={() => setExpandedMediaId(isMediaExpanded ? null : q.id)}
                               className="text-xs font-bold text-slate-400 dark:text-slate-500 hover:text-indigo-600 flex items-center gap-1 transition">
                               {q.media_url ? 'Modificar Audio/Multimedia' : '+ Agregar Audio / Archivo de Apoyo'}
                             </button>
-                            
+
                             {isMediaExpanded && (
-                              <div className="mt-2 p-4 bg-slate-50 dark:bg-slate-800/50 rounded-2xl border border-slate-100 dark:border-slate-800 space-y-2">
-                                <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">URL de Recurso de Audio/Media</label>
+                              <div className="mt-2 p-4 bg-slate-50 dark:bg-slate-800/50 rounded-2xl border border-slate-100 dark:border-slate-800 space-y-3">
+                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Recurso de Audio / Media</p>
+
+                                {/* Upload button */}
+                                <button
+                                  onClick={() => { uploadTargetQId.current = q.id; audioInputRef.current?.click(); }}
+                                  disabled={uploadingAudioId === q.id}
+                                  className="flex items-center gap-2 px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition disabled:opacity-50 w-full justify-center">
+                                  {uploadingAudioId === q.id
+                                    ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Subiendo...</>
+                                    : <><Upload className="w-3.5 h-3.5" /> Subir archivo de audio (MP3 / WAV)</>}
+                                </button>
+
+                                {/* URL fallback */}
+                                <div className="flex items-center gap-2">
+                                  <div className="flex-1 h-px bg-slate-200 dark:bg-slate-700" />
+                                  <span className="text-[10px] text-slate-400 font-bold">o pegar URL</span>
+                                  <div className="flex-1 h-px bg-slate-200 dark:bg-slate-700" />
+                                </div>
                                 <div className="flex gap-2">
                                   <input type="text"
-                                    placeholder="https://ejemplo.com/audio-listening.mp3"
+                                    placeholder="https://ejemplo.com/audio.mp3"
                                     defaultValue={q.media_url || ''}
-                                    onBlur={(e) => { handleUpdateQuestionField(q.id, { media_url: e.target.value.trim() || null }); setExpandedMediaId(null); }}
+                                    onBlur={(e) => {
+                                      const val = e.target.value.trim();
+                                      handleUpdateQuestionField(q.id, { media_url: val || null });
+                                      setExpandedMediaId(null);
+                                    }}
                                     className="flex-1 px-3 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-xs outline-none text-slate-800 dark:text-white" />
                                   <button onClick={() => setExpandedMediaId(null)}
-                                    className="px-3 py-1 bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg text-xs font-bold">
-                                    Listo
-                                  </button>
+                                    className="px-3 py-1 bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg text-xs font-bold">Listo</button>
                                 </div>
-                                <p className="text-[10px] text-slate-400">Pega un enlace directo de audio. Los formatos recomendados son MP3 o WAV.</p>
                               </div>
                             )}
                           </div>

@@ -15,24 +15,29 @@ import fs from 'fs';
 
 /** Files we accept and their hex magic signatures (first N bytes). */
 const MAGIC_SIGNATURES: Record<string, Buffer[]> = {
-  'image/jpeg': [
-    Buffer.from([0xff, 0xd8, 0xff]),   // JPEG / JFIF / Exif
-  ],
-  'image/jpg': [
-    Buffer.from([0xff, 0xd8, 0xff]),
-  ],
-  'image/png': [
-    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), // PNG
-  ],
-  'image/gif': [
+  'image/jpeg': [ Buffer.from([0xff, 0xd8, 0xff]) ],
+  'image/jpg':  [ Buffer.from([0xff, 0xd8, 0xff]) ],
+  'image/png':  [ Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]) ],
+  'image/gif':  [
     Buffer.from([0x47, 0x49, 0x46, 0x38, 0x37, 0x61]), // GIF87a
     Buffer.from([0x47, 0x49, 0x46, 0x38, 0x39, 0x61]), // GIF89a
   ],
-  'image/webp': [
-    // WebP: "RIFF" at offset 0 + "WEBP" at offset 8
-    // We handle this specially in the check function below.
-    Buffer.from([0x52, 0x49, 0x46, 0x46]), // "RIFF"
+  'image/webp': [ Buffer.from([0x52, 0x49, 0x46, 0x46]) ], // "RIFF" — checked with WEBP below
+  // MP3: starts with ID3 header (most common) or 0xFF 0xFB (raw MPEG)
+  'audio/mpeg': [
+    Buffer.from([0x49, 0x44, 0x33]),       // ID3
+    Buffer.from([0xff, 0xfb]),              // MPEG frame sync
+    Buffer.from([0xff, 0xf3]),
+    Buffer.from([0xff, 0xf2]),
   ],
+  'audio/mp3':  [
+    Buffer.from([0x49, 0x44, 0x33]),
+    Buffer.from([0xff, 0xfb]),
+  ],
+  // WAV: "RIFF" at offset 0, "WAVE" at offset 8
+  'audio/wav':   [ Buffer.from([0x52, 0x49, 0x46, 0x46]) ], // "RIFF" — WAVE checked below
+  'audio/wave':  [ Buffer.from([0x52, 0x49, 0x46, 0x46]) ],
+  'audio/x-wav': [ Buffer.from([0x52, 0x49, 0x46, 0x46]) ],
 };
 
 /** Number of bytes to read from the file (enough for the longest signature). */
@@ -63,14 +68,23 @@ export function validateMagicNumbers(filePath: string, mimetype: string): boolea
   }
 
   const signatures = MAGIC_SIGNATURES[mimetype];
+
+  // Audio types with variable/complex signatures (OGG, AAC, WebM) — trust multer's fileFilter
+  const AUDIO_PASSTHROUGH = new Set(['audio/ogg', 'audio/mp4', 'audio/aac', 'audio/webm']);
+  if (AUDIO_PASSTHROUGH.has(mimetype)) return true;
+
   if (!signatures) return false; // Unknown MIME type — reject
 
   return signatures.some((sig) => {
-    // For WebP, we also need "WEBP" starting at byte 8
+    // WebP: check RIFF at 0 + WEBP at 8
     if (mimetype === 'image/webp') {
-      const riff  = buffer.subarray(0, 4).equals(sig);
-      const webp  = buffer.subarray(8, 12).equals(Buffer.from('WEBP'));
-      return riff && webp;
+      return buffer.subarray(0, 4).equals(sig) &&
+             buffer.subarray(8, 12).equals(Buffer.from('WEBP'));
+    }
+    // WAV: check RIFF at 0 + WAVE at 8
+    if (mimetype === 'audio/wav' || mimetype === 'audio/wave' || mimetype === 'audio/x-wav') {
+      return buffer.subarray(0, 4).equals(sig) &&
+             buffer.subarray(8, 12).equals(Buffer.from('WAVE'));
     }
     return buffer.subarray(0, sig.length).equals(sig);
   });

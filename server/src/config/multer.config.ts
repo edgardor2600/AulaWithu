@@ -21,15 +21,20 @@ const storage = multer.diskStorage({
   },
 });
 
-// File filter - only images
+// File filter - images and audio
 const fileFilter = (req: any, file: Express.Multer.File, cb: multer.FileFilterCallback) => {
-  // Allowed mime types
-  const allowedMimes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
+  const allowedMimes = [
+    // Images
+    'image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp',
+    // Audio
+    'audio/mpeg', 'audio/mp3', 'audio/wav', 'audio/wave', 'audio/x-wav',
+    'audio/ogg', 'audio/mp4', 'audio/aac', 'audio/webm',
+  ];
 
   if (allowedMimes.includes(file.mimetype)) {
     cb(null, true);
   } else {
-    cb(new ValidationError('Only image files are allowed (JPEG, PNG, GIF, WebP)'));
+    cb(new ValidationError('Solo se permiten imágenes (JPEG, PNG, GIF, WebP) y audio (MP3, WAV, OGG)'));
   }
 };
 
@@ -38,7 +43,7 @@ export const upload = multer({
   storage,
   fileFilter,
   limits: {
-    fileSize: 10 * 1024 * 1024, // 10MB — suficiente para imágenes educativas
+    fileSize: 50 * 1024 * 1024, // 50 MB — imágenes y audios educativos
     files: 1,                   // solo 1 archivo por request
   },
 });
