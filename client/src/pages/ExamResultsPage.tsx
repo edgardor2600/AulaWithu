@@ -23,12 +23,6 @@ const isImageUrl = (url: string | null | undefined): boolean => {
   return /\.(png|jpe?g|gif|webp|svg|bmp)$/i.test(cleanUrl);
 };
 
-const isAudioUrl = (url: string | null | undefined): boolean => {
-  if (!url) return false;
-  const cleanUrl = url.split('?')[0].split('#')[0];
-  return /\.(mp3|wav|ogg|m4a|aac|flac)$/i.test(cleanUrl);
-};
-
 export const ExamResultsPage = () => {
   const { examId } = useParams<{ examId: string }>();
   const navigate   = useNavigate();
