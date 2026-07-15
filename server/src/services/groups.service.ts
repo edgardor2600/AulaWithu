@@ -1,4 +1,4 @@
-import { GroupsRepository, EnrollmentsRepository, ClassesRepository, UsersRepository } from '../db/repositories';
+import { GroupsRepository, EnrollmentsRepository, ClassesRepository, UsersRepository, LevelsRepository } from '../db/repositories';
 import { Group, Enrollment } from '../types/database';
 import { ValidationError, ConflictError, NotFoundError } from '../utils/AppError';
 
@@ -65,14 +65,9 @@ export class GroupsService {
 
     // Validate schedule time format if provided
     if (data.scheduleTime) {
-      const validTimeSlots = [
-        '08:00-09:00', '09:00-10:00', '10:00-11:00', '11:00-12:00',
-        '14:00-15:00', '15:00-16:00', '16:00-17:00', '17:00-18:00',
-        '18:00-19:00', '19:00-20:00', '20:00-21:00', '21:00-22:00'
-      ];
-      
-      if (!validTimeSlots.includes(data.scheduleTime)) {
-        throw new ValidationError('Invalid schedule time. Must be one of: ' + validTimeSlots.join(', '));
+      const scheduleRegex = /^([01]\d|2[0-3]):[0-5]\d-([01]\d|2[0-3]):[0-5]\d$/;
+      if (!scheduleRegex.test(data.scheduleTime)) {
+        throw new ValidationError('Invalid schedule time format. Must be HH:MM-HH:MM (e.g., 08:30-10:00)');
       }
     }
 
@@ -174,14 +169,11 @@ export class GroupsService {
 
     // Validate schedule time format if provided
     if (data.scheduleTime !== undefined) {
-      const validTimeSlots = [
-        '08:00-09:00', '09:00-10:00', '10:00-11:00', '11:00-12:00',
-        '14:00-15:00', '15:00-16:00', '16:00-17:00', '17:00-18:00',
-        '18:00-19:00', '19:00-20:00', '20:00-21:00', '21:00-22:00'
-      ];
-      
-      if (data.scheduleTime && !validTimeSlots.includes(data.scheduleTime)) {
-        throw new ValidationError('Invalid schedule time. Must be one of: ' + validTimeSlots.join(', '));
+      if (data.scheduleTime) {
+        const scheduleRegex = /^([01]\d|2[0-3]):[0-5]\d-([01]\d|2[0-3]):[0-5]\d$/;
+        if (!scheduleRegex.test(data.scheduleTime)) {
+          throw new ValidationError('Invalid schedule time format. Must be HH:MM-HH:MM (e.g., 08:30-10:00)');
+        }
       }
     }
 
@@ -238,7 +230,7 @@ export class GroupsService {
     studentId: string,
     enrolledBy: string,
     notes?: string
-  ): Promise<Enrollment> {
+  ): Promise<{ enrollment: Enrollment; warning: string | null }> {
     // Verify group exists
     const group = await GroupsRepository.getById(groupId);
     if (!group) {
@@ -284,11 +276,14 @@ export class GroupsService {
       throw new ConflictError('Student is already enrolled in this group');
     }
 
-    // --- NEW: Level Validation ---
+    // --- NEW: Level Validation with warnings ---
+    let warning: string | null = null;
     if (classObj.level_id && student.level_id) {
       if (classObj.level_id !== student.level_id) {
-        console.warn(`⚠️ Student level (${student.level_id}) does not match class level (${classObj.level_id})`);
-        // We allow it but could block it if requested. For now, just logging or we could pass a flag.
+        const classLevel = await LevelsRepository.getById(classObj.level_id);
+        const studentLevel = await LevelsRepository.getById(student.level_id);
+        warning = `El nivel académico del estudiante (${studentLevel?.name || 'Desconocido'}) no coincide con el de la clase (${classLevel?.name || 'Desconocido'}).`;
+        console.warn(`⚠️ Student level (${student.level_id}) does not match class level (${classObj.level_id}): ${warning}`);
       }
     }
 
@@ -304,7 +299,7 @@ export class GroupsService {
       notes,
     });
 
-    return enrollment;
+    return { enrollment, warning };
   }
 
   /**

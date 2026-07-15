@@ -15,6 +15,24 @@ export class EnrollmentsRepository {
     enrolledBy?: string;
     notes?: string;
   }): Promise<Enrollment> {
+    // Check if there is an existing enrollment (active or inactive)
+    const existing = await getOne<Enrollment>(
+      `SELECT * FROM enrollments WHERE group_id = $1 AND student_id = $2`,
+      [data.groupId, data.studentId]
+    );
+
+    if (existing) {
+      await runQuery(
+        `UPDATE enrollments 
+         SET status = 'active', enrolled_at = CURRENT_TIMESTAMP, enrolled_by = $1, notes = $2
+         WHERE id = $3`,
+        [data.enrolledBy || null, data.notes || null, existing.id]
+      );
+      const enrollment = await this.getById(existing.id);
+      if (!enrollment) throw new Error('Failed to reactivate enrollment');
+      return enrollment;
+    }
+
     const id = generateId();
 
     await runQuery(

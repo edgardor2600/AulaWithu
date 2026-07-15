@@ -54,8 +54,8 @@ export const GroupsPanel = ({ classId, className }: GroupsPanelProps) => {
     }
   }, [selectedGroup]);
 
-  const loadData = async () => {
-    setIsLoading(true);
+  const loadData = async (silent = false) => {
+    if (!silent) setIsLoading(true);
     try {
       // Load groups
       const groupsData = await groupsService.getClassGroups(classId);
@@ -194,16 +194,24 @@ export const GroupsPanel = ({ classId, className }: GroupsPanelProps) => {
 
     setIsEnrolling(true);
     try {
+      let result;
       if (user?.role === 'admin') {
-        await adminService.enrollStudentUnified(selectedGroup, enrollStudentId, enrollNotes);
+        result = await adminService.enrollStudentUnified(selectedGroup, enrollStudentId, enrollNotes);
       } else {
-        await groupsService.enrollStudent(selectedGroup, enrollStudentId, enrollNotes);
+        result = await groupsService.enrollStudent(selectedGroup, enrollStudentId, enrollNotes);
       }
-      toast.success('Estudiante inscrito exitosamente');
+      
+      if (result.warning) {
+        toast(result.warning, { icon: '⚠️', duration: 6000 });
+      } else {
+        toast.success('Estudiante inscrito exitosamente');
+      }
+      
       setShowEnrollModal(false);
       setEnrollStudentId('');
       setEnrollNotes('');
       loadGroupStudents(selectedGroup);
+      loadData(true); // reload groups count silently
     } catch (error: any) {
       const message = error.response?.data?.error?.message || 'Error al inscribir estudiante';
       toast.error(message);
@@ -223,6 +231,7 @@ export const GroupsPanel = ({ classId, className }: GroupsPanelProps) => {
       await groupsService.unenrollStudent(selectedGroup, studentId);
       toast.success(`${studentName} desinscrito del grupo`);
       loadGroupStudents(selectedGroup);
+      loadData(true); // reload groups count silently
     } catch (error: any) {
       const msg = error.response?.data?.error?.message || 'Error al desinscribir al estudiante';
       toast.error(msg);

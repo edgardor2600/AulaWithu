@@ -94,12 +94,15 @@ export const groupsService = {
   },
 
   // Enroll a student in a group
-  async enrollStudent(groupId: string, studentId: string, notes?: string): Promise<Enrollment> {
+  async enrollStudent(groupId: string, studentId: string, notes?: string): Promise<{ enrollment: Enrollment; warning?: string }> {
     const response = await api.post(`/groups/${groupId}/enroll`, {
       studentId,
       notes,
     });
-    return response.data.enrollment;
+    return {
+      enrollment: response.data.enrollment,
+      warning: response.data.warning,
+    };
   },
 
   // Unenroll a student from a group

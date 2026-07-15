@@ -39,8 +39,8 @@ router.post(
     body('scheduleTime')
       .optional()
       .trim()
-      .matches(/^(08|09|10|11|14|15|16|17|18|19|20|21):00-(09|10|11|12|15|16|17|18|19|20|21|22):00$/)
-      .withMessage('Invalid schedule time format'),
+      .matches(/^([01]\d|2[0-3]):[0-5]\d-([01]\d|2[0-3]):[0-5]\d$/)
+      .withMessage('Invalid schedule time format. Must be HH:MM-HH:MM'),
   ],
   validate,
   asyncHandler(async (req: any, res: any) => {
@@ -132,8 +132,8 @@ router.put(
     body('scheduleTime')
       .optional()
       .trim()
-      .matches(/^(08|09|10|11|14|15|16|17|18|19|20|21):00-(09|10|11|12|15|16|17|18|19|20|21|22):00$/)
-      .withMessage('Invalid schedule time format'),
+      .matches(/^([01]\d|2[0-3]):[0-5]\d-([01]\d|2[0-3]):[0-5]\d$/)
+      .withMessage('Invalid schedule time format. Must be HH:MM-HH:MM'),
   ],
   validate,
   asyncHandler(async (req: any, res: any) => {
@@ -215,7 +215,7 @@ router.post(
     const { studentId, notes } = req.body;
     const enrolledBy = req.user!.userId;
 
-    const enrollment = await GroupsService.enrollStudent(
+    const { enrollment, warning } = await GroupsService.enrollStudent(
       groupId,
       studentId,
       enrolledBy,
@@ -233,6 +233,7 @@ router.post(
         status: enrollment.status,
         notes: enrollment.notes,
       },
+      warning,
     });
   })
 );

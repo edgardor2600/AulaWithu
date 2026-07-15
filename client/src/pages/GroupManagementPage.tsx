@@ -492,10 +492,18 @@ export const GroupManagementPage = () => {
         )
       );
 
-      await Promise.all(enrollPromises);
+      const results = await Promise.all(enrollPromises);
       
       const count = selectedStudentIds.size;
-      toast.success(`✅ ${count} estudiante(s) añadido(s) al grupo`);
+      const warnings = results.filter(r => r && r.warning).map(r => r.warning);
+      
+      if (warnings.length > 0) {
+        toast.success(`✅ ${count} estudiante(s) procesado(s)`);
+        // Mostrar el aviso de nivel de forma duradera
+        toast(warnings[0]!, { icon: '⚠️', duration: 7000 });
+      } else {
+        toast.success(`✅ ${count} estudiante(s) añadido(s) al grupo`);
+      }
       
       setShowAddStudentsModal(false);
       setSelectedStudentIds(new Set());
