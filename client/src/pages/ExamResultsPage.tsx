@@ -5,7 +5,7 @@ import { examsService, type Exam, type ExamQuestion, type ExamAttempt, type Exam
 import toast from 'react-hot-toast';
 import {
   ArrowLeft, Users, CheckCircle2, XCircle, Clock, Loader2, TrendingUp, Award,
-  Eye, X, AlignLeft, Edit3, Save, Star, AlertTriangle,
+  Eye, X, AlignLeft, Edit3, Save, Star, AlertTriangle, Music,
 } from 'lucide-react';
 
 const STATUS_BADGE: Record<string, string> = {
@@ -15,6 +15,18 @@ const STATUS_BADGE: Record<string, string> = {
 };
 const STATUS_LABEL: Record<string, string> = {
   in_progress: 'En curso', submitted: 'Enviado', graded: 'Calificado',
+};
+
+const isImageUrl = (url: string | null | undefined): boolean => {
+  if (!url) return false;
+  const cleanUrl = url.split('?')[0].split('#')[0];
+  return /\.(png|jpe?g|gif|webp|svg|bmp)$/i.test(cleanUrl);
+};
+
+const isAudioUrl = (url: string | null | undefined): boolean => {
+  if (!url) return false;
+  const cleanUrl = url.split('?')[0].split('#')[0];
+  return /\.(mp3|wav|ogg|m4a|aac|flac)$/i.test(cleanUrl);
 };
 
 export const ExamResultsPage = () => {
@@ -335,6 +347,20 @@ export const ExamResultsPage = () => {
                         {currentPts !== null ? `${currentPts} / ${maxPts}` : `— / ${maxPts}`} pts
                       </div>
                     </div>
+
+                    {/* Media widget for the question */}
+                    {ans.media_url && (
+                      isImageUrl(ans.media_url) ? (
+                        <div className="rounded-xl overflow-hidden border border-slate-200 dark:border-slate-800 max-h-48 bg-slate-100 dark:bg-slate-900/50 max-w-md flex items-center justify-center mb-3">
+                          <img src={ans.media_url} alt="Recurso de la pregunta" className="object-contain max-h-48" />
+                        </div>
+                      ) : (
+                        <div className="bg-slate-100 dark:bg-slate-850 rounded-xl p-2.5 border border-slate-200/60 dark:border-slate-800 flex items-center gap-3 max-w-md mb-3">
+                          <Music className="w-4 h-4 text-indigo-500 flex-none" />
+                          <audio src={ans.media_url} controls className="w-full h-8 scale-95" />
+                        </div>
+                      )
+                    )}
 
                     {/* Student answer */}
                     <div className="bg-white dark:bg-slate-800 rounded-xl p-3 border border-slate-100 dark:border-slate-700 mb-3">

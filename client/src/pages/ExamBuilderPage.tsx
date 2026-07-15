@@ -27,6 +27,18 @@ const SKILL_LABELS: Record<string, string> = {
   complete: 'Evaluación Completa (Habilidades Combinadas)',
 };
 
+const isImageUrl = (url: string | null | undefined): boolean => {
+  if (!url) return false;
+  const cleanUrl = url.split('?')[0].split('#')[0];
+  return /\.(png|jpe?g|gif|webp|svg|bmp)$/i.test(cleanUrl);
+};
+
+const isAudioUrl = (url: string | null | undefined): boolean => {
+  if (!url) return false;
+  const cleanUrl = url.split('?')[0].split('#')[0];
+  return /\.(mp3|wav|ogg|m4a|aac|flac)$/i.test(cleanUrl);
+};
+
 export const ExamBuilderPage = () => {
   const { examId } = useParams<{ examId: string }>();
   const navigate = useNavigate();
@@ -482,7 +494,7 @@ export const ExamBuilderPage = () => {
             <input
               ref={audioInputRef}
               type="file"
-              accept="audio/mpeg,audio/wav,audio/ogg,audio/mp4,audio/*"
+              accept="image/*,audio/*"
               className="hidden"
               onChange={(e) => {
                 const file = e.target.files?.[0];
@@ -547,23 +559,38 @@ export const ExamBuilderPage = () => {
                             className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-850 rounded-2xl text-sm font-semibold text-slate-800 dark:text-white outline-none focus:border-indigo-500 focus:bg-white dark:focus:bg-slate-900 transition resize-none leading-relaxed" />
                         </div>
 
-                        {/* Audio / Media Player Preview if mediaUrl exists */}
+                        {/* Audio / Image Media Preview if mediaUrl exists */}
                         {q.media_url && (
-                          <div className="bg-slate-50 dark:bg-slate-800/40 rounded-2xl p-4 border border-slate-100 dark:border-slate-850 flex items-center gap-3">
-                            <div className="w-10 h-10 rounded-xl bg-indigo-100 dark:bg-indigo-500/10 flex items-center justify-center text-indigo-600 dark:text-indigo-400">
-                              <Music className="w-5 h-5" />
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <p className="text-xs font-bold text-slate-700 dark:text-slate-300 truncate">{q.media_url}</p>
-                              <div className="mt-1.5">
-                                <audio src={q.media_url} controls className="w-full max-h-8 scale-95 origin-left" />
-                              </div>
-                            </div>
+                          <div className="bg-slate-50 dark:bg-slate-800/40 rounded-2xl p-4 border border-slate-100 dark:border-slate-850 flex flex-col gap-3 relative">
                             {isDraft && (
                               <button onClick={() => handleUpdateQuestionField(q.id, { media_url: null })}
-                                className="p-1 text-slate-400 hover:text-rose-500 transition rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800">
+                                className="absolute top-3 right-3 p-1.5 text-slate-400 hover:text-rose-500 transition rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 z-10">
                                 <X className="w-4 h-4" />
                               </button>
+                            )}
+
+                            {isImageUrl(q.media_url) ? (
+                              <div className="space-y-2">
+                                <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider flex items-center gap-1">
+                                  <Globe className="w-3.5 h-3.5 text-indigo-500" /> Imagen de Apoyo
+                                </p>
+                                <div className="rounded-xl overflow-hidden border border-slate-200/60 dark:border-slate-800 max-h-60 bg-white dark:bg-slate-900 flex items-center justify-center">
+                                  <img src={q.media_url} alt="Recurso multimedia" className="object-contain max-h-60 w-full" />
+                                </div>
+                                <p className="text-[10px] text-slate-450 truncate">{q.media_url}</p>
+                              </div>
+                            ) : (
+                              <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 rounded-xl bg-indigo-100 dark:bg-indigo-500/10 flex items-center justify-center text-indigo-600 dark:text-indigo-400">
+                                  <Music className="w-5 h-5" />
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-xs font-bold text-slate-700 dark:text-slate-300 truncate">{q.media_url}</p>
+                                  <div className="mt-1.5">
+                                    <audio src={q.media_url} controls className="w-full max-h-8 scale-95 origin-left" />
+                                  </div>
+                                </div>
+                              </div>
                             )}
                           </div>
                         )}
@@ -573,12 +600,12 @@ export const ExamBuilderPage = () => {
                           <div>
                             <button onClick={() => setExpandedMediaId(isMediaExpanded ? null : q.id)}
                               className="text-xs font-bold text-slate-400 dark:text-slate-500 hover:text-indigo-600 flex items-center gap-1 transition">
-                              {q.media_url ? 'Modificar Audio/Multimedia' : '+ Agregar Audio / Archivo de Apoyo'}
+                              {q.media_url ? 'Modificar Recurso Multimedia' : '+ Agregar Imagen o Audio de Apoyo'}
                             </button>
 
                             {isMediaExpanded && (
                               <div className="mt-2 p-4 bg-slate-50 dark:bg-slate-800/50 rounded-2xl border border-slate-100 dark:border-slate-800 space-y-3">
-                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Recurso de Audio / Media</p>
+                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Recurso de Apoyo (Imagen o Audio)</p>
 
                                 {/* Upload button */}
                                 <button
@@ -587,7 +614,7 @@ export const ExamBuilderPage = () => {
                                   className="flex items-center gap-2 px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition disabled:opacity-50 w-full justify-center">
                                   {uploadingAudioId === q.id
                                     ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Subiendo...</>
-                                    : <><Upload className="w-3.5 h-3.5" /> Subir archivo de audio (MP3 / WAV)</>}
+                                    : <><Upload className="w-3.5 h-3.5" /> Subir Imagen o Audio (JPG, PNG, MP3, WAV)</>}
                                 </button>
 
                                 {/* URL fallback */}
@@ -776,12 +803,18 @@ export const ExamBuilderPage = () => {
 
                       <p className="text-slate-800 dark:text-slate-200 font-semibold text-sm leading-relaxed whitespace-pre-wrap">{q.text}</p>
 
-                      {/* Audio widget if mediaUrl exists */}
+                      {/* Audio/Image widget if mediaUrl exists */}
                       {q.media_url && (
-                        <div className="bg-slate-50 dark:bg-slate-800/40 rounded-xl p-3 border border-slate-100 dark:border-slate-800 flex items-center gap-3 max-w-lg">
-                          <Music className="w-4 h-4 text-indigo-500 flex-none" />
-                          <audio src={q.media_url} controls className="w-full h-8 scale-95" />
-                        </div>
+                        isImageUrl(q.media_url) ? (
+                          <div className="rounded-xl overflow-hidden border border-slate-200 dark:border-slate-800 max-h-64 bg-slate-50 dark:bg-slate-900/50 max-w-lg flex items-center justify-center">
+                            <img src={q.media_url} alt="Recurso de la pregunta" className="object-contain max-h-64" />
+                          </div>
+                        ) : (
+                          <div className="bg-slate-50 dark:bg-slate-800/40 rounded-xl p-3 border border-slate-100 dark:border-slate-800 flex items-center gap-3 max-w-lg">
+                            <Music className="w-4 h-4 text-indigo-500 flex-none" />
+                            <audio src={q.media_url} controls className="w-full h-8 scale-95" />
+                          </div>
+                        )
                       )}
 
                       {/* Options */}

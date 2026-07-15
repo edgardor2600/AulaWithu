@@ -8,8 +8,20 @@ import {
 import toast from 'react-hot-toast';
 import {
   Clock, ChevronLeft, ChevronRight, Send, Loader2,
-  CheckCircle2, XCircle, BookOpen, AlertTriangle, Eye, ArrowRight, WifiOff,
+  CheckCircle2, XCircle, BookOpen, AlertTriangle, Eye, ArrowRight, WifiOff, Music,
 } from 'lucide-react';
+
+const isImageUrl = (url: string | null | undefined): boolean => {
+  if (!url) return false;
+  const cleanUrl = url.split('?')[0].split('#')[0];
+  return /\.(png|jpe?g|gif|webp|svg|bmp)$/i.test(cleanUrl);
+};
+
+const isAudioUrl = (url: string | null | undefined): boolean => {
+  if (!url) return false;
+  const cleanUrl = url.split('?')[0].split('#')[0];
+  return /\.(mp3|wav|ogg|m4a|aac|flac)$/i.test(cleanUrl);
+};
 
 /**
  * Parse a DB timestamp (may or may not have TZ suffix) as Colombia wall-clock time.
@@ -19,6 +31,15 @@ import {
 const parseDbDate = (raw: string): Date => {
   if (raw.endsWith('Z') || /[+-]\d{2}:?\d{2}$/.test(raw)) return new Date(raw);
   return new Date(raw.replace(' ', 'T') + '-05:00');
+};
+
+/**
+ * Parse system-generated timestamps (like started_at) as UTC dates.
+ * If there is no zone suffix, we append 'Z'.
+ */
+const parseSystemDate = (raw: string): Date => {
+  if (raw.endsWith('Z') || /[+-]\d{2}:?\d{2}$/.test(raw)) return new Date(raw);
+  return new Date(raw.replace(' ', 'T') + 'Z');
 };
 
 // ── Timer ─────────────────────────────────────────────────────────────────────
@@ -164,8 +185,9 @@ interface ResultScreenProps {
   exam: Exam;
   attempt: ExamAttempt;
   onBack: () => void;
+  questions: ExamQuestion[];
 }
-const ResultScreen = ({ exam, attempt, onBack }: ResultScreenProps) => {
+const ResultScreen = ({ exam, attempt, onBack, questions }: ResultScreenProps) => {
   const scaleMax = exam.scale_max ?? 5;
   const passingNote = scaleMax * ((exam.passing_score ?? 60) / 100);
   const score = num(attempt.score);
@@ -174,6 +196,7 @@ const ResultScreen = ({ exam, attempt, onBack }: ResultScreenProps) => {
   const scoreKnown = attempt.score !== null;
   const passed = scoreKnown && score >= passingNote;
   const pct = totalPoints > 0 ? Math.min((earnedPoints / totalPoints) * 100, 100) : 0;
+  const hasOpenQuestions = questions.some(q => q.type === 'short_answer');
 
   return (
     <Layout>
@@ -227,7 +250,9 @@ const ResultScreen = ({ exam, attempt, onBack }: ResultScreenProps) => {
               : 'bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400'
           }`}>
             {attempt.status === 'graded'
-              ? <><CheckCircle2 className="w-4 h-4" /> Calificado por el profesor</>
+              ? hasOpenQuestions
+                ? <><CheckCircle2 className="w-4 h-4" /> Calificado por el profesor</>
+                : <><CheckCircle2 className="w-4 h-4" /> Calificado automáticamente</>
               : <><Clock className="w-4 h-4" /> ⏳ Tu profesor revisará y calificará tus respuestas</>}
           </div>
 
@@ -312,13 +337,21 @@ export const TakeExamPage = () => {
     await doSubmit();
   }, [attempt, phase]);
 
-  // Bug A fix: parse started_at using Colombia offset (-05:00) to avoid
-  // timezone drift on devices set to a different local timezone.
+  // Parse started_at as system UTC date to prevent timezone drifts
   const elapsedSeconds = attempt
-    ? Math.floor((Date.now() - parseDbDate(attempt.started_at).getTime()) / 1000)
+    ? Math.floor((Date.now() - parseSystemDate(attempt.started_at).getTime()) / 1000)
     : 0;
   const totalSeconds = (exam?.duration_minutes ?? 0) * 60;
-  const remainingSeconds = Math.max(0, totalSeconds - elapsedSeconds);
+  let remainingSeconds = Math.max(0, totalSeconds - elapsedSeconds);
+
+  // If the exam has a closing date (available_to), the student's remaining time
+  // cannot exceed the actual time left until the exam closes.
+  if (exam?.available_to) {
+    const closingTime = parseDbDate(exam.available_to).getTime();
+    const secondsToClosing = Math.max(0, Math.floor((closingTime - Date.now()) / 1000));
+    remainingSeconds = Math.min(remainingSeconds, secondsToClosing);
+  }
+
   const timer = useTimer(phase === 'taking' ? remainingSeconds : 0, handleExpire);
 
   const saveAnswer = async (questionId: string, value: string) => {
@@ -372,7 +405,7 @@ export const TakeExamPage = () => {
 
   // ── Already submitted / graded ────────────────────────────────────────────────
   if (phase === 'submitted' && exam && attempt) {
-    return <ResultScreen exam={exam} attempt={attempt} onBack={() => navigate(-1)} />;
+    return <ResultScreen exam={exam} attempt={attempt} onBack={() => navigate(-1)} questions={questions} />;
   }
 
   // ── Confirmation screen ───────────────────────────────────────────────────────
@@ -473,9 +506,27 @@ export const TakeExamPage = () => {
             {savingId === currentQ.id
               ? <Loader2 className="w-4 h-4 animate-spin text-indigo-400 flex-none mt-1" />
               : failedSaves.has(currentQ.id)
-                ? <WifiOff className="w-4 h-4 text-rose-500 flex-none mt-1" title="No guardado" />
+                ? (
+                  <span title="No guardado" className="flex-none mt-1">
+                    <WifiOff className="w-4 h-4 text-rose-500" />
+                  </span>
+                )
                 : null}
           </div>
+
+          {/* Question Media File */}
+          {currentQ.media_url && (
+            isImageUrl(currentQ.media_url) ? (
+              <div className="rounded-2xl overflow-hidden border border-slate-200 dark:border-slate-800 max-h-64 bg-slate-50 dark:bg-slate-900/50 flex items-center justify-center">
+                <img src={currentQ.media_url} alt="Imagen de apoyo para la pregunta" className="object-contain max-h-64 w-full" />
+              </div>
+            ) : (
+              <div className="bg-slate-50 dark:bg-slate-800/40 rounded-2xl p-4 border border-slate-100 dark:border-slate-800 flex items-center gap-3">
+                <Music className="w-5 h-5 text-indigo-500 flex-none" />
+                <audio src={currentQ.media_url} controls className="w-full h-8 scale-95" />
+              </div>
+            )
+          )}
 
           {/* Multiple choice */}
           {currentQ.type === 'multiple_choice' && currentQ.options && (

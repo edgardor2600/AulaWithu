@@ -3,7 +3,7 @@ import { examsService, type GradeExam, type GradeRow } from '../../services/exam
 import toast from 'react-hot-toast';
 import {
   Loader2, Award, TrendingUp, Users, ClipboardList,
-  CheckCircle2, XCircle, Clock, ChevronDown, Download,
+  CheckCircle2, XCircle, Clock, Download,
 } from 'lucide-react';
 
 interface GradesPanelProps {
@@ -44,7 +44,9 @@ export const GradesPanel = ({ classId, isTeacher = false }: GradesPanelProps) =>
   const [exams, setExams]   = useState<GradeExam[]>([]);
   const [rows, setRows]     = useState<GradeRow[]>([]);
   const [loading, setLoading] = useState(true);
-  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  const [editingCell, setEditingCell] = useState<{ studentId: string; examId: string } | null>(null);
+  const [editValue, setEditValue] = useState<string>('');
+  const [savingGrade, setSavingGrade] = useState<{ studentId: string; examId: string } | null>(null);
 
   useEffect(() => {
     setLoading(true);
@@ -90,14 +92,20 @@ export const GradesPanel = ({ classId, isTeacher = false }: GradesPanelProps) =>
     return { students, pivot };
   }, [rows]);
 
+  // Helper to resolve the effective score.
+  // If student hasn't taken the exam, they get a 1.0 (NP = No Presentó).
+  const getEffectiveScore = (studentId: string, examId: string): number => {
+    const cell = pivot.get(studentId)?.get(examId);
+    if (!cell || cell.score === null) return 1.0;
+    return Number(cell.score);
+  };
+
   // Per-exam stats (for the footer)
   const examStats = useMemo(() => {
     return exams.map(e => {
-      const scores = students
-        .map(s => pivot.get(s.id)?.get(e.id)?.score ?? null)
-        .filter(s => s !== null) as number[];
+      const scores = students.map(s => getEffectiveScore(s.id, e.id));
       const passed = scores.filter(s => s >= e.scale_max * (e.passing_score / 100)).length;
-      const avg    = scores.length ? scores.reduce((a, b) => a + b, 0) / scores.length : null;
+      const avg    = scores.length ? scores.reduce((a, b) => a + b, 0) / scores.length : 1.0;
       return { examId: e.id, count: scores.length, passed, avg };
     });
   }, [exams, students, pivot]);
@@ -105,10 +113,8 @@ export const GradesPanel = ({ classId, isTeacher = false }: GradesPanelProps) =>
   // Per-student average
   const studentAvg = useMemo(() => {
     return students.map(s => {
-      const scores = exams
-        .map(e => pivot.get(s.id)?.get(e.id)?.score ?? null)
-        .filter(s => s !== null) as number[];
-      return { studentId: s.id, avg: scores.length ? scores.reduce((a, b) => a + b, 0) / scores.length : null };
+      const scores = exams.map(e => getEffectiveScore(s.id, e.id));
+      return { studentId: s.id, avg: scores.length ? scores.reduce((a, b) => a + b, 0) / scores.length : 1.0 };
     });
   }, [students, exams, pivot]);
 
@@ -116,18 +122,57 @@ export const GradesPanel = ({ classId, isTeacher = false }: GradesPanelProps) =>
   const exportCSV = () => {
     const header = ['Estudiante', 'Usuario', ...exams.map(e => e.title), 'Promedio'].join(',');
     const dataRows = students.map(s => {
-      const scores = exams.map(e => {
-        const r = pivot.get(s.id)?.get(e.id);
-        return r?.score != null ? r.score.toFixed(2) : '';
-      });
+      const scores = exams.map(e => getEffectiveScore(s.id, e.id).toFixed(2));
       const avg = studentAvg.find(a => a.studentId === s.id)?.avg;
-      return [s.name, s.username, ...scores, avg != null ? avg.toFixed(2) : ''].join(',');
+      return [s.name, s.username, ...scores, avg != null ? avg.toFixed(2) : '1.00'].join(',');
     });
     const blob = new Blob([[header, ...dataRows].join('\n')], { type: 'text/csv;charset=utf-8;' });
     const url  = URL.createObjectURL(blob);
     const a    = document.createElement('a');
     a.href = url; a.download = `notas_clase.csv`; a.click();
     URL.revokeObjectURL(url);
+  };
+
+  // Save manual grade
+  const saveManualGrade = async (studentId: string, examId: string, value: string, scaleMax: number) => {
+    setEditingCell(null);
+    const numVal = parseFloat(value);
+    if (isNaN(numVal) || numVal < 0 || numVal > scaleMax) {
+      toast.error(`La nota debe ser un número entre 0.0 y ${scaleMax}`);
+      return;
+    }
+
+    setSavingGrade({ studentId, examId });
+    try {
+      const attempt = await examsService.updateManualGrade(examId, studentId, numVal);
+      toast.success('Nota guardada');
+      
+      setRows(prevRows => {
+        const idx = prevRows.findIndex(r => r.student_id === studentId && r.exam_id === examId);
+        const updatedRow: GradeRow = {
+          student_id: studentId,
+          student_name: prevRows[idx]?.student_name || students.find(s => s.id === studentId)?.name || '',
+          student_username: prevRows[idx]?.student_username || students.find(s => s.id === studentId)?.username || '',
+          exam_id: examId,
+          score: attempt.score !== null ? Number(attempt.score) : numVal,
+          status: attempt.status,
+          submitted_at: attempt.submitted_at
+        };
+
+        if (idx >= 0) {
+          const next = [...prevRows];
+          next[idx] = updatedRow;
+          return next;
+        } else {
+          return [...prevRows, updatedRow];
+        }
+      });
+    } catch (err: any) {
+      console.error(err);
+      toast.error(err.response?.data?.message || 'Error al guardar la nota');
+    } finally {
+      setSavingGrade(null);
+    }
   };
 
   // ── Render ──────────────────────────────────────────────────────────────────
@@ -149,7 +194,7 @@ export const GradesPanel = ({ classId, isTeacher = false }: GradesPanelProps) =>
   );
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 animate-fadeIn">
 
       {/* Header */}
       <div className="flex items-center justify-between gap-4">
@@ -212,6 +257,13 @@ export const GradesPanel = ({ classId, isTeacher = false }: GradesPanelProps) =>
             <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mt-0.5">Promedio Gral.</p>
           </div>
         </div>
+      )}
+
+      {/* Helper text for teachers */}
+      {isTeacher && (
+        <p className="text-xs text-slate-400 dark:text-slate-500 italic">
+          💡 Tip: Haz clic sobre la celda de cualquier nota para modificarla o calificar a estudiantes que no presentaron (NP).
+        </p>
       )}
 
       {/* Grade table */}
@@ -292,24 +344,71 @@ export const GradesPanel = ({ classId, isTeacher = false }: GradesPanelProps) =>
                     {/* Score cells */}
                     {exams.map(e => {
                       const cell = pivot.get(student.id)?.get(e.id);
+                      const isEditing = editingCell?.studentId === student.id && editingCell?.examId === e.id;
+                      const isSaving = savingGrade?.studentId === student.id && savingGrade?.examId === e.id;
+                      const effectiveScore = getEffectiveScore(student.id, e.id);
+                      const hasAttempt = !!cell;
+
                       return (
-                        <td key={e.id} className={`px-4 py-3.5 text-center ${cell ? scoreBg(cell.score, e.scale_max, e.passing_score) : ''}`}>
-                          {!cell ? (
-                            <span className="text-slate-300 dark:text-slate-600 text-lg">—</span>
-                          ) : cell.score === null ? (
-                            <div className="flex flex-col items-center gap-0.5">
-                              <span className="text-[10px] font-bold text-amber-500 uppercase tracking-wider">Pendiente</span>
+                        <td
+                          key={e.id}
+                          onClick={() => {
+                            if (isTeacher && !isEditing && !isSaving) {
+                              setEditingCell({ studentId: student.id, examId: e.id });
+                              setEditValue(effectiveScore.toFixed(2));
+                            }
+                          }}
+                          className={`px-4 py-3.5 text-center relative transition-all group ${
+                            isTeacher ? 'cursor-pointer hover:bg-slate-100/50 dark:hover:bg-slate-800/40 select-none' : ''
+                          } ${scoreBg(effectiveScore, e.scale_max, e.passing_score)}`}
+                        >
+                          {isSaving ? (
+                            <div className="flex items-center justify-center py-2">
+                              <Loader2 className="w-5 h-5 animate-spin text-indigo-500" />
+                            </div>
+                          ) : isEditing ? (
+                            <div onClick={(ev) => ev.stopPropagation()}>
+                              <input
+                                type="number"
+                                step="0.1"
+                                min="0"
+                                max={e.scale_max}
+                                value={editValue}
+                                onChange={(evt) => setEditValue(evt.target.value)}
+                                onBlur={() => saveManualGrade(student.id, e.id, editValue, e.scale_max)}
+                                onKeyDown={(evt) => {
+                                  if (evt.key === 'Enter') {
+                                    saveManualGrade(student.id, e.id, editValue, e.scale_max);
+                                  } else if (evt.key === 'Escape') {
+                                    setEditingCell(null);
+                                  }
+                                }}
+                                className="w-16 px-1.5 py-1 text-center text-sm font-bold border border-indigo-500 rounded focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:bg-slate-800 dark:text-white"
+                                autoFocus
+                              />
                             </div>
                           ) : (
                             <div className="flex flex-col items-center gap-1">
-                              <span className={`text-lg font-black ${scoreColor(cell.score, e.scale_max, e.passing_score)}`}>
-                                {cell.score.toFixed(2)}
+                              <span className={`text-lg font-black ${scoreColor(effectiveScore, e.scale_max, e.passing_score)}`}>
+                                {effectiveScore.toFixed(2)}
                               </span>
                               <span className="text-[10px] text-slate-400">/{e.scale_max}</span>
-                              {cell.score >= e.scale_max * (e.passing_score / 100)
-                                ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
-                                : <XCircle className="w-3.5 h-3.5 text-rose-500" />
-                              }
+                              <div className="flex items-center gap-1">
+                                {effectiveScore >= e.scale_max * (e.passing_score / 100)
+                                  ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
+                                  : <XCircle className="w-3.5 h-3.5 text-rose-500" />
+                                }
+                                {!hasAttempt && (
+                                  <span className="text-[8px] font-extrabold text-slate-400 dark:text-slate-500 bg-slate-200/50 dark:bg-slate-800/80 px-1 py-0.5 rounded uppercase tracking-wider">
+                                    NP
+                                  </span>
+                                )}
+                              </div>
+                              {isTeacher && (
+                                <span className="absolute right-1 bottom-1 text-[10px] text-slate-400 dark:text-slate-500 opacity-0 group-hover:opacity-100 transition-opacity">
+                                  ✎
+                                </span>
+                              )}
                             </div>
                           )}
                         </td>

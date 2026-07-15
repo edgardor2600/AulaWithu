@@ -753,6 +753,7 @@ export class ExamsService {
     // Calculate score (only MC questions are auto-graded)
     const totalPoints  = questions.reduce((sum, q) => sum + q.points, 0);
     const mcQuestions  = questions.filter(q => q.type === 'multiple_choice');
+    const openQuestions = questions.filter(q => q.type === 'short_answer');
     let earnedPoints   = 0;
 
     for (const q of mcQuestions) {
@@ -767,10 +768,14 @@ export class ExamsService {
     const scaleMax = exam?.scale_max ? Number(exam.scale_max) : 5.00;
     const score = totalPoints > 0 ? Math.round((earnedPoints / totalPoints) * scaleMax * 100) / 100 : 0;
 
+    // If no open questions, the exam is graded instantly
+    const finalStatus = openQuestions.length === 0 ? 'graded' : 'submitted';
+
     const submitted = await ExamsRepository.submitAttempt(attemptId, {
       score,
       totalPoints,
       earnedPoints,
+      status: finalStatus,
     });
 
     if (!submitted) throw new NotFoundError('Error al enviar el examen');
@@ -798,5 +803,32 @@ export class ExamsService {
 
     // Student: only their own data
     return ExamsRepository.getGradesByClass(classId, requesterId);
+  }
+
+  /**
+   * Upsert a manual grade for a student in an exam (Teacher/Admin only)
+   */
+  static async upsertManualGrade(
+    examId: string,
+    studentId: string,
+    score: number,
+    teacherId: string
+  ): Promise<ExamAttempt> {
+    const exam = await ExamsRepository.getById(examId);
+    if (!exam) throw new NotFoundError('Examen no encontrado');
+
+    const teacher = await UsersRepository.getById(teacherId);
+    if (!teacher) throw new ForbiddenError('Usuario no encontrado');
+
+    if (teacher.role !== 'admin') {
+      await this.assertTeacherOwnsClass(exam.class_id, teacherId);
+    }
+
+    const scaleMax = Number(exam.scale_max) || 5.0;
+    if (score < 0 || score > scaleMax) {
+      throw new ValidationError(`La nota debe estar entre 0.0 y ${scaleMax}`);
+    }
+
+    return await ExamsRepository.upsertManualGrade(examId, studentId, score);
   }
 }
