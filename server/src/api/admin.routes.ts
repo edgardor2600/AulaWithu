@@ -321,14 +321,15 @@ router.post(
     const { groupId, studentId, notes } = req.body;
     const adminId = req.user.userId;
 
-    const result = await AdminService.enrollStudentToGroupUnified(
+    const { enrollment, warning } = await AdminService.enrollStudentToGroupUnified(
       { groupId, studentId, notes },
       adminId
     );
 
     res.status(201).json({
       success: true,
-      data: result,
+      data: enrollment,
+      warning,
     });
   })
 );

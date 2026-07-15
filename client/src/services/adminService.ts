@@ -146,13 +146,16 @@ export const adminService = {
   /**
    * Unified Enrollment: Enroll student in a group and automatically assign to teacher
    */
-  async enrollStudentUnified(groupId: string, studentId: string, notes?: string): Promise<any> {
+  async enrollStudentUnified(groupId: string, studentId: string, notes?: string): Promise<{ enrollment: any; warning?: string }> {
     const response = await api.post('/admin/enrollments/unified', {
       groupId,
       studentId,
       notes,
     });
-    return response.data.data;
+    return {
+      enrollment: response.data.data,
+      warning: response.data.warning,
+    };
   },
 
   /**

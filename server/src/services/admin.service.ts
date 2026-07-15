@@ -1,4 +1,4 @@
-import { UsersRepository, GroupsRepository, EnrollmentsRepository, ClassesRepository } from '../db/repositories';
+import { UsersRepository, GroupsRepository, EnrollmentsRepository, ClassesRepository, LevelsRepository } from '../db/repositories';
 import { User, Enrollment } from '../types/database';
 import { GroupsService } from './groups.service';
 import { hashPassword } from '../utils/password';
@@ -221,7 +221,7 @@ export class AdminService {
       notes?: string;
     },
     adminId: string
-  ): Promise<{ enrollment: Enrollment }> {
+  ): Promise<{ enrollment: Enrollment; warning: string | null }> {
     // 1. Validate admin permission
     const admin = await UsersRepository.getById(adminId);
     if (!admin || admin.role !== 'admin') {
@@ -247,13 +247,21 @@ export class AdminService {
       throw new ValidationError('Student not found or invalid role');
     }
 
-    // 4. Enroll in group (logic already exists in GroupsService, but we'll use repos directly for atomicity or just call the service)
-    // To maintain best practices, we use a transaction if possible, but our current architecture doesn't easily support it across repos without passing the client.
-    // For now, we'll do it sequentially.
-    
+    // 4. Enroll in group
     // Check if already enrolled
     if (await EnrollmentsRepository.isEnrolled(data.groupId, data.studentId)) {
       throw new ConflictError('Student is already enrolled in this group');
+    }
+
+    // --- NEW: Level Validation with warnings ---
+    let warning: string | null = null;
+    if (classObj.level_id && student.level_id) {
+      if (classObj.level_id !== student.level_id) {
+        const classLevel = await LevelsRepository.getById(classObj.level_id);
+        const studentLevel = await LevelsRepository.getById(student.level_id);
+        warning = `El nivel académico del estudiante (${studentLevel?.name || 'Desconocido'}) no coincide con el de la clase (${classLevel?.name || 'Desconocido'}).`;
+        console.warn(`⚠️ Student level (${student.level_id}) does not match class level (${classObj.level_id}): ${warning}`);
+      }
     }
 
     // Check if group is full
@@ -268,7 +276,7 @@ export class AdminService {
       notes: data.notes,
     });
 
-    return { enrollment };
+    return { enrollment, warning };
   }
 
   // ============================================
