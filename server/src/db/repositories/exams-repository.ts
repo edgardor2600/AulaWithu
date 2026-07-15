@@ -119,6 +119,16 @@ export class ExamsRepository {
   }
 
   static async deleteExam(id: string): Promise<boolean> {
+    // 1. Delete answers belonging to attempts of this exam
+    await runQuery(
+      `DELETE FROM exam_answers WHERE attempt_id IN (SELECT id FROM exam_attempts WHERE exam_id = $1)`,
+      [id]
+    );
+    // 2. Delete attempts of this exam
+    await runQuery(`DELETE FROM exam_attempts WHERE exam_id = $1`, [id]);
+    // 3. Delete questions of this exam
+    await runQuery(`DELETE FROM exam_questions WHERE exam_id = $1`, [id]);
+    // 4. Delete the exam itself
     const result = await runQuery(`DELETE FROM exams WHERE id = $1`, [id]);
     return (result.rowCount ?? 0) > 0;
   }
@@ -290,23 +300,50 @@ export class ExamsRepository {
     );
     if (!attempt) return null;
 
-    const answers = await getAll<ExamAnswer & { question_text: string; question_type: string; correct_answer: string | null; points: number; skill_category: string }>(
-      `SELECT ans.*, q.text as question_text, q.type as question_type, q.correct_answer, q.points, q.skill_category
-       FROM exam_answers ans
-       JOIN exam_questions q ON q.id = ans.question_id
-       WHERE ans.attempt_id = $1
+    const answers = await getAll<any>(
+      `SELECT 
+         ans.id,
+         $1 as attempt_id,
+         q.id as question_id,
+         ans.answer_text,
+         ans.points_earned,
+         ans.is_correct,
+         ans.answered_at,
+         q.text as question_text,
+         q.type as question_type,
+         q.correct_answer,
+         q.points,
+         q.skill_category,
+         q.media_url
+       FROM exam_questions q
+       LEFT JOIN exam_answers ans ON ans.question_id = q.id AND ans.attempt_id = $1
+       WHERE q.exam_id = $2
        ORDER BY q.question_number ASC`,
-      [attemptId]
+      [attemptId, attempt.exam_id]
     );
     return { attempt, answers };
   }
 
   static async gradeAnswer(attemptId: string, questionId: string, pointsEarned: number, teacherComment?: string | null): Promise<void> {
-    await runQuery(
-      `UPDATE exam_answers SET points_earned = $1, is_correct = ($1 > 0)
-       WHERE attempt_id = $2 AND question_id = $3`,
-      [pointsEarned, attemptId, questionId]
+    const existing = await getOne<any>(
+      `SELECT id FROM exam_answers WHERE attempt_id = $1 AND question_id = $2`,
+      [attemptId, questionId]
     );
+
+    if (existing) {
+      await runQuery(
+        `UPDATE exam_answers SET points_earned = $1, is_correct = ($1 > 0)
+         WHERE attempt_id = $2 AND question_id = $3`,
+        [pointsEarned, attemptId, questionId]
+      );
+    } else {
+      const id = generateId();
+      await runQuery(
+        `INSERT INTO exam_answers (id, attempt_id, question_id, answer_text, points_earned, is_correct)
+         VALUES ($1, $2, $3, NULL, $4, ($4 > 0))`,
+        [id, attemptId, questionId, pointsEarned]
+      );
+    }
   }
 
   static async finalizeGrading(attemptId: string): Promise<ExamAttempt | undefined> {
@@ -339,14 +376,16 @@ export class ExamsRepository {
       score: number;
       totalPoints: number;
       earnedPoints: number;
+      status?: 'submitted' | 'graded';
     }
   ): Promise<ExamAttempt | undefined> {
+    const status = data.status || 'submitted';
     await runQuery(
       `UPDATE exam_attempts
-       SET status = 'submitted', submitted_at = CURRENT_TIMESTAMP,
-           score = $1, total_points = $2, earned_points = $3
-       WHERE id = $4`,
-      [data.score, data.totalPoints, data.earnedPoints, attemptId]
+       SET status = $1, submitted_at = CURRENT_TIMESTAMP,
+           score = $2, total_points = $3, earned_points = $4
+       WHERE id = $5`,
+      [status, data.score, data.totalPoints, data.earnedPoints, attemptId]
     );
     return await this.getAttemptById(attemptId);
   }
@@ -469,5 +508,30 @@ export class ExamsRepository {
     );
 
     return { exams, rows };
+  }
+
+  static async upsertManualGrade(
+    examId: string,
+    studentId: string,
+    score: number
+  ): Promise<ExamAttempt> {
+    const existing = await this.getAttemptByStudentAndExam(examId, studentId);
+    if (existing) {
+      await runQuery(
+        `UPDATE exam_attempts 
+         SET score = $1, status = 'graded', submitted_at = COALESCE(submitted_at, CURRENT_TIMESTAMP)
+         WHERE id = $2`,
+        [score, existing.id]
+      );
+      return (await this.getAttemptById(existing.id))!;
+    } else {
+      const id = generateId();
+      await runQuery(
+        `INSERT INTO exam_attempts (id, exam_id, student_id, status, started_at, submitted_at, score, total_points, earned_points)
+         VALUES ($1, $2, $3, 'graded', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, $4, $4, $4)`,
+        [id, examId, studentId, score]
+      );
+      return (await this.getAttemptById(id))!;
+    }
   }
 }

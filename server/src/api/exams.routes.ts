@@ -347,4 +347,25 @@ router.get(
   })
 );
 
+/**
+ * PUT /api/exams/:examId/students/:studentId/grade
+ * Upsert a manual grade for a student (Teacher/Admin only)
+ */
+router.put(
+  '/exams/:examId/students/:studentId/grade',
+  requireRole(['teacher', 'admin']),
+  [
+    param('examId').notEmpty(),
+    param('studentId').notEmpty(),
+    body('score').isFloat({ min: 0 }).withMessage('La nota debe ser un número positivo'),
+  ],
+  validate,
+  asyncHandler(async (req: any, res: any) => {
+    const { examId, studentId } = req.params;
+    const { score } = req.body;
+    const attempt = await ExamsService.upsertManualGrade(examId, studentId, Number(score), req.user.userId);
+    res.status(200).json({ success: true, attempt });
+  })
+);
+
 export default router;

@@ -65,6 +65,7 @@ export interface ExamAnswer {
   points_earned: number | null;
   points?: number;
   correct_answer?: string | null;
+  media_url?: string | null;
 }
 
 /** Represents one exam column in the grade-book */
@@ -228,10 +229,13 @@ export const examsService = {
     return res.data.attempt;
   },
 
-  // --- GRADES (book of grades) ---
-
   async getGradesByClass(classId: string): Promise<{ exams: GradeExam[]; rows: GradeRow[] }> {
     const res = await api.get(`/classes/${classId}/grades`);
     return { exams: res.data.exams, rows: res.data.rows };
+  },
+
+  async updateManualGrade(examId: string, studentId: string, score: number): Promise<ExamAttempt> {
+    const res = await api.put(`/exams/${examId}/students/${studentId}/grade`, { score });
+    return res.data.attempt;
   },
 };
