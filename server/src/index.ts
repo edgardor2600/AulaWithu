@@ -17,6 +17,7 @@ import messagesRoutes from './api/messages.routes';
 import groupsRoutes from './api/groups.routes';
 import topicsRoutes from './api/topics.routes';
 import examsRoutes from './api/exams.routes';
+import readingRoutes from './api/reading.routes';
 import { errorHandler } from './middleware/error.middleware';
 import { generalLimiter, authLimiter } from './middleware/rate-limit.middleware';
 import { testConnection } from './db/database';
@@ -63,7 +64,7 @@ app.use(cors({
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'x-gemini-api-key'],
 }));
 
 // ============================================================
@@ -115,6 +116,7 @@ app.use('/api/snapshots', snapshotsRoutes);
 app.use('/api/admin', adminRoutes);
 // Exams: /api/exams/... and /api/classes/...
 app.use('/api', examsRoutes);
+app.use('/api/reading', readingRoutes);
 
 // ============================================================
 // FIX-08: RUTAS DE TEST — Solo en desarrollo

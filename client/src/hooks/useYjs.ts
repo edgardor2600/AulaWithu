@@ -366,6 +366,9 @@ export function useYjs(
           if (isTeacher) {
             // Profesor: siempre puede editar
             shouldLock = false;
+          } else if ((objectData as any).isLocalOwned && isOwner) {
+            // Objeto TTS local propio: siempre editable
+            shouldLock = false;
           } else if (isReadOnly) {
             // Estudiante en modo view-only: bloquear TODO
             shouldLock = true;
@@ -458,7 +461,7 @@ export function useYjs(
         (obj as any).createdBy = ydocRef.current.clientID;
       }
 
-      const objectData = (obj as any).toJSON(['id', 'createdBy']); // Include custom props
+      const objectData = (obj as any).toJSON(['id', 'createdBy', 'isLocalOwned']); // Include custom props
       yCanvas.set(objectId, objectData);
       syncedObjectsRef.current.add(objectId);
     }

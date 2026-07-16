@@ -20,10 +20,18 @@ import {
   Maximize2,
   Hand,
   ArrowRight,
-  Image as ImageIcon,
+  ImageIcon,
   FolderOpen,
-  Keyboard
+  Keyboard,
+  Volume2,
+  Activity,
+  Play,
+  Pause,
+  SkipBack,
+  SkipForward,
+  BookOpen
 } from 'lucide-react';
+import { useReading } from '../hooks/useReading';
 import toast from 'react-hot-toast';
 import { useYjs } from '../hooks/useYjs';
 import { uploadImage } from '../services/uploadService';
@@ -58,7 +66,7 @@ interface CanvasEditorProps {
   onPermissionsChange?: (allowDraw: boolean) => void;  // ✅ NUEVO: Callback cuando cambien permisos
 }
 
-type Tool = 'select' | 'pencil' | 'rectangle' | 'circle' | 'line' | 'triangle' | 'arrow' | 'text' | 'eraser' | 'hand' | 'image';
+type Tool = 'select' | 'pencil' | 'rectangle' | 'circle' | 'line' | 'triangle' | 'arrow' | 'text' | 'eraser' | 'hand' | 'image' | 'reading';
 
 export const CanvasEditor = ({ 
   slideId, 
@@ -187,6 +195,14 @@ export const CanvasEditor = ({
     setCanUndo(historyIndexRef.current > 0);
     setCanRedo(false);
   }, [serializeCanvas]);
+
+  const reading = useReading(fabricCanvasRef.current, saveHistory);
+
+  // Referencia mutable para actualizar el texto de lectura TTS basado en selecciones en el canvas
+  const setReadingTextRef = useRef(reading.setReadingText);
+  useEffect(() => {
+    setReadingTextRef.current = reading.setReadingText;
+  }, [reading.setReadingText]);
 
   const restoreCanvasState = useCallback(async (canvas: fabric.Canvas, serializedState: string) => {
     const state = JSON.parse(serializedState);
@@ -696,9 +712,28 @@ export const CanvasEditor = ({
       return;
     }
 
+    if (tool === 'reading') {
+      const willShow = !reading.showReadingPanel;
+      reading.setShowReadingPanel(willShow);
+      setCurrentTool('select');
+      syncCursorForTool('select');
+      
+      if (willShow) {
+        const canvas = fabricCanvasRef.current;
+        const activeObject = canvas?.getActiveObject();
+        if (activeObject && (activeObject.type === 'i-text' || activeObject.type === 'text')) {
+          const text = (activeObject as any).text;
+          if (text && text.trim()) {
+            reading.setReadingText(text);
+          }
+        }
+      }
+      return;
+    }
+
     setCurrentTool(tool);
     syncCursorForTool(tool);
-  }, [addText, syncCursorForTool, triggerImageUpload]);
+  }, [addText, syncCursorForTool, triggerImageUpload, reading]);
 
   const exportJSON = useCallback(() => {
     const canvas = fabricCanvasRef.current;
@@ -1227,10 +1262,11 @@ export const CanvasEditor = ({
               enlivenedObjects.forEach((obj: any) => {
                 // ✅ ENFORCE READ-ONLY: Lock objects if in read-only mode
                 if (isReadOnlyRef.current) {
-                  obj.selectable = false;
-                  obj.evented = false;
+                  const isTextType = obj instanceof fabric.IText || obj.type === 'text' || obj.type === 'i-text';
+                  obj.selectable = isTextType ? true : false;
+                  obj.evented = isTextType ? true : false;
                   obj.hasControls = false;
-                  obj.hasBorders = false;
+                  obj.hasBorders = isTextType ? true : false;
                   obj.lockMovementX = true;
                   obj.lockMovementY = true;
                   obj.lockRotation = true;
@@ -1239,6 +1275,7 @@ export const CanvasEditor = ({
                   
                   if (obj instanceof fabric.IText) {
                     obj.editable = false;
+                    obj.selectable = true;
                   }
                 }
                 canvas.add(obj);
@@ -1278,6 +1315,11 @@ export const CanvasEditor = ({
       setIsReady(true);
       
       // ✅ NUEVO: Ajustar al viewport al cargar
+      
+      isLoadingRef.current = false;
+      setIsReady(true);
+      
+      // ✅ NUEVO: Ajustar al viewport al cargar
       setTimeout(() => fitToViewport(), 100);
     };
 
@@ -1285,15 +1327,29 @@ export const CanvasEditor = ({
 
     // Listen to canvas changes AFTER loading
     const setupListeners = () => {
-      // Enforce read-only on added objects
+      // Escuchar selecciones del canvas para cargar textos automáticamente en la herramienta TTS
+      const handleSelection = () => {
+        const activeObject = canvas.getActiveObject();
+        if (activeObject && (activeObject.type === 'i-text' || activeObject.type === 'text')) {
+          const text = (activeObject as any).text;
+          if (text && text.trim()) {
+            setReadingTextRef.current(text);
+          }
+        }
+      };
+
+      canvas.on('selection:created', handleSelection);
+      canvas.on('selection:updated', handleSelection);
+
+      // Enforce read-only on added objects (skip locally owned objects like TTS text)
       canvas.on('object:added', (e) => {
         const obj = e.target;
-        if (obj && isReadOnlyRef.current) {
-           // Apply restrictions immediately
-           obj.selectable = false;
-           obj.evented = false;
+        if (obj && isReadOnlyRef.current && !(obj as any).isLocalOwned) {
+           const isTextType = obj instanceof fabric.IText || obj.type === 'text' || obj.type === 'i-text';
+           obj.selectable = isTextType ? true : false;
+           obj.evented = isTextType ? true : false;
            obj.hasControls = false;
-           obj.hasBorders = false;
+           obj.hasBorders = isTextType ? true : false;
            obj.lockMovementX = true;
            obj.lockMovementY = true;
            obj.lockRotation = true;
@@ -1302,7 +1358,7 @@ export const CanvasEditor = ({
            
            if (obj instanceof fabric.IText) {
              (obj as any).editable = false;
-             (obj as any).selectable = false;
+             (obj as any).selectable = true;
            }
           
           canvas.requestRenderAll();
@@ -1798,6 +1854,7 @@ export const CanvasEditor = ({
     { id: 'text' as Tool, icon: Type, label: 'Text', desc: 'Add text (T)' },
     { id: 'image' as Tool, icon: ImageIcon, label: 'Image', desc: 'Upload image (I)' },  // ✅ NUEVO
     { id: 'eraser' as Tool, icon: Eraser, label: 'Eraser', desc: 'Erase (E)' },
+    { id: 'reading' as Tool, icon: BookOpen, label: 'Reading/TTS', desc: 'Text to Speech and Phonetics' },
   ];
 
   const colors = [
@@ -2087,23 +2144,23 @@ export const CanvasEditor = ({
         ref={containerRef}
         className={`flex-1 flex items-center justify-center overflow-auto ${
           isReadOnly && !isTeacher 
-            ? 'p-0 bg-white' // Pantalla completa blanca para estudiantes en lectura
-            : 'p-2 md:p-4 bg-gray-200/50' // Bordes grises para edición
+            ? 'p-0 bg-[#1a1d23]' // Fondo oscuro para estudiantes en lectura
+            : 'p-2 md:p-4 bg-[#1e2128]' // Bordes oscuros para edición
         }`}
       >
         <div className={`bg-white shrink-0 ${
           isReadOnly && !isTeacher 
-            ? 'shadow-none' // Sin sombras para estudiantes en lectura
-            : 'shadow-lg border border-gray-100' // Con sombra para edición
+            ? 'shadow-none ring-1 ring-white/10' // Sin sombras para estudiantes en lectura
+            : 'shadow-2xl shadow-black/50 ring-1 ring-white/10' // Con sombra para edición
         }`}>
           <canvas ref={canvasRef} />
         </div>
       </div>
 
       {/* Mini-Map Navigator - Fixed position (Visible only on Large screens) */}
-      <div className="hidden lg:block fixed bottom-6 right-6 bg-white rounded-xl shadow-[0_4px_20px_rgba(0,0,0,0.15)] border border-gray-200 p-3 z-20">
-        <div className="text-[10px] uppercase tracking-widest font-bold text-gray-500 mb-2 text-center">Navigator</div>
-        <div className="relative bg-gray-50 rounded-lg overflow-hidden border border-gray-200" style={{ width: '150px', height: '100px' }}>
+      <div className="hidden lg:block fixed bottom-6 right-6 bg-[#1e2128] rounded-xl shadow-[0_4px_24px_rgba(0,0,0,0.5)] border border-white/10 p-3 z-20">
+        <div className="text-[10px] uppercase tracking-widest font-bold text-slate-400 mb-2 text-center">Navigator</div>
+        <div className="relative bg-[#13151a] rounded-lg overflow-hidden border border-white/10" style={{ width: '150px', height: '100px' }}>
         <canvas 
           ref={miniMapCanvasRef} 
           width={150} 
@@ -2178,7 +2235,310 @@ export const CanvasEditor = ({
         onChange={handleJSONFileLoad}
         style={{ display: 'none' }}
       />
+      {/* Panel flotante de Reading / TTS (Figma style) */}
+      {reading.showReadingPanel && (
+        <div className="fixed top-20 right-6 z-40 w-80 bg-[#1e2128]/95 backdrop-blur-xl border border-white/10 rounded-2xl shadow-[0_20px_60px_rgba(0,0,0,0.6)] flex flex-col max-h-[75vh] transition-all duration-300">
+          {/* Cabecera */}
+          <div className="px-4 py-3 border-b border-white/8 flex items-center justify-between bg-white/5 rounded-t-2xl">
+            <div className="flex items-center gap-2">
+              <Volume2 className="w-5 h-5 text-indigo-400" />
+              <span className="font-semibold text-white text-sm">Lectura y TTS / IPA</span>
+            </div>
+            <button 
+              onClick={() => reading.setShowReadingPanel(false)}
+              className="text-slate-400 hover:text-white text-lg font-bold p-1 leading-none transition-colors"
+            >
+              ×
+            </button>
+          </div>
 
+          {/* Contenido con scroll */}
+          <div className="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar text-xs text-slate-300">
+            
+            {/* Texto de entrada */}
+            <div>
+              <label className="block text-[11px] font-semibold text-slate-300 mb-1">Texto a fraccionar y leer:</label>
+              <textarea
+                className="w-full h-20 p-2 border border-white/10 rounded-lg focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 resize-none text-xs text-slate-100 bg-white/5 placeholder-slate-500"
+                value={reading.readingText}
+                onChange={(e) => reading.setReadingText(e.target.value)}
+                placeholder="Introduce el texto aquí..."
+              />
+            </div>
+
+            {/* Botón de Fraccionar + IPA */}
+            <button
+              onClick={reading.handleSplitAndIpa}
+              disabled={!reading.readingText.trim() || reading.readingStatus.includes('Generando')}
+              className="w-full py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg font-medium shadow-lg shadow-indigo-900/50 transition disabled:opacity-40 disabled:cursor-not-allowed text-xs flex items-center justify-center gap-1.5"
+            >
+              <Activity className="w-3.5 h-3.5" />
+              {reading.readingStatus.includes('Generando') ? 'Generando IPA...' : 'Fraccionar + IPA'}
+            </button>
+
+            {/* Configuración de Audio (Speech) */}
+            <div className="border-t border-white/8 pt-3">
+              <span className="font-bold text-slate-200 block mb-2">Configuración de voz</span>
+              
+              {/* Selector de Modo */}
+              <div className="grid grid-cols-2 gap-2 mb-3">
+                <button
+                  onClick={() => reading.setAudioMode('browser')}
+                  className={`py-1 rounded border text-center transition font-medium ${
+                    reading.audioMode === 'browser'
+                      ? 'bg-indigo-600 border-indigo-500 text-white'
+                      : 'border-white/10 hover:bg-white/10 text-slate-400'
+                  }`}
+                >
+                  Navegador
+                </button>
+                <button
+                  onClick={() => reading.setAudioMode('server')}
+                  className={`py-1 rounded border text-center transition font-medium ${
+                    reading.audioMode === 'server'
+                      ? 'bg-indigo-600 border-indigo-500 text-white'
+                      : 'border-white/10 hover:bg-white/10 text-slate-400'
+                  }`}
+                >
+                  Servidor (Edge)
+                </button>
+              </div>
+
+              {/* Lista de Voces */}
+              <div className="space-y-2.5">
+                {reading.audioMode === 'browser' ? (
+                  <div>
+                    <label className="block text-gray-600 mb-1">Voz del Navegador:</label>
+                    <select
+                      className="w-full p-1.5 border border-white/10 rounded-lg text-slate-200 text-xs bg-white/5 focus:ring-1 focus:ring-indigo-500"
+                      value={reading.voiceURI}
+                      onChange={(e) => reading.setVoiceURI(e.target.value)}
+                    >
+                      {reading.browserVoices.map((v, idx) => (
+                        <option key={`${v.voiceURI}-${idx}`} value={v.voiceURI}>
+                          {v.name} ({v.lang})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                ) : (
+                  <div>
+                    <label className="block text-gray-600 mb-1">Voz del Servidor:</label>
+                    <select
+                      className="w-full p-1.5 border border-white/10 rounded-lg text-slate-200 text-xs bg-white/5 focus:ring-1 focus:ring-indigo-500"
+                      value={reading.edgeVoice}
+                      onChange={(e) => reading.setEdgeVoice(e.target.value)}
+                    >
+                      {reading.edgeVoices.map((v, idx) => (
+                        <option key={`${v.shortName || idx}`} value={v.shortName}>
+                          {v.name || v.friendlyName || v.shortName}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                {/* Controles de velocidad (Rate / Pitch) */}
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="block text-gray-600 mb-0.5">Velocidad: {reading.rate}x</label>
+                    <input
+                      type="range"
+                      min="0.5"
+                      max="2"
+                      step="0.1"
+                      value={reading.rate}
+                      onChange={(e) => reading.setRate(Number(e.target.value))}
+                      className="w-full"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-gray-600 mb-0.5">Tono: {reading.pitch}x</label>
+                    <input
+                      type="range"
+                      min="0.5"
+                      max="1.5"
+                      step="0.1"
+                      value={reading.pitch}
+                      onChange={(e) => reading.setPitch(Number(e.target.value))}
+                      className="w-full"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Configuración de Fonética (IPA) */}
+            <div className="border-t border-white/8 pt-3">
+              <span className="font-bold text-slate-200 block mb-2">Configuración Fonética (IPA)</span>
+              
+              <div className="space-y-2">
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="block text-gray-600 mb-0.5">Idioma:</label>
+                    <select
+                      className="w-full p-1.5 border border-white/10 rounded-lg text-slate-200 text-xs bg-white/5 focus:ring-1 focus:ring-indigo-500"
+                      value={reading.ipaLang}
+                      onChange={(e) => reading.setIpaLang(e.target.value as any)}
+                    >
+                      <option value="auto">Auto</option>
+                      <option value="en">Inglés</option>
+                      <option value="es">Español</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-gray-600 mb-0.5">Acento:</label>
+                    <select
+                      className="w-full p-1.5 border border-white/10 rounded-lg text-slate-200 text-xs bg-white/5 focus:ring-1 focus:ring-indigo-500"
+                      value={reading.ipaAccent}
+                      onChange={(e) => reading.setIpaAccent(e.target.value as any)}
+                    >
+                      <option value="us">Americano</option>
+                      <option value="uk">Británico</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-gray-600 mb-0.5">Motor IPA:</label>
+                  <select
+                    className="w-full p-1.5 border border-white/10 rounded-lg text-slate-200 text-xs bg-white/5 focus:ring-1 focus:ring-indigo-500"
+                    value={reading.ipaEngine}
+                    onChange={(e) => reading.setIpaEngine(e.target.value as any)}
+                  >
+                    <option value="local">Gruut (Local)</option>
+                    <option value="ai">AI (Gemini)</option>
+                  </select>
+                </div>
+
+                {reading.ipaEngine === 'ai' && (
+                  <div className="space-y-2 bg-white/5 p-2 rounded-lg border border-white/10">
+                    <div>
+                      <label className="block text-gray-600 mb-0.5">Proveedor API:</label>
+                      <select
+                        className="w-full p-1.5 border border-white/10 rounded-lg text-slate-200 text-xs bg-white/5 focus:ring-1 focus:ring-indigo-500"
+                        value={reading.ipaProvider}
+                        onChange={(e) => reading.setIpaProvider(e.target.value)}
+                      >
+                        <option value="gemini">Gemini</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-gray-600 mb-0.5">API Key:</label>
+                      <input
+                        type="password"
+                        className="w-full p-1.5 border border-white/10 rounded-lg text-xs text-slate-200 bg-white/5 focus:ring-1 focus:ring-indigo-500"
+                        placeholder="Ingresa API Key..."
+                        value={reading.ipaApiKey}
+                        onChange={(e) => reading.setIpaApiKey(e.target.value)}
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Status Bar */}
+            <div className="bg-black/30 border border-white/8 rounded-lg p-2 text-center text-[10px] text-slate-400 font-mono">
+              {reading.readingStatus}
+            </div>
+
+            {/* ✅ Segmentos generados con IPA */}
+            {reading.readingSegments.length > 0 && (
+              <div className="border-t border-white/8 pt-3">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="font-bold text-slate-200 text-[11px]">Frases generadas</span>
+                  <span className="text-[10px] text-slate-500">{reading.readingSegments.length} segmento(s)</span>
+                </div>
+                <div className="space-y-1.5 max-h-48 overflow-y-auto custom-scrollbar pr-0.5">
+                  {reading.readingSegments.map((seg, idx) => (
+                    <div
+                      key={seg.id}
+                      onClick={() => reading.playSegment(idx)}
+                      className={`cursor-pointer rounded-lg px-2.5 py-2 border transition-all select-none ${
+                        idx === reading.currentSegmentIndex
+                          ? 'bg-indigo-600/20 border-indigo-500/50 shadow-sm'
+                          : 'bg-white/5 border-white/10 hover:border-indigo-500/40 hover:bg-indigo-600/10'
+                      }`}
+                    >
+                      <p className={`text-[11px] font-semibold leading-snug ${
+                        idx === reading.currentSegmentIndex ? 'text-indigo-200' : 'text-slate-200'
+                      }`}>
+                        {seg.text}
+                      </p>
+                      {seg.ipa && (
+                        <p className={`text-[10px] italic mt-0.5 font-mono leading-snug ${
+                          idx === reading.currentSegmentIndex ? 'text-indigo-400' : 'text-violet-400'
+                        }`}>
+                          /{seg.ipa}/
+                        </p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Panel de control de reproducción */}
+          {reading.readingSegments.length > 0 && (
+            <div className="p-3 border-t border-white/8 bg-black/20 rounded-b-2xl space-y-2">
+              <div className="flex items-center justify-between text-xs text-slate-400 mb-1">
+                <span>Segmento {reading.currentSegmentIndex + 1} de {reading.readingSegments.length}</span>
+              </div>
+              
+              {/* Botones de reproducción */}
+              <div className="flex items-center justify-center gap-2">
+                <button
+                  onClick={() => {
+                    const prevIdx = Math.max(0, reading.currentSegmentIndex - 1);
+                    reading.playSegment(prevIdx);
+                  }}
+                  disabled={reading.currentSegmentIndex <= 0}
+                  className="p-2 bg-white/8 border border-white/10 hover:bg-white/15 rounded-lg transition text-slate-300 disabled:opacity-40"
+                  title="Anterior"
+                >
+                  <SkipBack className="w-3.5 h-3.5" />
+                </button>
+
+                <button
+                  onClick={reading.togglePlayPause}
+                  className="p-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-full transition shadow-lg shadow-indigo-900/50"
+                  title={reading.isPlaying ? 'Pausar' : 'Reproducir'}
+                >
+                  {reading.isPlaying ? (
+                    <Pause className="w-4 h-4 fill-white" />
+                  ) : (
+                    <Play className="w-4 h-4 fill-white translate-x-0.5" />
+                  )}
+                </button>
+
+                <button
+                  onClick={reading.stopReading}
+                  className="p-2 bg-white/8 border border-white/10 hover:bg-red-900/20 rounded-lg transition text-red-400"
+                  title="Detener"
+                >
+                  <Volume2 className="w-3.5 h-3.5 text-red-600" />
+                </button>
+
+                <button
+                  onClick={() => {
+                    const nextIdx = Math.min(reading.readingSegments.length - 1, reading.currentSegmentIndex + 1);
+                    reading.playSegment(nextIdx);
+                  }}
+                  disabled={reading.currentSegmentIndex >= reading.readingSegments.length - 1}
+                  className="p-2 bg-white/8 border border-white/10 hover:bg-white/15 rounded-lg transition text-slate-300 disabled:opacity-40"
+                  title="Siguiente"
+                >
+                  <SkipForward className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      
       {showShortcuts && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
