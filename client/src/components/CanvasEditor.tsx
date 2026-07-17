@@ -722,9 +722,13 @@ export const CanvasEditor = ({
         const canvas = fabricCanvasRef.current;
         const activeObject = canvas?.getActiveObject();
         if (activeObject && (activeObject.type === 'i-text' || activeObject.type === 'text')) {
-          const text = (activeObject as any).text;
+          let text = (activeObject as any).text || '';
+          // Si es un bloque de texto unificado, extraemos solo la frase original (primera linea)
+          if (text.includes('\n')) {
+            text = text.split('\n')[0];
+          }
           if (text && text.trim()) {
-            reading.setReadingText(text);
+            reading.setReadingText(text.trim());
           }
         }
       }

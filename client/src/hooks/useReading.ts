@@ -146,7 +146,7 @@ export const useReading = (
 
     // Obtener centro del canvas
     const center = canvas.getVpCenter();
-    let startY = center.y - (chunks.length * 40);
+    let startY = center.y - (chunks.length * 35);
     const startX = center.x - 200;
 
     chunks.forEach((chunk, index) => {
@@ -155,8 +155,23 @@ export const useReading = (
         ? ipaLinesByChunk[index].join(' ').trim() 
         : '';
 
-      // Texto Principal
-      const mainText = new fabric.IText(textVal, {
+      const ipaString = ipaVal ? `[${ipaVal}]` : '[no ipa]';
+      const combinedContent = `${textVal}\n${ipaString}`;
+
+      // Crear estilos específicos para la línea 1 (fonética)
+      const line1Styles: Record<number, any> = {};
+      for (let i = 0; i < ipaString.length; i++) {
+        line1Styles[i] = {
+          fontSize: 16,
+          fill: '#0284c7', // sky-600
+          fontStyle: 'italic',
+          fontFamily: 'Lucida Sans Unicode, Arial, sans-serif',
+          fontWeight: 'normal'
+        };
+      }
+
+      // Crear un único objeto de texto unificado
+      const unifiedText = new fabric.IText(combinedContent, {
         fontSize: 22,
         fill: '#1e293b', // slate-800
         fontFamily: 'Inter, Arial, sans-serif',
@@ -166,26 +181,14 @@ export const useReading = (
         editable: true,
         selectable: true,
         evented: true,
+        styles: {
+          1: line1Styles // Aplicar estilos a la segunda línea
+        }
       });
-      (mainText as any).isLocalOwned = true;
+      (unifiedText as any).isLocalOwned = true;
 
-      // Texto IPA
-      const ipaText = new fabric.IText(ipaVal || '[no ipa]', {
-        fontSize: 18, // Aumentado a 18 para mayor legibilidad
-        fill: '#0284c7', // sky-600
-        fontFamily: 'Lucida Sans Unicode, Arial, sans-serif',
-        left: startX,
-        top: startY + 32, // Colocado 32px debajo de mainText
-        fontStyle: 'italic',
-        editable: true,
-        selectable: true,
-        evented: true,
-      });
-      (ipaText as any).isLocalOwned = true;
-
-      canvas.add(mainText);
-      canvas.add(ipaText);
-      startY += 95; // espaciado ajustado para evitar encimamiento
+      canvas.add(unifiedText);
+      startY += 75; // Espaciado elegante entre frases unificadas
     });
 
     canvas.renderAll();
@@ -393,7 +396,7 @@ export const useReading = (
 
       let ipaLinesByChunk: string[][] = [];
 
-      if (ipaEngine === 'ai' || ipaEngine === 'gruut') {
+      if (ipaEngine === 'ai' || ipaEngine === 'gruut' || ipaEngine === 'local') {
         setReadingStatus(
           ipaEngine === 'ai'
             ? 'Generando IPA con IA...'
