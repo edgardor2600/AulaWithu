@@ -239,4 +239,100 @@ router.post(
   })
 );
 
+/**
+ * POST /api/conversation/agent/command
+ * Enviar un comando remoto al agente de voz
+ */
+router.post(
+  '/agent/command',
+  authMiddleware,
+  asyncHandler(async (req: any, res: any) => {
+    try {
+      const targetUrl = `${AI_TUTOR_SERVER_URL}/api/agent/command`;
+      logger.info(`Proxying POST /api/conversation/agent/command -> ${targetUrl}`);
+      const response = await fetch(targetUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(req.body)
+      });
+      if (!response.ok) throw new Error(`Python server returned status ${response.status}`);
+      const data = await response.json();
+      res.status(200).json(data);
+    } catch (error: any) {
+      logger.error(`Error in POST /api/conversation/agent/command proxy: ${error.message}`);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  })
+);
+
+/**
+ * GET /api/conversation/agent/commands
+ * Obtener y vaciar la cola de comandos remotos
+ */
+router.get(
+  '/agent/commands',
+  authMiddleware,
+  asyncHandler(async (req: any, res: any) => {
+    try {
+      const targetUrl = `${AI_TUTOR_SERVER_URL}/api/agent/commands`;
+      logger.info(`Proxying GET /api/conversation/agent/commands -> ${targetUrl}`);
+      const response = await fetch(targetUrl);
+      if (!response.ok) throw new Error(`Python server returned status ${response.status}`);
+      const data = await response.json();
+      res.status(200).json(data);
+    } catch (error: any) {
+      logger.error(`Error in GET /api/conversation/agent/commands proxy: ${error.message}`);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  })
+);
+
+/**
+ * POST /api/conversation/agent/status
+ * Reportar estado actual del frontend al agente
+ */
+router.post(
+  '/agent/status',
+  authMiddleware,
+  asyncHandler(async (req: any, res: any) => {
+    try {
+      const targetUrl = `${AI_TUTOR_SERVER_URL}/api/agent/status`;
+      logger.info(`Proxying POST /api/conversation/agent/status -> ${targetUrl}`);
+      const response = await fetch(targetUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(req.body)
+      });
+      if (!response.ok) throw new Error(`Python server returned status ${response.status}`);
+      const data = await response.json();
+      res.status(200).json(data);
+    } catch (error: any) {
+      logger.error(`Error in POST /api/conversation/agent/status proxy: ${error.message}`);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  })
+);
+
+/**
+ * GET /api/conversation/agent/status
+ * Consultar estado actual del agente
+ */
+router.get(
+  '/agent/status',
+  authMiddleware,
+  asyncHandler(async (req: any, res: any) => {
+    try {
+      const targetUrl = `${AI_TUTOR_SERVER_URL}/api/agent/status`;
+      logger.info(`Proxying GET /api/conversation/agent/status -> ${targetUrl}`);
+      const response = await fetch(targetUrl);
+      if (!response.ok) throw new Error(`Python server returned status ${response.status}`);
+      const data = await response.json();
+      res.status(200).json(data);
+    } catch (error: any) {
+      logger.error(`Error in GET /api/conversation/agent/status proxy: ${error.message}`);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  })
+);
+
 export default router;

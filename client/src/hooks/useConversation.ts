@@ -78,6 +78,12 @@ export const useConversation = (
   // ✅ NUEVO: Estado para Subtítulos
   const [showSubtitles, setShowSubtitles] = useState(false);
   
+  // ✅ NUEVO: Estados para Barra de Progreso del Reproductor
+  const [audioProgress, setAudioProgress] = useState(0);
+  const [audioDuration, setAudioDuration] = useState(0);
+  const [isAudioLoading, setIsAudioLoading] = useState(false);
+  const isSeekingRef = useRef(false);
+
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const playTimeoutRef = useRef<any>(null);
   const isContinuousPlayRef = useRef(false);
@@ -131,6 +137,60 @@ export const useConversation = (
     loadEdgeVoices();
   }, [loadEdgeVoices]);
 
+  // Configure Audio element event listeners for progress tracking
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const audio = new Audio();
+      audioRef.current = audio;
+
+      const handleTimeUpdate = () => {
+        if (!isSeekingRef.current) {
+          setAudioProgress(audio.currentTime);
+        }
+      };
+
+      const handleDurationChange = () => {
+        setAudioDuration(audio.duration || 0);
+      };
+
+      const handleLoadedMetadata = () => {
+        setAudioDuration(audio.duration || 0);
+        setIsAudioLoading(false);
+      };
+
+      const handleLoadStart = () => {
+        setIsAudioLoading(true);
+      };
+
+      const handleCanPlay = () => {
+        setIsAudioLoading(false);
+      };
+
+      audio.addEventListener('timeupdate', handleTimeUpdate);
+      audio.addEventListener('durationchange', handleDurationChange);
+      audio.addEventListener('loadedmetadata', handleLoadedMetadata);
+      audio.addEventListener('loadstart', handleLoadStart);
+      audio.addEventListener('canplay', handleCanPlay);
+
+      return () => {
+        audio.removeEventListener('timeupdate', handleTimeUpdate);
+        audio.removeEventListener('durationchange', handleDurationChange);
+        audio.removeEventListener('loadedmetadata', handleLoadedMetadata);
+        audio.removeEventListener('loadstart', handleLoadStart);
+        audio.removeEventListener('canplay', handleCanPlay);
+        audio.pause();
+      };
+    }
+  }, []);
+
+  const reportAgentStatus = useCallback(async (status: string, message: string) => {
+    try {
+      await api.post('/conversation/agent/status', { status, message });
+    } catch (e) {
+      console.warn('[ConversationHook] Error reporting agent status:', e);
+    }
+  }, []);
+
   // Stop any active playing audio
   const stopAudio = useCallback((keepContinuous: boolean = false, keepPlayingState: boolean = false) => {
     if (audioRef.current) {
@@ -152,11 +212,12 @@ export const useConversation = (
     }
     if (!keepPlayingState) {
       setIsPlaying(false);
+      reportAgentStatus('idle', 'Listo');
     }
     if (!keepContinuous) {
       isContinuousPlayRef.current = false;
     }
-  }, []);
+  }, [reportAgentStatus]);
 
   // Parse dialogue text manually (fallback plan)
   const parseDialogueManually = (text: string) => {
@@ -296,6 +357,7 @@ export const useConversation = (
     stopAudio();
     setIsLoading(true);
     setStatusText('Analizando diálogo...');
+    reportAgentStatus('analyzing_text', 'Analizando diálogo...');
 
     // Extract supplementary material first
     const { dialogueText: dialogueOnly, supplementaryText: suppOnly } = extractSupplementaryText(dialogueText);
@@ -316,6 +378,7 @@ export const useConversation = (
       setIsLoading(false);
       setStatusText('Listo (Analizado manualmente - Sin API Key)');
       toast.success('Diálogo analizado localmente (sin IA)');
+      reportAgentStatus('idle', 'Listo');
       return;
     }
 
@@ -410,6 +473,7 @@ Rules:
       toast.error('Ocurrió un error con la IA. Se utilizó análisis local.');
     } finally {
       setIsLoading(false);
+      reportAgentStatus('idle', 'Listo');
     }
   };
 
@@ -423,6 +487,7 @@ Rules:
     stopAudio();
     setIsLoading(true);
     setStatusText('Generando diálogo...');
+    reportAgentStatus('generating_dialogue', 'Generando diálogo...');
 
     if (aiApiKey) {
       localStorage.setItem(`aiTutorApiKey_${aiProvider}`, aiApiKey);
@@ -491,6 +556,7 @@ Por favor, genera el material educativo completo siguiendo este formato estricto
       setStatusText('Error');
     } finally {
       setIsLoading(false);
+      reportAgentStatus('idle', 'Listo');
     }
   };
 
@@ -502,6 +568,7 @@ Por favor, genera el material educativo completo siguiendo este formato estricto
     setCurrentClipIndex(idx);
     setIsPlaying(true);
     setStatusText(`Reproduciendo línea ${idx + 1}`);
+    reportAgentStatus('playing_audio', `Reproduciendo línea ${idx + 1}...`);
 
     const clip = clips[idx];
     const speakerConf = speakers[clip.speaker];
@@ -517,15 +584,18 @@ Por favor, genera el material educativo completo siguiendo este formato estricto
         utterance.onend = () => {
           if (isContinuousPlayRef.current && idx < clips.length - 1) {
             setStatusText('Listo, esperando siguiente línea...');
+            reportAgentStatus('waiting', 'Esperando siguiente línea...');
             handleContinuousPlayNext(idx);
           } else {
             setIsPlaying(false);
             setStatusText('Listo');
+            reportAgentStatus('idle', 'Listo');
           }
         };
         utterance.onerror = () => {
           setIsPlaying(false);
           setStatusText('Error');
+          reportAgentStatus('idle', 'Error de reproducción browser');
         };
         window.speechSynthesis.speak(utterance);
       }
@@ -573,10 +643,12 @@ Por favor, genera el material educativo completo siguiendo este formato estricto
         audio.onended = () => {
           if (isContinuousPlayRef.current && idx < clips.length - 1) {
             setStatusText('Listo, esperando siguiente línea...');
+            reportAgentStatus('waiting', 'Esperando siguiente línea...');
             handleContinuousPlayNext(idx);
           } else {
             setIsPlaying(false);
             setStatusText('Listo');
+            reportAgentStatus('idle', 'Listo');
           }
         };
 
@@ -584,6 +656,7 @@ Por favor, genera el material educativo completo siguiendo este formato estricto
           setIsPlaying(false);
           setStatusText('Error al cargar audio del servidor');
           toast.error('Error al reproducir el audio del servidor');
+          reportAgentStatus('idle', 'Error de carga de audio');
         };
 
         const playPromise = audio.play();
@@ -599,6 +672,7 @@ Por favor, genera el material educativo completo siguiendo este formato estricto
         console.error('Error in Server TTS Play:', err);
         setIsPlaying(false);
         setStatusText('Error');
+        reportAgentStatus('idle', 'Error de reproducción servidor');
       }
     }
   };
@@ -611,6 +685,7 @@ Por favor, genera el material educativo completo siguiendo este formato estricto
       setIsPlaying(false);
       setCurrentClipIndex(-1);
       setStatusText('Diálogo completo finalizado');
+      reportAgentStatus('idle', 'Listo');
       return;
     }
 
@@ -621,6 +696,7 @@ Por favor, genera el material educativo completo siguiendo este formato estricto
     const totalDelay = (delayAfter + delayBefore) * 1000; // to ms
 
     setStatusText(`Pausa de ${(totalDelay / 1000).toFixed(1)}s...`);
+    reportAgentStatus('waiting', `Pausa de ${(totalDelay / 1000).toFixed(1)}s...`);
     
     playTimeoutRef.current = setTimeout(() => {
       playClip(nextIdx);
@@ -853,6 +929,7 @@ Por favor, genera el material educativo completo siguiendo este formato estricto
     setIsLoading(true);
     setStatusText('Generando imagen...');
     toast.loading('Generando imagen con IA...', { id: 'gen-image-toast' });
+    reportAgentStatus('generating_image', 'Generando imagen...');
 
     try {
       const speakersList = Object.keys(speakers).join(', ');
@@ -992,6 +1069,7 @@ CRITICAL DIRECTIONS FOR THE IMAGE GENERATOR:
       setStatusText('Error al generar imagen');
     } finally {
       setIsLoading(false);
+      reportAgentStatus('idle', 'Listo');
     }
   };
 
@@ -1095,6 +1173,119 @@ CRITICAL DIRECTIONS FOR THE IMAGE GENERATOR:
     toast.success('Datos limpiados');
   };
 
+  const seekAudio = (time: number) => {
+    if (audioRef.current) {
+      isSeekingRef.current = true;
+      audioRef.current.currentTime = time;
+      setAudioProgress(time);
+      isSeekingRef.current = false;
+    }
+  };
+
+  const togglePlayPause = () => {
+    if (clips.length === 0) return;
+    
+    // Si no hay ningún clip seleccionado, seleccionamos el primero
+    const idx = currentClipIndex === -1 ? 0 : currentClipIndex;
+    
+    if (audioMode === 'browser') {
+      if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+        if (window.speechSynthesis.speaking) {
+          if (window.speechSynthesis.paused) {
+            window.speechSynthesis.resume();
+            setIsPlaying(true);
+          } else {
+            window.speechSynthesis.pause();
+            setIsPlaying(false);
+          }
+        } else {
+          playClip(idx);
+        }
+      }
+    } else {
+      const audio = audioRef.current;
+      if (audio && audio.src) {
+        if (isPlaying) {
+          audio.pause();
+          setIsPlaying(false);
+        } else {
+          audio.play().then(() => {
+            setIsPlaying(true);
+          }).catch(err => {
+            console.error('Failed to resume playback:', err);
+          });
+        }
+      } else {
+        playClip(idx);
+      }
+    }
+  };
+
+  const isExecutingRef = useRef(false);
+
+  const executeAgentCommand = useCallback(async (cmd: { command: string; value?: any }) => {
+    const action = cmd.command;
+    const value = cmd.value;
+
+    console.log('[ConversationHook] Executing remote agent command:', action, value);
+
+    switch (action) {
+      case 'open_panel':
+        setShowConversationPanel(true);
+        break;
+      case 'close_panel':
+        setShowConversationPanel(false);
+        break;
+      case 'set_prompt':
+        if (value !== undefined) setPlot(value);
+        break;
+      case 'generate_dialogue':
+        generateDialogueText();
+        break;
+      case 'analyze_text':
+        analyzeDialogue();
+        break;
+      case 'generate_audio':
+        // Edge TTS audios are generated on the fly, but we report ready
+        reportAgentStatus('idle', 'Listo');
+        break;
+      case 'generate_image':
+        generateConversationImage();
+        break;
+      case 'clear':
+        clearAll();
+        break;
+      default:
+        console.warn('[ConversationHook] Unknown remote command:', action);
+    }
+  }, [generateDialogueText, analyzeDialogue, generateConversationImage, clearAll, reportAgentStatus]);
+
+  const pollAgentCommands = useCallback(async () => {
+    if (isExecutingRef.current) return;
+    try {
+      const res = await api.get('/conversation/agent/commands');
+      if (res.data && res.data.ok && Array.isArray(res.data.commands) && res.data.commands.length > 0) {
+        isExecutingRef.current = true;
+        try {
+          for (const cmd of res.data.commands) {
+            await executeAgentCommand(cmd);
+          }
+        } finally {
+          isExecutingRef.current = false;
+        }
+      }
+    } catch (e) {
+      // Ignore network errors during HMR or when backend is sleeping
+    }
+  }, [executeAgentCommand]);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      pollAgentCommands();
+    }, 1500);
+    return () => clearInterval(interval);
+  }, [pollAgentCommands]);
+
   return {
     showConversationPanel,
     setShowConversationPanel,
@@ -1148,6 +1339,11 @@ CRITICAL DIRECTIONS FOR THE IMAGE GENERATOR:
     showSubtitles,
     setShowSubtitles,
     
+    // ✅ NUEVO: Progreso y Carga de Audio
+    audioProgress,
+    audioDuration,
+    isAudioLoading,
+
     // Actions
     analyzeDialogue,
     generateDialogueText,
@@ -1162,6 +1358,8 @@ CRITICAL DIRECTIONS FOR THE IMAGE GENERATOR:
     loadStory,
     deleteStory,
     clearAll,
+    seekAudio,
+    togglePlayPause,
 
     // ✅ NUEVO: Nuevas acciones expuestas
     generateConversationImage,

@@ -15,10 +15,18 @@ import {
   Subtitles,
   Image,
   Upload,
-  Copy
+  Copy,
+  Pause
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import type { UseConversationReturn } from '../hooks/useConversation';
+
+const formatTime = (secs: number) => {
+  if (isNaN(secs) || secs === Infinity) return '0:00';
+  const minutes = Math.floor(secs / 60);
+  const seconds = Math.floor(secs % 60);
+  return `${minutes}:${seconds < 10 ? '0' : ''}${seconds}`;
+};
 
 interface ConversationPanelProps {
   conversation: UseConversationReturn;
@@ -740,7 +748,7 @@ export const ConversationPanel: React.FC<ConversationPanelProps> = ({ conversati
 
       {/* Panel de control de reproducción global */}
       {conversationTab === 'player' && conversation.clips.length > 0 && (
-        <div className="p-3 border-t border-white/8 bg-black/20 rounded-b-2xl space-y-2">
+        <div className="p-3 border-t border-white/8 bg-black/20 rounded-b-2xl space-y-3">
           <div className="flex items-center justify-between text-[10px] text-slate-400 mb-1">
             <span>
               {conversation.currentClipIndex === -1 
@@ -751,6 +759,24 @@ export const ConversationPanel: React.FC<ConversationPanelProps> = ({ conversati
               {conversation.audioMode === 'server' ? 'Edge Voice (Servidor)' : 'Local Speech'}
             </span>
           </div>
+
+          {/* Barra de progreso deslizante (Slider) */}
+          {conversation.audioMode === 'server' && (
+            <div className="flex items-center gap-2 text-[10px] text-slate-300 font-mono bg-white/5 rounded-lg p-1.5 border border-white/5">
+              <span className="w-8 text-right select-none">{formatTime(conversation.audioProgress)}</span>
+              <input
+                type="range"
+                min="0"
+                max={conversation.audioDuration || 100}
+                step="0.05"
+                value={conversation.audioProgress}
+                disabled={conversation.isAudioLoading || conversation.audioDuration === 0}
+                onChange={(e) => conversation.seekAudio(parseFloat(e.target.value))}
+                className="flex-1 accent-violet-500 h-1 rounded bg-white/10 outline-none cursor-pointer hover:accent-violet-400 transition-all"
+              />
+              <span className="w-8 text-left select-none">{formatTime(conversation.audioDuration)}</span>
+            </div>
+          )}
           
           {/* Botones de reproducción */}
           <div className="flex items-center justify-center gap-2">
@@ -764,6 +790,24 @@ export const ConversationPanel: React.FC<ConversationPanelProps> = ({ conversati
               title="Línea Anterior"
             >
               <SkipBack className="w-3.5 h-3.5" />
+            </button>
+
+            {/* Play/Pause individual */}
+            <button
+              onClick={conversation.togglePlayPause}
+              disabled={conversation.currentClipIndex === -1}
+              className={`p-2 border rounded-lg transition ${
+                conversation.isPlaying
+                  ? 'bg-violet-600 border-violet-500 text-white shadow-md shadow-violet-950/20'
+                  : 'bg-white/8 border-white/10 hover:bg-white/15 text-slate-300'
+              } disabled:opacity-40`}
+              title={conversation.isPlaying ? "Pausar Clip Actual" : "Reproducir Clip Actual"}
+            >
+              {conversation.isPlaying ? (
+                <Pause className="w-3.5 h-3.5" />
+              ) : (
+                <Play className="w-3.5 h-3.5" />
+              )}
             </button>
 
             {/* Play Continuous (Diálogo corrido) */}
