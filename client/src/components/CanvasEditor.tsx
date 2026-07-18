@@ -29,9 +29,12 @@ import {
   Pause,
   SkipBack,
   SkipForward,
-  BookOpen
+  BookOpen,
+  MessageSquare
 } from 'lucide-react';
 import { useReading } from '../hooks/useReading';
+import { useConversation } from '../hooks/useConversation';
+import { ConversationPanel } from './ConversationPanel';
 import toast from 'react-hot-toast';
 import { useYjs } from '../hooks/useYjs';
 import { uploadImage } from '../services/uploadService';
@@ -66,7 +69,7 @@ interface CanvasEditorProps {
   onPermissionsChange?: (allowDraw: boolean) => void;  // ✅ NUEVO: Callback cuando cambien permisos
 }
 
-type Tool = 'select' | 'pencil' | 'rectangle' | 'circle' | 'line' | 'triangle' | 'arrow' | 'text' | 'eraser' | 'hand' | 'image' | 'reading';
+type Tool = 'select' | 'pencil' | 'rectangle' | 'circle' | 'line' | 'triangle' | 'arrow' | 'text' | 'eraser' | 'hand' | 'image' | 'reading' | 'conversation';
 
 export const CanvasEditor = ({ 
   slideId, 
@@ -117,6 +120,92 @@ export const CanvasEditor = ({
   const jsonInputRef = useRef<HTMLInputElement | null>(null);
   const containerRef = useRef<HTMLDivElement>(null); // ✅ NUEVO: Ref para el contenedor principal
   const [showShortcuts, setShowShortcuts] = useState(false);
+
+  // Estados para subtítulos arrastrables y redimensionables
+  const [subtitlesPos, setSubtitlesPos] = useState({ x: window.innerWidth / 2 - 200, y: window.innerHeight - 150 });
+  const [subtitlesSize, setSubtitlesSize] = useState({ width: 400, height: 75 });
+
+  // Lógica de arrastre de los subtítulos (Drag)
+  const handleSubtitlesMouseDown = (e: React.MouseEvent<HTMLDivElement> | React.TouchEvent<HTMLDivElement>) => {
+    // Evitar arrastrar si se hace clic en el tirador de tamaño
+    if ((e.target as HTMLElement).closest('#conversation-subtitles-resize')) return;
+    
+    const isTouch = e.type === 'touchstart';
+    const clientX = isTouch ? (e as React.TouchEvent).touches[0].clientX : (e as React.MouseEvent).clientX;
+    const clientY = isTouch ? (e as React.TouchEvent).touches[0].clientY : (e as React.MouseEvent).clientY;
+
+    const startX = clientX;
+    const startY = clientY;
+    const initialX = subtitlesPos.x;
+    const initialY = subtitlesPos.y;
+
+    const handleMouseMove = (moveEvent: MouseEvent | TouchEvent) => {
+      const isMoveTouch = moveEvent.type === 'touchmove';
+      const moveClientX = isMoveTouch ? (moveEvent as TouchEvent).touches[0].clientX : (moveEvent as MouseEvent).clientX;
+      const moveClientY = isMoveTouch ? (moveEvent as TouchEvent).touches[0].clientY : (moveEvent as MouseEvent).clientY;
+
+      const dx = moveClientX - startX;
+      const dy = moveClientY - startY;
+
+      setSubtitlesPos({
+        x: initialX + dx,
+        y: initialY + dy
+      });
+    };
+
+    const handleMouseUp = () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('touchmove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+      document.removeEventListener('touchend', handleMouseUp);
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('touchmove', handleMouseMove, { passive: false });
+    document.addEventListener('mouseup', handleMouseUp);
+    document.addEventListener('touchend', handleMouseUp);
+  };
+
+  // Lógica de cambio de tamaño de los subtítulos (Resize)
+  const handleSubtitlesResizeMouseDown = (e: React.MouseEvent<HTMLDivElement> | React.TouchEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    const isTouch = e.type === 'touchstart';
+    const clientX = isTouch ? (e as React.TouchEvent).touches[0].clientX : (e as React.MouseEvent).clientX;
+    const clientY = isTouch ? (e as React.TouchEvent).touches[0].clientY : (e as React.MouseEvent).clientY;
+
+    const startX = clientX;
+    const startY = clientY;
+    const initialWidth = subtitlesSize.width;
+    const initialHeight = subtitlesSize.height;
+
+    const handleMouseMove = (moveEvent: MouseEvent | TouchEvent) => {
+      const isMoveTouch = moveEvent.type === 'touchmove';
+      const moveClientX = isMoveTouch ? (moveEvent as TouchEvent).touches[0].clientX : (moveEvent as MouseEvent).clientX;
+      const moveClientY = isMoveTouch ? (moveEvent as TouchEvent).touches[0].clientY : (moveEvent as MouseEvent).clientY;
+
+      const dx = moveClientX - startX;
+      const dy = moveClientY - startY;
+
+      setSubtitlesSize({
+        width: Math.max(250, initialWidth + dx),
+        height: Math.max(60, initialHeight + dy)
+      });
+    };
+
+    const handleMouseUp = () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('touchmove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+      document.removeEventListener('touchend', handleMouseUp);
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('touchmove', handleMouseMove, { passive: false });
+    document.addEventListener('mouseup', handleMouseUp);
+    document.addEventListener('touchend', handleMouseUp);
+  };
 
   // Yjs real-time collaboration
   const { isConnected, participants, participantsList, clientId, updateSessionPermissions } = useYjs(
@@ -197,6 +286,7 @@ export const CanvasEditor = ({
   }, [serializeCanvas]);
 
   const reading = useReading(fabricCanvasRef.current, saveHistory);
+  const conversation = useConversation(fabricCanvasRef.current, saveHistory);
 
   // Referencia mutable para actualizar el texto de lectura TTS basado en selecciones en el canvas
   const setReadingTextRef = useRef(reading.setReadingText);
@@ -715,10 +805,8 @@ export const CanvasEditor = ({
     if (tool === 'reading') {
       const willShow = !reading.showReadingPanel;
       reading.setShowReadingPanel(willShow);
-      setCurrentTool('select');
-      syncCursorForTool('select');
-      
       if (willShow) {
+        conversation.setShowConversationPanel(false); // Cerrar conversación
         const canvas = fabricCanvasRef.current;
         const activeObject = canvas?.getActiveObject();
         if (activeObject && (activeObject.type === 'i-text' || activeObject.type === 'text')) {
@@ -732,6 +820,20 @@ export const CanvasEditor = ({
           }
         }
       }
+      setCurrentTool('select');
+      syncCursorForTool('select');
+      return;
+    }
+
+    if (tool === 'conversation') {
+      const willShow = !conversation.showConversationPanel;
+      conversation.setShowConversationPanel(willShow);
+      if (willShow) {
+        reading.setShowReadingPanel(false); // Cerrar lectura
+        conversation.loadStoriesFromLibrary();
+      }
+      setCurrentTool('select');
+      syncCursorForTool('select');
       return;
     }
 
@@ -1859,6 +1961,7 @@ export const CanvasEditor = ({
     { id: 'image' as Tool, icon: ImageIcon, label: 'Image', desc: 'Upload image (I)' },  // ✅ NUEVO
     { id: 'eraser' as Tool, icon: Eraser, label: 'Eraser', desc: 'Erase (E)' },
     { id: 'reading' as Tool, icon: BookOpen, label: 'Reading/TTS', desc: 'Text to Speech and Phonetics' },
+    { id: 'conversation' as Tool, icon: MessageSquare, label: 'Diálogos/Conversación', desc: 'Práctica de diálogos con voces de personajes' },
   ];
 
   const colors = [
@@ -2541,6 +2644,53 @@ export const CanvasEditor = ({
           )}
         </div>
       )}
+
+      <ConversationPanel conversation={conversation} />
+
+      {/* Subtítulos Flotantes Sincronizados de la Conversación */}
+      {conversation.showSubtitles && conversation.isPlaying && conversation.currentClipIndex !== -1 && conversation.currentClipIndex < conversation.clips.length && (() => {
+        const subtitlesFontSize = Math.max(11, Math.min(36, Math.round(subtitlesSize.width * 0.035)));
+        return (
+          <div 
+            id="conversation-subtitles" 
+            onMouseDown={handleSubtitlesMouseDown}
+            onTouchStart={handleSubtitlesMouseDown}
+            style={{
+              position: 'fixed',
+              left: `${subtitlesPos.x}px`,
+              top: `${subtitlesPos.y}px`,
+              width: `${subtitlesSize.width}px`,
+              height: `${subtitlesSize.height}px`,
+            }}
+            className="z-50 bg-slate-900/90 backdrop-blur-md border border-violet-500/40 border-l-4 border-l-violet-500 rounded-xl px-4 py-2.5 shadow-[0_12px_40px_rgba(0,0,0,0.6)] flex items-center justify-center cursor-move select-none transition-all duration-75 animate-fade-in group"
+          >
+            {/* Texto de Subtítulo */}
+            <div 
+              id="conversation-subtitles-text"
+              style={{ fontSize: `${subtitlesFontSize}px` }}
+              className="text-center font-sans leading-relaxed text-slate-200 w-full overflow-y-auto max-h-full custom-scrollbar pr-1"
+            >
+              <strong className="text-violet-400 font-bold uppercase tracking-wider text-[0.8em] mr-2">
+                {conversation.clips[conversation.currentClipIndex].speaker}:
+              </strong>
+              {conversation.clips[conversation.currentClipIndex].text}
+            </div>
+
+            {/* Tirador para cambiar tamaño (Resize Handle) */}
+            <div
+              id="conversation-subtitles-resize"
+              onMouseDown={handleSubtitlesResizeMouseDown}
+              onTouchStart={handleSubtitlesResizeMouseDown}
+              className="absolute bottom-0 right-0 w-4 h-4 cursor-se-resize flex items-end justify-end p-0.5"
+              title="Redimensionar subtítulos"
+            >
+              <svg className="w-2.5 h-2.5 text-violet-400/50 group-hover:text-violet-400" viewBox="0 0 10 10" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M10 0L0 10M10 4L4 10M10 7L7 10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+              </svg>
+            </div>
+          </div>
+        );
+      })()}
 
       
       {showShortcuts && (

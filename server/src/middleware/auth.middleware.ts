@@ -24,17 +24,14 @@ declare global {
  */
 export const authMiddleware = async (req: Request, res: Response, next: NextFunction) => {
   try {
+    let token = '';
     const authHeader = req.headers.authorization;
 
-    if (!authHeader) {
-      throw new UnauthorizedError('No authorization header provided');
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      token = authHeader.substring(7);
+    } else if (req.query && req.query.token) {
+      token = req.query.token as string;
     }
-
-    if (!authHeader.startsWith('Bearer ')) {
-      throw new UnauthorizedError('Invalid authorization format. Use: Bearer <token>');
-    }
-
-    const token = authHeader.substring(7);
 
     if (!token) {
       throw new UnauthorizedError('No token provided');
