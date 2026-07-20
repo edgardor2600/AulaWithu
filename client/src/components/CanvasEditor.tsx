@@ -30,7 +30,10 @@ import {
   SkipBack,
   SkipForward,
   BookOpen,
-  MessageSquare
+  MessageSquare,
+  MonitorUp,
+  Scissors,
+  Palette
 } from 'lucide-react';
 import { useReading } from '../hooks/useReading';
 import { useConversation } from '../hooks/useConversation';
@@ -38,10 +41,14 @@ import { ConversationPanel } from './ConversationPanel';
 import toast from 'react-hot-toast';
 import { useYjs } from '../hooks/useYjs';
 import { uploadImage } from '../services/uploadService';
+import { useCanvasHistory } from '../hooks/useCanvasHistory';
+import { useCanvasClipboard } from '../hooks/useCanvasClipboard';
+import { useScreenShare } from '../hooks/useScreenShare';
+import { useCanvasBoardTheme } from '../hooks/useCanvasBoardTheme';
+import { BOARD_THEMES, type Tool, type BoardTheme } from '../types/canvas';
 
 const isEditableTarget = (target: EventTarget | null) => {
   if (!(target instanceof HTMLElement)) return false;
-
   const tagName = target.tagName;
   return (
     target.isContentEditable ||
@@ -57,19 +64,17 @@ interface CanvasEditorProps {
   onSave: (canvasData: string) => Promise<void>;
   onChange?: (canvasData: string) => void;
   isReadOnly?: boolean;
-  sessionId?: string | null; // For live collaboration
+  sessionId?: string | null;
   onParticipantsChange?: (
     count: number,
     list?: Array<{ clientId: number; name: string; color: string }>,
     clientId?: number
   ) => void;
-  enforceOwnership?: boolean; // If true, restricts editing to own objects
-  isTeacher?: boolean;  // ✅ NUEVO: Si es profesor, puede editar todo
-  onPermissionsReady?: (updateFn: (allow: boolean) => void) => void;  // ✅ NUEVO: Callback para pasar updateSessionPermissions
-  onPermissionsChange?: (allowDraw: boolean) => void;  // ✅ NUEVO: Callback cuando cambien permisos
+  enforceOwnership?: boolean;
+  isTeacher?: boolean;
+  onPermissionsReady?: (updateFn: (allow: boolean) => void) => void;
+  onPermissionsChange?: (allowDraw: boolean) => void;
 }
-
-type Tool = 'select' | 'pencil' | 'rectangle' | 'circle' | 'line' | 'triangle' | 'arrow' | 'text' | 'eraser' | 'hand' | 'image' | 'reading' | 'conversation';
 
 export const CanvasEditor = ({ 
   slideId, 
@@ -80,48 +85,53 @@ export const CanvasEditor = ({
   sessionId = null,
   onParticipantsChange,
   enforceOwnership = false,
-  isTeacher = false,  // ✅ NUEVO: Por defecto es estudiante
-  onPermissionsReady,  // ✅ NUEVO: Callback para permisos
-  onPermissionsChange  // ✅ NUEVO: Callback cuando cambien permisos
+  isTeacher = false,
+  onPermissionsReady,
+  onPermissionsChange
 }: CanvasEditorProps) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const fabricCanvasRef = useRef<fabric.Canvas | null>(null);
-  const isLoadingRef = useRef(false);
   const isReadOnlyRef = useRef(isReadOnly);
 
   useEffect(() => {
     isReadOnlyRef.current = isReadOnly;
   }, [isReadOnly]);
-  
-  // Undo/Redo state
-  const historyRef = useRef<string[]>([]);
-  const historyIndexRef = useRef(-1);
-  const isUndoRedoRef = useRef(false);
-  
-  // Clipboard
-  const clipboardRef = useRef<any>(null);
-  
+
   const [currentTool, setCurrentTool] = useState<Tool>('select');
   const [color, setColor] = useState('#000000');
   const [brushWidth, setBrushWidth] = useState(2);
   const [isSaving, setIsSaving] = useState(false);
   const [isReady, setIsReady] = useState(false);
-  const [canUndo, setCanUndo] = useState(false);
-  const [canRedo, setCanRedo] = useState(false);
-  
-  // ✅ NUEVO: Zoom and Pan state
+
+  // Zoom and Pan state
   const [zoomLevel, setZoomLevel] = useState(1);
-  const [manualZoom, setManualZoom] = useState('100'); // Estado para el input de zoom
+  const [manualZoom, setManualZoom] = useState('100');
   const MIN_ZOOM = 0.1;
   const MAX_ZOOM = 5;
-  const [isSpacePressed, setIsSpacePressed] = useState(false);  // ✅ Para pan temporal con Espacio
-  const miniMapCanvasRef = useRef<HTMLCanvasElement | null>(null);  // ✅ NUEVO: Ref para mini-mapa
-  const imageInputRef = useRef<HTMLInputElement | null>(null);  // ✅ NUEVO: Ref para input de imagen
+  const [isSpacePressed, setIsSpacePressed] = useState(false);
+  const miniMapCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const imageInputRef = useRef<HTMLInputElement | null>(null);
   const jsonInputRef = useRef<HTMLInputElement | null>(null);
-  const containerRef = useRef<HTMLDivElement>(null); // ✅ NUEVO: Ref para el contenedor principal
+  const containerRef = useRef<HTMLDivElement>(null);
   const [showShortcuts, setShowShortcuts] = useState(false);
 
+  // ── Extracted hooks ──────────────────────────────────────────────────────────
+  const history = useCanvasHistory(fabricCanvasRef, onChange);
+  const { serializeCanvas, saveHistory, shouldSkipCanvasPersistence, notifyChange,
+          restoreCanvasState, undo, redo, canUndo, canRedo, isLoadingRef, isUndoRedoRef } = history;
+
+  const clipboard = useCanvasClipboard(fabricCanvasRef, isReadOnly);
+  const { copySelected, cutSelected, paste } = clipboard;
+
+  const screenShare = useScreenShare(fabricCanvasRef);
+  const { handleShareScreen, audioBannerType, setAudioBannerType } = screenShare;
+
+  const boardThemeHook = useCanvasBoardTheme(fabricCanvasRef);
+  const { boardTheme, showThemeMenu, setShowThemeMenu, applyBoardTheme } = boardThemeHook;
+  // ────────────────────────────────────────────────────────────────────────────
+
   // Estados para subtítulos arrastrables y redimensionables
+
   const [subtitlesPos, setSubtitlesPos] = useState({ x: window.innerWidth / 2 - 200, y: window.innerHeight - 150 });
   const [subtitlesSize, setSubtitlesSize] = useState({ width: 400, height: 75 });
 
@@ -234,56 +244,10 @@ export const CanvasEditor = ({
     }
   }, [onPermissionsReady, updateSessionPermissions]);
 
-  // Save state to history (debounced to avoid too many saves)
-  // ✅ NUEVO: Helper para serializar canvas con propiedades personalizadas
-  const serializeCanvas = useCallback((canvas: fabric.Canvas) => {
-    const json = canvas.toJSON();
-    // Agregar propiedades personalizadas manualmente a cada objeto
-    json.objects = canvas.getObjects().filter((obj: any) => !obj.excludeFromSerialization).map((obj: any) => {
-      const objJson = obj.toObject();
-      objJson.id = obj.id;
-      objJson.createdBy = obj.createdBy;
-      return objJson;
-    });
-    return JSON.stringify(json);
-  }, []);
-
   // MiniMap Refs for Interaction
   const miniMapStateRef = useRef({ scale: 1, minX: 0, minY: 0 });
   const isDraggingMiniMapRef = useRef(false);
-  const hasInitialFitRef = useRef(false); // Para controlar el auto-zoom inicial
-
-  const saveHistory = useCallback(() => {
-    const canvas = fabricCanvasRef.current;
-    if (!canvas || isUndoRedoRef.current || isLoadingRef.current) return;
-
-    // ✅ MODIFICADO: Usar serializeCanvas para incluir propiedades personalizadas
-    const currentState = serializeCanvas(canvas);
-    
-    // Check if state actually changed
-    if (historyRef.current[historyIndexRef.current] === currentState) {
-      console.log('State unchanged, skipping history save');
-      return;
-    }
-    
-    // Remove any states after current index
-    historyRef.current = historyRef.current.slice(0, historyIndexRef.current + 1);
-    
-    // Add new state
-    historyRef.current.push(currentState);
-    historyIndexRef.current++;
-    
-    console.log('History saved. Index:', historyIndexRef.current, 'Total:', historyRef.current.length);
-    
-    // Limit history to 50 states
-    if (historyRef.current.length > 50) {
-      historyRef.current.shift();
-      historyIndexRef.current--;
-    }
-    
-    setCanUndo(historyIndexRef.current > 0);
-    setCanRedo(false);
-  }, [serializeCanvas]);
+  const hasInitialFitRef = useRef(false);
 
   const reading = useReading(fabricCanvasRef.current, saveHistory);
   const conversation = useConversation(fabricCanvasRef.current, saveHistory);
@@ -293,87 +257,6 @@ export const CanvasEditor = ({
   useEffect(() => {
     setReadingTextRef.current = reading.setReadingText;
   }, [reading.setReadingText]);
-
-  const restoreCanvasState = useCallback(async (canvas: fabric.Canvas, serializedState: string) => {
-    const state = JSON.parse(serializedState);
-
-    canvas.clear();
-    canvas.backgroundColor = '#ffffff';
-
-    if (state.objects && state.objects.length > 0) {
-      const enlivenedObjects = await fabric.util.enlivenObjects(state.objects);
-      enlivenedObjects.forEach((obj: any) => canvas.add(obj));
-    }
-
-    canvas.renderAll();
-  }, []);
-
-  const notifySerializedChange = useCallback((canvas: fabric.Canvas) => {
-    if (!onChange) return;
-    onChange(serializeCanvas(canvas));
-  }, [onChange, serializeCanvas]);
-
-  const shouldSkipCanvasPersistence = useCallback((obj?: fabric.Object | null) => {
-    const candidate = obj as any;
-    return !!candidate?.excludeFromHistory || !!candidate?.excludeFromSerialization;
-  }, []);
-
-  // Undo
-  const undo = useCallback(async () => {
-    const canvas = fabricCanvasRef.current;
-    if (!canvas || historyIndexRef.current <= 0) {
-      console.log('Cannot undo. Index:', historyIndexRef.current);
-      return;
-    }
-
-    console.log('Undo: Going from index', historyIndexRef.current, 'to', historyIndexRef.current - 1);
-    
-    isUndoRedoRef.current = true;
-    historyIndexRef.current--;
-
-    const targetState = historyRef.current[historyIndexRef.current];
-    const parsedState = JSON.parse(targetState);
-    console.log('Restoring state with', parsedState.objects?.length || 0, 'objects');
-
-    await restoreCanvasState(canvas, targetState);
-    console.log('Undo complete');
-    
-    setCanUndo(historyIndexRef.current > 0);
-    setCanRedo(true);
-    
-    // Keep flag briefly then notify parent to trigger auto-save
-    setTimeout(() => {
-      isUndoRedoRef.current = false;
-      console.log('Undo flag cleared, notifying parent');
-      
-      // Notify parent so auto-save can happen
-      notifySerializedChange(canvas);
-    }, 500); // Longer delay to ensure history doesn't get saved again
-  }, [notifySerializedChange, restoreCanvasState]);
-
-  // Redo
-  const redo = useCallback(async () => {
-    const canvas = fabricCanvasRef.current;
-    if (!canvas || historyIndexRef.current >= historyRef.current.length - 1) return;
-
-    isUndoRedoRef.current = true;
-    historyIndexRef.current++;
-
-    const targetState = historyRef.current[historyIndexRef.current];
-    await restoreCanvasState(canvas, targetState);
-    
-    setCanUndo(true);
-    setCanRedo(historyIndexRef.current < historyRef.current.length - 1);
-    
-    // Keep flag briefly then notify parent to trigger auto-save
-    setTimeout(() => {
-      isUndoRedoRef.current = false;
-      console.log('Redo flag cleared, notifying parent');
-      
-      // Notify parent so auto-save can happen
-      notifySerializedChange(canvas);
-    }, 500); // Longer delay to ensure history doesn't get saved again
-  }, [notifySerializedChange, restoreCanvasState]);
 
   // ✅ NUEVO: Función para actualizar el mini-mapa (movida arriba para ser usada en zoom)
   const updateMiniMap = useCallback(() => {
@@ -665,65 +548,9 @@ export const CanvasEditor = ({
     updateMiniMap();
   }, [updateMiniMap]);
 
-  // Copy selected object
-  const copySelected = useCallback(async () => {
-    const canvas = fabricCanvasRef.current;
-    if (!canvas) return;
-
-    const activeObject = canvas.getActiveObject();
-    if (activeObject) {
-      try {
-        const cloned = await activeObject.clone();
-        clipboardRef.current = cloned;
-        toast.success('Copied!');
-      } catch (error) {
-        console.error('Error copying:', error);
-      }
-    }
-  }, []);
-
-  // Paste from clipboard
-  const paste = useCallback(async () => {
-    const canvas = fabricCanvasRef.current;
-    if (!canvas || !clipboardRef.current) return;
-
-    try {
-      const clonedObj = await clipboardRef.current.clone();
-      canvas.discardActiveObject();
-      
-      clonedObj.set({
-        left: (clonedObj.left || 0) + 10,
-        top: (clonedObj.top || 0) + 10,
-        evented: true,
-      });
-      
-      if (clonedObj.type === 'activeSelection') {
-        // Handle multiple objects
-        clonedObj.canvas = canvas;
-        clonedObj.forEachObject((obj: any) => {
-          canvas.add(obj);
-        });
-        clonedObj.setCoords();
-      } else {
-        canvas.add(clonedObj);
-      }
-      
-      // Update clipboard position for next paste
-      clipboardRef.current.set({
-        top: (clipboardRef.current.top || 0) + 10,
-        left: (clipboardRef.current.left || 0) + 10,
-      });
-      
-      canvas.setActiveObject(clonedObj);
-      canvas.requestRenderAll();
-      
-      toast.success('Pasted!');
-    } catch (error) {
-      console.error('Error pasting:', error);
-    }
-  }, []);
 
   // Delete selected object
+
   const deleteSelected = useCallback(() => {
     const canvas = fabricCanvasRef.current;
     if (!canvas) return;
@@ -881,7 +708,7 @@ export const CanvasEditor = ({
       isLoadingRef.current = false;
 
       saveHistory();
-      notifySerializedChange(canvas);
+      notifyChange();
       toast.success('Pizarra cargada desde backup');
     } catch (error) {
       isLoadingRef.current = false;
@@ -890,7 +717,7 @@ export const CanvasEditor = ({
     } finally {
       e.target.value = '';
     }
-  }, [notifySerializedChange, restoreCanvasState, saveHistory]);
+  }, [notifyChange, restoreCanvasState, saveHistory]);
 
   // (updateMiniMap movida arriba)
 
@@ -959,6 +786,13 @@ export const CanvasEditor = ({
       if ((e.ctrlKey || e.metaKey) && key === 'c') {
         e.preventDefault();
         copySelected();
+        return;
+      }
+
+      // Cut: Ctrl+X / Cmd+X — cuts selected object to internal clipboard
+      if ((e.ctrlKey || e.metaKey) && key === 'x') {
+        e.preventDefault();
+        cutSelected();
         return;
       }
       
@@ -1044,6 +878,12 @@ export const CanvasEditor = ({
           return;
         }
 
+        if (key === 'x') {
+          e.preventDefault();
+          handleToolClick('cut');
+          return;
+        }
+
         if (key === 'escape' && canvas) {
           setShowShortcuts(false);
           canvas.discardActiveObject();
@@ -1084,7 +924,7 @@ export const CanvasEditor = ({
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
     };
-  }, [isReady, isReadOnly, undo, redo, copySelected, paste, deleteSelected, currentTool, handleSave, handleToolClick]);
+  }, [isReady, isReadOnly, undo, redo, copySelected, cutSelected, paste, deleteSelected, currentTool, handleSave, handleToolClick]);
 
   // ✅ NUEVO: Ref para isSpacePressed para evitar re-render del useEffect
   const isSpacePressedRef = useRef(isSpacePressed);
@@ -1320,18 +1160,7 @@ export const CanvasEditor = ({
 
 
 
-  // ✅ ELIMINADO: Lógica de permisos movida completamente a useYjs
-  // useYjs maneja todos los permisos basados en isReadOnly, enforceOwnership, e isTeacher
 
-  // Notify parent of canvas changes
-  const notifyChange = useCallback(() => {
-    const canvas = fabricCanvasRef.current;
-    if (!canvas || !onChange || isLoadingRef.current || isUndoRedoRef.current) return;
-    
-    // ✅ MODIFICADO: Usar serializeCanvas para persistir ownership
-    const canvasData = serializeCanvas(canvas);
-    onChange(canvasData);
-  }, [onChange, serializeCanvas]);
 
   // Initialize canvas and load data
   useEffect(() => {
@@ -1411,10 +1240,8 @@ export const CanvasEditor = ({
         canvas.renderAll();
       }
       
-      // Reset history for new slide
-      const initialState = serializeCanvas(canvas);
-      historyRef.current = [initialState];
-      historyIndexRef.current = 0;
+      // Reset history for new slide — saveHistory resets via the hook
+      saveHistory();
       console.log('History reset for slide:', slideId);
       
       isLoadingRef.current = false;
@@ -1491,7 +1318,20 @@ export const CanvasEditor = ({
         }
       });
       canvas.on('object:removed', (e) => {
-        if (shouldSkipCanvasPersistence(e.target)) {
+        const obj = e.target;
+        if (obj && (obj as any).isVideo) {
+          const stream = (obj as any).stream as MediaStream;
+          const audioElement = (obj as any).audioElement as HTMLAudioElement;
+          console.log('Cleaning up shared screen video/audio resource...');
+          if (stream) {
+            stream.getTracks().forEach(track => track.stop());
+          }
+          if (audioElement && audioElement.parentNode) {
+            audioElement.parentNode.removeChild(audioElement);
+          }
+        }
+
+        if (shouldSkipCanvasPersistence(obj)) {
           return;
         }
 
@@ -1515,6 +1355,20 @@ export const CanvasEditor = ({
       
       // Cancelar setTimeout si aún no se ejecutó
       clearTimeout(timeoutId);
+      
+      // Detener cualquier stream activo del canvas antes de eliminarlo
+      canvas.getObjects().forEach((obj: any) => {
+        if (obj.isVideo) {
+          const stream = obj.stream as MediaStream;
+          const audioElement = obj.audioElement as HTMLAudioElement;
+          if (stream) {
+            stream.getTracks().forEach(track => track.stop());
+          }
+          if (audioElement && audioElement.parentNode) {
+            audioElement.parentNode.removeChild(audioElement);
+          }
+        }
+      });
       
       canvas.dispose();
       fabricCanvasRef.current = null;
@@ -1810,8 +1664,106 @@ export const CanvasEditor = ({
         canvas.fire('object:modified', { target: group });
         setCurrentTool('select');
       };
+    } else if (currentTool === 'cut') {
+      // Drag-to-cut: select a rectangular area and extract it as a new image object
+      canvas.selection = false;
+      canvas.defaultCursor = 'crosshair';
+      let isCutting = false;
+      let cutStartX = 0;
+      let cutStartY = 0;
+      let selectionRect: fabric.Rect | null = null;
+
+      mouseDownHandler = (o) => {
+        const evt = o.e as MouseEvent;
+        if (isSpacePressedRef.current || evt.button === 1) return;
+        const pointer = canvas.getScenePoint(o.e);
+        isCutting = true;
+        cutStartX = pointer.x;
+        cutStartY = pointer.y;
+        selectionRect = new fabric.Rect({
+          left: cutStartX,
+          top: cutStartY,
+          width: 0,
+          height: 0,
+          fill: 'rgba(99,102,241,0.15)',
+          stroke: '#6366f1',
+          strokeWidth: 1.5,
+          strokeDashArray: [6, 3],
+          selectable: false,
+          evented: false,
+        } as any);
+        (selectionRect as any).excludeFromSync = true;
+        (selectionRect as any).excludeFromSerialization = true;
+        (selectionRect as any).excludeFromHistory = true;
+        canvas.add(selectionRect);
+      };
+
+      mouseMoveHandler = (o) => {
+        if (!isCutting || !selectionRect) return;
+        const pointer = canvas.getScenePoint(o.e);
+        const w = pointer.x - cutStartX;
+        const h = pointer.y - cutStartY;
+        selectionRect.set({
+          width: Math.abs(w), height: Math.abs(h),
+          left: w < 0 ? pointer.x : cutStartX,
+          top: h < 0 ? pointer.y : cutStartY,
+        });
+        canvas.renderAll();
+      };
+
+      mouseUpHandler = async () => {
+        if (!isCutting || !selectionRect) return;
+        isCutting = false;
+
+        const cutX = selectionRect.left || 0;
+        const cutY = selectionRect.top || 0;
+        const cutW = selectionRect.width || 0;
+        const cutH = selectionRect.height || 0;
+
+        canvas.remove(selectionRect);
+        selectionRect = null;
+
+        if (cutW < 10 || cutH < 10) {
+          setCurrentTool('select');
+          return;
+        }
+
+        // Render canvas to offscreen and crop the selected area
+        const zoom = canvas.getZoom();
+        const vpt = canvas.viewportTransform || [1,0,0,1,0,0];
+        const offscreen = document.createElement('canvas');
+        offscreen.width = Math.round(cutW * zoom);
+        offscreen.height = Math.round(cutH * zoom);
+        const ctx = offscreen.getContext('2d');
+        if (!ctx) { setCurrentTool('select'); return; }
+
+        // Temporarily render without the selection overlay
+        canvas.renderAll();
+        const srcX = (cutX * zoom) + vpt[4];
+        const srcY = (cutY * zoom) + vpt[5];
+        ctx.drawImage(
+          canvas.getElement(),
+          Math.round(srcX), Math.round(srcY),
+          Math.round(cutW * zoom), Math.round(cutH * zoom),
+          0, 0,
+          Math.round(cutW * zoom), Math.round(cutH * zoom)
+        );
+
+        const dataUrl = offscreen.toDataURL('image/png');
+        const img = await fabric.FabricImage.fromURL(dataUrl, { crossOrigin: 'anonymous' });
+        img.set({
+          left: cutX + cutW / 2 + 20,
+          top:  cutY + cutH / 2 + 20,
+          originX: 'center', originY: 'center',
+        });
+        canvas.add(img);
+        canvas.setActiveObject(img);
+        canvas.requestRenderAll();
+        toast.success('Área recortada como imagen');
+        setCurrentTool('select');
+      };
     }
-    
+
     // Registrar listeners si existen
     if (mouseDownHandler) canvas.on('mouse:down', mouseDownHandler);
     if (mouseMoveHandler) canvas.on('mouse:move', mouseMoveHandler);
@@ -1950,15 +1902,16 @@ export const CanvasEditor = ({
 
   const tools = [
     { id: 'select' as Tool, icon: MousePointer, label: 'Select', desc: 'Select and move (V)' },
-    { id: 'hand' as Tool, icon: Hand, label: 'Hand', desc: 'Pan canvas (H or Space)' },  // ✅ NUEVO
+    { id: 'hand' as Tool, icon: Hand, label: 'Hand', desc: 'Pan canvas (H or Space)' },
     { id: 'pencil' as Tool, icon: Pencil, label: 'Pencil', desc: 'Draw freehand (P)' },
+    { id: 'cut' as Tool, icon: Scissors, label: 'Recortar', desc: 'Recortar área del canvas (X)' },
     { id: 'rectangle' as Tool, icon: Square, label: 'Rectangle', desc: 'Add rectangle (R)' },
     { id: 'circle' as Tool, icon: CircleIcon, label: 'Circle', desc: 'Add circle (C)' },
     { id: 'line' as Tool, icon: Minus, label: 'Line', desc: 'Add line (L)' },
     { id: 'triangle' as Tool, icon: TriangleIcon, label: 'Triangle', desc: 'Add triangle' },
     { id: 'arrow' as Tool, icon: ArrowRight, label: 'Arrow', desc: 'Add arrow (A)' },
     { id: 'text' as Tool, icon: Type, label: 'Text', desc: 'Add text (T)' },
-    { id: 'image' as Tool, icon: ImageIcon, label: 'Image', desc: 'Upload image (I)' },  // ✅ NUEVO
+    { id: 'image' as Tool, icon: ImageIcon, label: 'Image', desc: 'Upload image (I)' },
     { id: 'eraser' as Tool, icon: Eraser, label: 'Eraser', desc: 'Erase (E)' },
     { id: 'reading' as Tool, icon: BookOpen, label: 'Reading/TTS', desc: 'Text to Speech and Phonetics' },
     { id: 'conversation' as Tool, icon: MessageSquare, label: 'Diálogos/Conversación', desc: 'Práctica de diálogos con voces de personajes' },
@@ -2167,6 +2120,41 @@ export const CanvasEditor = ({
                 >
                   <FolderOpen className="w-3.5 h-3.5" />
                   Cargar
+                </button>
+                {/* Board Theme Selector */}
+                <div className="relative">
+                  <button
+                    onClick={() => setShowThemeMenu(prev => !prev)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-gray-700 hover:bg-gray-100 rounded transition text-sm font-medium border border-gray-200"
+                    title="Tema del Pizarrón"
+                  >
+                    <Palette className="w-3.5 h-3.5" />
+                    <span>{BOARD_THEMES[boardTheme].emoji}</span>
+                    <span className="hidden md:inline">{BOARD_THEMES[boardTheme].label}</span>
+                  </button>
+                  {showThemeMenu && (
+                    <div className="absolute top-full right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-xl z-50 overflow-hidden min-w-[150px]">
+                      {(Object.keys(BOARD_THEMES) as BoardTheme[]).map((key) => (
+                        <button
+                          key={key}
+                          onClick={() => applyBoardTheme(key)}
+                          className={`w-full flex items-center gap-2 px-4 py-2.5 text-sm hover:bg-indigo-50 transition text-left ${boardTheme === key ? 'font-semibold text-indigo-700 bg-indigo-50' : 'text-gray-700'}`}
+                        >
+                          <span className="text-base">{BOARD_THEMES[key].emoji}</span>
+                          {BOARD_THEMES[key].label}
+                          {boardTheme === key && <span className="ml-auto text-indigo-500 text-xs">✓</span>}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <button
+                  onClick={handleShareScreen}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 text-white hover:bg-indigo-700 rounded transition text-sm font-medium shadow-sm"
+                  title="Compartir Pantalla (Meet/Video)"
+                >
+                  <MonitorUp className="w-3.5 h-3.5" />
+                  Compartir
                 </button>
                 <button
                   onClick={() => setShowShortcuts(true)}
@@ -2729,6 +2717,37 @@ export const CanvasEditor = ({
               ))}
             </div>
           </div>
+        </div>
+      )}
+
+      {audioBannerType && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-slate-900/95 backdrop-blur-md border border-indigo-500/40 rounded-2xl p-4 shadow-[0_12px_40px_rgba(0,0,0,0.6)] flex items-center gap-3 max-w-[90vw] animate-fade-in text-slate-200">
+          <div className="w-8 h-8 rounded-full bg-indigo-500/10 flex items-center justify-center text-indigo-400 shrink-0">
+            <Volume2 className="w-4 h-4" />
+          </div>
+          <div className="flex-1 text-xs">
+            {audioBannerType === 'active' && (
+              <p>
+                <strong>Compartiendo Pantalla con Audio:</strong> Para que los estudiantes escuchen el video, presenta <em>esta pestaña de la pizarra</em> en Google Meet y asegúrate de marcar la casilla <strong>"Compartir audio de la pestaña"</strong>.
+              </p>
+            )}
+            {audioBannerType === 'blocked' && (
+              <p className="text-amber-400">
+                <strong>Audio bloqueado:</strong> El navegador bloqueó el autoplay del audio. Haz clic en cualquier lugar del pizarrón para activarlo.
+              </p>
+            )}
+            {audioBannerType === 'no-audio' && (
+              <p className="text-amber-400">
+                <strong>Sin audio capturado:</strong> No se detectó audio. Al compartir, recuerda marcar la opción <strong>"Compartir audio de la pestaña"</strong> en el cuadro del navegador.
+              </p>
+            )}
+          </div>
+          <button 
+            onClick={() => setAudioBannerType(null)} 
+            className="text-slate-400 hover:text-white text-base font-bold px-1.5 leading-none transition-colors"
+          >
+            ×
+          </button>
         </div>
       )}
     </div>
