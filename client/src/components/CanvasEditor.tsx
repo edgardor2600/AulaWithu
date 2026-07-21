@@ -33,11 +33,14 @@ import {
   MessageSquare,
   MonitorUp,
   Scissors,
-  Palette
+  Palette,
+  Timer
 } from 'lucide-react';
 import { useReading } from '../hooks/useReading';
 import { useConversation } from '../hooks/useConversation';
 import { ConversationPanel } from './ConversationPanel';
+import { useGlobalTimer } from '../hooks/useGlobalTimer';
+import { GlobalTimerPanel } from './GlobalTimerPanel';
 import toast from 'react-hot-toast';
 import { useYjs } from '../hooks/useYjs';
 import { uploadImage } from '../services/uploadService';
@@ -218,7 +221,7 @@ export const CanvasEditor = ({
   };
 
   // Yjs real-time collaboration
-  const { isConnected, participants, participantsList, clientId, updateSessionPermissions } = useYjs(
+  const { isConnected, participants, participantsList, clientId, updateSessionPermissions, ydoc } = useYjs(
     sessionId, // Room name (null if not in live session)
     fabricCanvasRef.current,
     !!sessionId, // Only enable if sessionId exists
@@ -251,6 +254,7 @@ export const CanvasEditor = ({
 
   const reading = useReading(fabricCanvasRef.current, saveHistory);
   const conversation = useConversation(fabricCanvasRef.current, saveHistory);
+  const globalTimer = useGlobalTimer(ydoc, isTeacher);
 
   // Referencia mutable para actualizar el texto de lectura TTS basado en selecciones en el canvas
   const setReadingTextRef = useRef(reading.setReadingText);
@@ -664,9 +668,16 @@ export const CanvasEditor = ({
       return;
     }
 
+    if (tool === 'timer') {
+      globalTimer.setOpen(!globalTimer.isOpen);
+      setCurrentTool('select');
+      syncCursorForTool('select');
+      return;
+    }
+
     setCurrentTool(tool);
     syncCursorForTool(tool);
-  }, [addText, syncCursorForTool, triggerImageUpload, reading]);
+  }, [addText, syncCursorForTool, triggerImageUpload, reading, globalTimer]);
 
   const exportJSON = useCallback(() => {
     const canvas = fabricCanvasRef.current;
@@ -1915,6 +1926,7 @@ export const CanvasEditor = ({
     { id: 'eraser' as Tool, icon: Eraser, label: 'Eraser', desc: 'Erase (E)' },
     { id: 'reading' as Tool, icon: BookOpen, label: 'Reading/TTS', desc: 'Text to Speech and Phonetics' },
     { id: 'conversation' as Tool, icon: MessageSquare, label: 'Diálogos/Conversación', desc: 'Práctica de diálogos con voces de personajes' },
+    ...(isTeacher ? [{ id: 'timer' as Tool, icon: Timer, label: 'Cronómetro', desc: 'Cronómetro / Temporizador' }] : []),
   ];
 
   const colors = [
@@ -2750,6 +2762,22 @@ export const CanvasEditor = ({
           </button>
         </div>
       )}
+
+      {/* Sincronización de Cronómetro Flotante */}
+      <GlobalTimerPanel
+        isOpen={globalTimer.isOpen}
+        durationMinutes={globalTimer.durationMinutes}
+        remainingMs={globalTimer.remainingMs}
+        isRunning={globalTimer.isRunning}
+        hasStarted={globalTimer.hasStarted}
+        isTeacher={isTeacher}
+        setOpen={globalTimer.setOpen}
+        setDuration={globalTimer.setDuration}
+        startTimer={globalTimer.startTimer}
+        pauseTimer={globalTimer.pauseTimer}
+        resetTimer={globalTimer.resetTimer}
+        setRemainingFromDisplayInput={globalTimer.setRemainingFromDisplayInput}
+      />
     </div>
   );
 };
