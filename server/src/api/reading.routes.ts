@@ -2,6 +2,8 @@ import { Router } from 'express';
 import { authMiddleware } from '../middleware/auth.middleware';
 import { asyncHandler } from '../middleware/error.middleware';
 import { logger } from '../utils/logger';
+import { uploadSingle } from '../config/multer.config';
+
 
 const router = Router();
 
@@ -144,4 +146,129 @@ router.post(
   })
 );
 
+/**
+ * POST /api/reading/evaluate
+ * Proxy para evaluar la pronunciación y fluidez del audio grabado contra la historia
+ */
+router.post(
+  '/evaluate',
+  authMiddleware,
+  uploadSingle,
+  asyncHandler(async (req: any, res: any) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ success: false, message: 'Audio file is required for evaluation' });
+      }
+
+      const { topic, level, question, expected_answer } = req.body;
+      const targetUrl = `${AI_TUTOR_SERVER_URL}/api/evaluate`;
+      logger.info(`Proxying POST /api/reading/evaluate -> ${targetUrl}`);
+
+      // Construir FormData nativo de Node.js (v18+)
+      const fs = await import('fs');
+      const fileBuffer = fs.readFileSync(req.file.path);
+      const audioBlob = new Blob([fileBuffer], { type: req.file.mimetype || 'audio/webm' });
+
+      const formData = new FormData();
+      formData.append('audio', audioBlob, req.file.filename);
+
+      if (topic) formData.append('topic', topic);
+      if (level) formData.append('level', level);
+      if (question) formData.append('question', question);
+      if (expected_answer) formData.append('expected_answer', expected_answer);
+
+      const pythonRes = await fetch(targetUrl, {
+        method: 'POST',
+        body: formData as any,
+      });
+
+
+      // Limpiar archivo temporal
+      try { fs.unlinkSync(req.file.path); } catch { /* ignore */ }
+
+      if (!pythonRes.ok) {
+        const errText = await pythonRes.text();
+        throw new Error(`Python server returned ${pythonRes.status}: ${errText}`);
+      }
+
+      const data = await pythonRes.json();
+      res.status(200).json(data);
+    } catch (error: any) {
+      logger.error(`Error in POST /api/reading/evaluate: ${error.message}`);
+      res.status(500).json({
+        success: false,
+        message: 'Error al evaluar la grabación de lectura',
+        error: error.message,
+      });
+    }
+  })
+);
+
+/**
+ * POST /api/reading/attempts
+ * Guardar intento de lectura en PostgreSQL
+ */
+router.post(
+  '/attempts',
+  authMiddleware,
+  asyncHandler(async (req: any, res: any) => {
+    try {
+      const { ReadingRepository } = await import('../db/repositories/reading-repository');
+      const student_id = req.user?.userId || req.body.student_id;
+      const attempt = await ReadingRepository.saveAttempt({
+        session_id: req.body.session_id,
+        student_id,
+        story_title: req.body.story_title,
+        story_text: req.body.story_text,
+        wpm_setting: req.body.wpm_setting,
+        overall_score: req.body.overall_score,
+        pronunciation_score: req.body.pronunciation_score,
+        feedback: req.body.feedback,
+        audio_url: req.body.audio_url,
+        words_alignment: req.body.words_alignment,
+      });
+
+      res.status(201).json({
+        success: true,
+        attempt,
+        message: 'Intento de lectura guardado con éxito',
+      });
+    } catch (error: any) {
+      logger.error(`Error saving reading attempt: ${error.message}`);
+      res.status(500).json({
+        success: false,
+        message: 'Error al guardar intento de lectura',
+        error: error.message,
+      });
+    }
+  })
+);
+
+/**
+ * GET /api/reading/attempts/session/:sessionId
+ * Obtener intentos de lectura para una sesión
+ */
+router.get(
+  '/attempts/session/:sessionId',
+  authMiddleware,
+  asyncHandler(async (req: any, res: any) => {
+    try {
+      const { ReadingRepository } = await import('../db/repositories/reading-repository');
+      const attempts = await ReadingRepository.getAttemptsBySession(req.params.sessionId);
+      res.status(200).json({
+        success: true,
+        attempts,
+      });
+    } catch (error: any) {
+      logger.error(`Error fetching session reading attempts: ${error.message}`);
+      res.status(500).json({
+        success: false,
+        message: 'Error al recuperar intentos de la sesión',
+        error: error.message,
+      });
+    }
+  })
+);
+
 export default router;
+

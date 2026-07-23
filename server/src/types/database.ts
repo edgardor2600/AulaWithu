@@ -210,3 +210,14 @@ export interface ExamAnswer {
   points_earned: number | null;
   answered_at: string;
 }
+
+export interface SessionMaterial {
+  id: number;
+  session_id: string;
+  file_name: string;
+  file_type: string;
+  slide_urls: string[];
+  current_slide_index: number;
+  created_at: string;
+}
+
