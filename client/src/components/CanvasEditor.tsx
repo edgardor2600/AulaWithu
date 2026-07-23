@@ -49,6 +49,14 @@ import { useCanvasClipboard } from '../hooks/useCanvasClipboard';
 import { useScreenShare } from '../hooks/useScreenShare';
 import { useCanvasBoardTheme } from '../hooks/useCanvasBoardTheme';
 import { BOARD_THEMES, type Tool, type BoardTheme } from '../types/canvas';
+import { usePresenter } from '../hooks/usePresenter';
+import { PresenterPanel } from './PresenterPanel';
+import { PresenterCompactNav } from './PresenterCompactNav';
+import { useReadingGame } from '../hooks/useReadingGame';
+import { ReadingGamePanel } from './ReadingGamePanel';
+
+
+
 
 const isEditableTarget = (target: EventTarget | null) => {
   if (!(target instanceof HTMLElement)) return false;
@@ -100,7 +108,9 @@ export const CanvasEditor = ({
     isReadOnlyRef.current = isReadOnly;
   }, [isReadOnly]);
 
-  const [currentTool, setCurrentTool] = useState<Tool>('select');
+  const [currentTool, setCurrentTool] = useState<Tool>('hand');
+
+
   const [color, setColor] = useState('#000000');
   const [brushWidth, setBrushWidth] = useState(2);
   const [isSaving, setIsSaving] = useState(false);
@@ -115,6 +125,8 @@ export const CanvasEditor = ({
   const miniMapCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const imageInputRef = useRef<HTMLInputElement | null>(null);
   const jsonInputRef = useRef<HTMLInputElement | null>(null);
+  const presentationInputRef = useRef<HTMLInputElement | null>(null);
+
   const containerRef = useRef<HTMLDivElement>(null);
   const [showShortcuts, setShowShortcuts] = useState(false);
 
@@ -255,6 +267,25 @@ export const CanvasEditor = ({
   const reading = useReading(fabricCanvasRef.current, saveHistory);
   const conversation = useConversation(fabricCanvasRef.current, saveHistory);
   const globalTimer = useGlobalTimer(ydoc, isTeacher);
+
+  const effectivePresenterSessionId = sessionId || (slideId ? `slide_${slideId}` : 'standalone_session');
+  const presenter = usePresenter(
+    effectivePresenterSessionId,
+    fabricCanvasRef.current,
+    ydoc,
+    isTeacher
+  );
+  const readingGame = useReadingGame(effectivePresenterSessionId);
+
+
+
+  const handlePresentationFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = '';
+    await presenter.startPresentation(file);
+  };
+
 
   // Referencia mutable para actualizar el texto de lectura TTS basado en selecciones en el canvas
   const setReadingTextRef = useRef(reading.setReadingText);
@@ -586,23 +617,37 @@ export const CanvasEditor = ({
     canvas.hoverCursor = 'move';
   }, []);
 
-  const addText = useCallback(() => {
+  const addText = useCallback((x?: number, y?: number) => {
     const canvas = fabricCanvasRef.current;
     if (!canvas) return;
 
-    const text = new fabric.IText('Click to edit', {
-      left: 100,
-      top: 100,
-      fontSize: 32,
+    let posX = x;
+    let posY = y;
+
+    if (posX === undefined || posY === undefined) {
+      const vpt = canvas.viewportTransform || [1, 0, 0, 1, 0, 0];
+      const zoom = canvas.getZoom();
+      posX = (-vpt[4] + canvas.getWidth() / 2) / zoom - 100;
+      posY = (-vpt[5] + canvas.getHeight() / 2) / zoom - 20;
+    }
+
+    const text = new fabric.IText('Escribe aquí...', {
+      left: posX,
+      top: posY,
+      fontSize: 28,
       fill: color,
-      fontFamily: 'Arial',
+      fontFamily: 'Inter, Arial, sans-serif',
+      editable: true,
+      selectable: true,
     });
 
     canvas.add(text);
     canvas.setActiveObject(text);
     text.enterEditing();
+    text.selectAll();
     canvas.renderAll();
   }, [color]);
+
 
   const handleSave = useCallback(async () => {
     const canvas = fabricCanvasRef.current;
@@ -636,18 +681,18 @@ export const CanvasEditor = ({
     if (tool === 'reading') {
       const willShow = !reading.showReadingPanel;
       reading.setShowReadingPanel(willShow);
+      readingGame.setShowReadingGamePanel(true);
       if (willShow) {
         conversation.setShowConversationPanel(false); // Cerrar conversación
-        const canvas = fabricCanvasRef.current;
-        const activeObject = canvas?.getActiveObject();
-        if (activeObject && (activeObject.type === 'i-text' || activeObject.type === 'text')) {
+        const activeObject = fabricCanvasRef.current?.getActiveObject();
+        if (activeObject && (activeObject.type === 'i-text' || activeObject.type === 'textbox')) {
           let text = (activeObject as any).text || '';
-          // Si es un bloque de texto unificado, extraemos solo la frase original (primera linea)
           if (text.includes('\n')) {
             text = text.split('\n')[0];
           }
           if (text && text.trim()) {
             reading.setReadingText(text.trim());
+            readingGame.setStoryText(text.trim());
           }
         }
       }
@@ -675,9 +720,17 @@ export const CanvasEditor = ({
       return;
     }
 
+    if (tool === 'presenter') {
+      presentationInputRef.current?.click();
+      setCurrentTool('select');
+      syncCursorForTool('select');
+      return;
+    }
+
     setCurrentTool(tool);
     syncCursorForTool(tool);
-  }, [addText, syncCursorForTool, triggerImageUpload, reading, globalTimer]);
+  }, [addText, syncCursorForTool, triggerImageUpload, reading, globalTimer, presenter]);
+
 
   const exportJSON = useCallback(() => {
     const canvas = fabricCanvasRef.current;
@@ -952,7 +1005,8 @@ export const CanvasEditor = ({
     let lastPosX = 0;
     let lastPosY = 0;
     let wasDrawingMode = false;  // Guardar estado del modo de dibujo
-    let restoreTimeout: number | null = null;  // Para delay al restaurar
+    let restoreTimeout: any = null;  // Para delay al restaurar
+
 
     // Zoom con Ctrl + Scroll
     const handleWheel = (e: WheelEvent) => {
@@ -990,7 +1044,18 @@ export const CanvasEditor = ({
         canvas.selection = false;
       }
       
+      if (currentTool === 'text') {
+        const pointer = canvas.getScenePoint(evt);
+        addText(pointer.x, pointer.y);
+        setCurrentTool('select');
+        syncCursorForTool('select');
+        evt.preventDefault();
+        evt.stopPropagation();
+        return false;
+      }
+
       // Activar pan si:
+
       // 1. Hand tool está seleccionado
       // 2. Espacio está presionado (leído desde ref)
       // 3. Middle click (rueda del mouse)
@@ -1927,7 +1992,9 @@ export const CanvasEditor = ({
     { id: 'reading' as Tool, icon: BookOpen, label: 'Reading/TTS', desc: 'Text to Speech and Phonetics' },
     { id: 'conversation' as Tool, icon: MessageSquare, label: 'Diálogos/Conversación', desc: 'Práctica de diálogos con voces de personajes' },
     ...(isTeacher ? [{ id: 'timer' as Tool, icon: Timer, label: 'Cronómetro', desc: 'Cronómetro / Temporizador' }] : []),
+    ...(isTeacher ? [{ id: 'presenter' as Tool, icon: MonitorUp, label: 'Presentador', desc: 'Presentar archivos PPTX, DOCX, XLSX' }] : []),
   ];
+
 
   const colors = [
     { value: '#000000', name: 'Black' },
@@ -2342,6 +2409,14 @@ export const CanvasEditor = ({
         onChange={handleJSONFileLoad}
         style={{ display: 'none' }}
       />
+      <input
+        ref={presentationInputRef}
+        type="file"
+        accept=".pptx,.docx,.xlsx,.xls,.csv"
+        onChange={handlePresentationFileSelect}
+        style={{ display: 'none' }}
+      />
+
       {/* Panel flotante de Reading / TTS (Figma style) */}
       {reading.showReadingPanel && (
         <div className="fixed top-20 right-6 z-40 w-80 bg-[#1e2128]/95 backdrop-blur-xl border border-white/10 rounded-2xl shadow-[0_20px_60px_rgba(0,0,0,0.6)] flex flex-col max-h-[75vh] transition-all duration-300">
@@ -2778,6 +2853,41 @@ export const CanvasEditor = ({
         resetTimer={globalTimer.resetTimer}
         setRemainingFromDisplayInput={globalTimer.setRemainingFromDisplayInput}
       />
+
+      {/* Presentador de Documentos */}
+      <PresenterPanel
+        isActive={presenter.isActive}
+        fileName={presenter.fileName}
+        slideUrls={presenter.slideUrls}
+        currentIndex={presenter.currentIndex}
+        isTeacher={isTeacher}
+        isLoading={presenter.isLoading}
+        loadingMessage={presenter.loadingMessage}
+        isOpen={presenter.showPresenterPanel}
+        setOpen={presenter.setShowPresenterPanel}
+        showSlide={presenter.showSlide}
+        endPresentation={presenter.endPresentation}
+        onMinimize={() => presenter.setShowPresenterPanel(false)}
+        exportCurrentSlide={presenter.exportCurrentSlide}
+      />
+
+      <PresenterCompactNav
+        isActive={presenter.isActive}
+        slideUrls={presenter.slideUrls}
+        currentIndex={presenter.currentIndex}
+        isTeacher={isTeacher}
+        showSlide={presenter.showSlide}
+        centerOnSlide={presenter.centerOnSlide}
+        onRestore={() => presenter.setShowPresenterPanel(true)}
+        onEnd={presenter.endPresentation}
+        onExport={presenter.exportCurrentSlide}
+      />
+
+
+
+      {/* Reto de Velocidad de Lectura */}
+      <ReadingGamePanel game={readingGame} />
     </div>
   );
 };
+

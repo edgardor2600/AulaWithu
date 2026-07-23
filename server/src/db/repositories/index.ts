@@ -12,3 +12,5 @@ export { EnrollmentsRepository } from './enrollments-repository';
 export { TopicsRepository } from './topics-repository';
 export { LevelsRepository } from './levels-repository';
 export { ExamsRepository } from './exams-repository';
+export { PresenterRepository } from './presenter-repository';
+

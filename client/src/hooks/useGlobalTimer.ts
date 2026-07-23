@@ -65,18 +65,19 @@ export function useGlobalTimer(ydoc: Y.Doc | null, isTeacher: boolean) {
 
       setTimerState((prev) => {
         const newState = { ...prev };
-        if (isOpen !== undefined) newState.isOpen = isOpen;
-        if (durationMinutes !== undefined) newState.durationMinutes = durationMinutes;
-        if (remainingMs !== undefined) newState.remainingMs = remainingMs;
-        if (isRunning !== undefined) newState.isRunning = isRunning;
-        if (deadlineMs !== undefined) newState.deadlineMs = deadlineMs;
-        if (hasStarted !== undefined) newState.hasStarted = hasStarted;
+        if (isOpen !== undefined && isOpen !== null) newState.isOpen = Boolean(isOpen);
+        if (durationMinutes !== undefined && durationMinutes !== null) newState.durationMinutes = Number(durationMinutes);
+        if (remainingMs !== undefined && remainingMs !== null) newState.remainingMs = Number(remainingMs);
+        if (isRunning !== undefined && isRunning !== null) newState.isRunning = Boolean(isRunning);
+        if (deadlineMs !== undefined && deadlineMs !== null) newState.deadlineMs = Number(deadlineMs);
+        if (hasStarted !== undefined && hasStarted !== null) newState.hasStarted = Boolean(hasStarted);
         
         // If it became running, adjust the local clock
         if (isRunning && deadlineMs) {
-          const calculatedRemaining = Math.max(0, deadlineMs - Date.now());
+          const calculatedRemaining = Math.max(0, Number(deadlineMs) - Date.now());
           newState.remainingMs = calculatedRemaining;
         }
+
 
         return newState;
       });
