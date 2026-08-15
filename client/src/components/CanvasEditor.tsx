@@ -34,7 +34,8 @@ import {
   MonitorUp,
   Scissors,
   Palette,
-  Timer
+  Timer,
+  Zap
 } from 'lucide-react';
 import { useReading } from '../hooks/useReading';
 import { useConversation } from '../hooks/useConversation';
@@ -482,40 +483,38 @@ export const CanvasEditor = ({
     miniCtx.fillRect(vx + vw - 2, vy + vh - 2, dotSize, dotSize); 
   }, []);
 
-  // ✅ NUEVO: Fit to Viewport con Redimensionamiento Físico
+  // ✅ Fit to Viewport con Redimensionamiento Físico y Centrado Correcto
   const fitToViewport = useCallback(() => {
     const canvas = fabricCanvasRef.current;
     const container = containerRef.current;
     if (!canvas || !container) return;
 
-    // Obtener dimensiones disponibles
     const containerWidth = container.clientWidth;
     const containerHeight = container.clientHeight;
-    
-    // Calcular escala para caber en AMBAS dimensiones (manteniendo 16:9)
-    // El tablero base es de 1200x675
+    if (containerWidth === 0 || containerHeight === 0) return;
+
+    // El lienzo físico siempre ocupa el 100% del contenedor
+    canvas.setWidth(containerWidth);
+    canvas.setHeight(containerHeight);
+
+    // Calcular escala para caber en AMBAS dimensiones (manteniendo 16:9 base 1200x675)
     const scaleX = containerWidth / 1200;
     const scaleY = containerHeight / 675;
-    
-    // Elegimos la escala menor para que el tablero ENTERO sea visible
     const scale = Math.min(scaleX, scaleY);
-    
-    // Aplicar dimensiones físicas (el lienzo físico ocupa el espacio de escala)
-    canvas.setWidth(1200 * scale);
-    canvas.setHeight(675 * scale);
-    
-    // Aplicar zoom de Fabric
-    canvas.setZoom(scale);
-    canvas.setViewportTransform([scale, 0, 0, scale, 0, 0]);
-    
+
+    // Centrar la pizarra en el contenedor
+    const translateX = (containerWidth - 1200 * scale) / 2;
+    const translateY = (containerHeight - 675 * scale) / 2;
+
+    // Aplicar zoom y centrado en el ViewportTransform
+    canvas.setViewportTransform([scale, 0, 0, scale, translateX, translateY]);
+
     setZoomLevel(scale);
     canvas.renderAll();
     updateMiniMap();
   }, [updateMiniMap]);
 
-  // ✅ NUEVO: Sensor de tamaño inteligente (ResizeObserver)
-  // AJUSTADO: Solo hace "Fit" (Zoom automático) la primera vez.
-  // Después, solo redimensiona el lienzo sin tocar el zoom del usuario.
+  // ✅ Sensor de tamaño inteligente (ResizeObserver)
   useEffect(() => {
     if (!isReady || !containerRef.current) return;
     
@@ -526,15 +525,11 @@ export const CanvasEditor = ({
         if (!canvas || !container) return;
 
         if (!hasInitialFitRef.current) {
-          // Primera vez: Hacemos Fit para que se vea grande
           fitToViewport();
           hasInitialFitRef.current = true;
         } else {
-          // Veces siguientes (ej: ocultar sidebar): Solo ajustamos tamaño físico
-          // MANTENIENDO el zoom actual del usuario
           canvas.setWidth(container.clientWidth);
           canvas.setHeight(container.clientHeight);
-          
           canvas.requestRenderAll();
           updateMiniMap();
         }
@@ -571,17 +566,8 @@ export const CanvasEditor = ({
   }, [zoomLevel, MIN_ZOOM, updateMiniMap]);
 
   const resetZoom = useCallback(() => {
-    const canvas = fabricCanvasRef.current;
-    if (!canvas) return;
-    
-    // Zoom al 100% exacto
-    const newZoom = 1;
-    setZoomLevel(newZoom);
-    
-    const center = canvas.getCenter();
-    canvas.zoomToPoint({ x: center.left, y: center.top } as any, newZoom);
-    updateMiniMap();
-  }, [updateMiniMap]);
+    fitToViewport();
+  }, [fitToViewport]);
 
 
   // Delete selected object
@@ -681,19 +667,31 @@ export const CanvasEditor = ({
     if (tool === 'reading') {
       const willShow = !reading.showReadingPanel;
       reading.setShowReadingPanel(willShow);
-      readingGame.setShowReadingGamePanel(true);
       if (willShow) {
-        conversation.setShowConversationPanel(false); // Cerrar conversación
+        conversation.setShowConversationPanel(false);
+        readingGame.setShowReadingGamePanel(false);
         const activeObject = fabricCanvasRef.current?.getActiveObject();
         if (activeObject && (activeObject.type === 'i-text' || activeObject.type === 'textbox')) {
           let text = (activeObject as any).text || '';
-          if (text.includes('\n')) {
-            text = text.split('\n')[0];
-          }
-          if (text && text.trim()) {
-            reading.setReadingText(text.trim());
-            readingGame.setStoryText(text.trim());
-          }
+          if (text.includes('\n')) text = text.split('\n')[0];
+          if (text && text.trim()) reading.setReadingText(text.trim());
+        }
+      }
+      setCurrentTool('select');
+      syncCursorForTool('select');
+      return;
+    }
+
+    if (tool === 'reading-game') {
+      const willShow = !readingGame.showReadingGamePanel;
+      readingGame.setShowReadingGamePanel(willShow);
+      if (willShow) {
+        conversation.setShowConversationPanel(false);
+        reading.setShowReadingPanel(false);
+        const activeObject = fabricCanvasRef.current?.getActiveObject();
+        if (activeObject && (activeObject.type === 'i-text' || activeObject.type === 'textbox')) {
+          const text = ((activeObject as any).text || '').trim();
+          if (text) readingGame.setStoryText(text);
         }
       }
       setCurrentTool('select');
@@ -729,7 +727,7 @@ export const CanvasEditor = ({
 
     setCurrentTool(tool);
     syncCursorForTool(tool);
-  }, [addText, syncCursorForTool, triggerImageUpload, reading, globalTimer, presenter]);
+  }, [addText, syncCursorForTool, triggerImageUpload, reading, globalTimer, presenter, readingGame, conversation]);
 
 
   const exportJSON = useCallback(() => {
@@ -1993,6 +1991,7 @@ export const CanvasEditor = ({
     { id: 'conversation' as Tool, icon: MessageSquare, label: 'Diálogos/Conversación', desc: 'Práctica de diálogos con voces de personajes' },
     ...(isTeacher ? [{ id: 'timer' as Tool, icon: Timer, label: 'Cronómetro', desc: 'Cronómetro / Temporizador' }] : []),
     ...(isTeacher ? [{ id: 'presenter' as Tool, icon: MonitorUp, label: 'Presentador', desc: 'Presentar archivos PPTX, DOCX, XLSX' }] : []),
+    { id: 'reading-game' as Tool, icon: Zap, label: 'Reto de Lectura', desc: '⚡ Reto de Velocidad de Lectura con IA (G)' },
   ];
 
 

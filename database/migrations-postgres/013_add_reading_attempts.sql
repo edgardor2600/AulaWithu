@@ -4,8 +4,8 @@
 
 CREATE TABLE IF NOT EXISTS student_reading_attempts (
     id SERIAL PRIMARY KEY,
-    session_id VARCHAR(255) REFERENCES sessions(id) ON DELETE CASCADE,
-    student_id VARCHAR(255) REFERENCES users(id) ON DELETE CASCADE,
+    session_id VARCHAR(255) NOT NULL,
+    student_id VARCHAR(255),
     story_title VARCHAR(255),
     story_text TEXT NOT NULL,
     wpm_setting INT NOT NULL DEFAULT 120,

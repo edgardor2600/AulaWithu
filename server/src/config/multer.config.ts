@@ -23,18 +23,11 @@ const storage = multer.diskStorage({
 
 // File filter - images and audio
 const fileFilter = (req: any, file: Express.Multer.File, cb: multer.FileFilterCallback) => {
-  const allowedMimes = [
-    // Images
-    'image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp',
-    // Audio
-    'audio/mpeg', 'audio/mp3', 'audio/wav', 'audio/wave', 'audio/x-wav',
-    'audio/ogg', 'audio/mp4', 'audio/aac', 'audio/webm',
-  ];
-
-  if (allowedMimes.includes(file.mimetype)) {
+  // Accept any audio or image MIME type (including codec variants like audio/webm;codecs=opus)
+  if (file.mimetype.startsWith('audio/') || file.mimetype.startsWith('image/')) {
     cb(null, true);
   } else {
-    cb(new ValidationError('Solo se permiten imágenes (JPEG, PNG, GIF, WebP) y audio (MP3, WAV, OGG)'));
+    cb(new ValidationError('Solo se permiten imágenes y archivos de audio'));
   }
 };
 

@@ -16,7 +16,8 @@ export type Tool =
   | 'conversation'
   | 'cut'
   | 'timer'
-  | 'presenter';
+  | 'presenter'
+  | 'reading-game';
 
 
 export type BoardTheme = 'white' | 'notebook' | 'green' | 'blackboard' | 'cork';
