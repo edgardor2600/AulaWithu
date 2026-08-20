@@ -13,4 +13,6 @@ export { TopicsRepository } from './topics-repository';
 export { LevelsRepository } from './levels-repository';
 export { ExamsRepository } from './exams-repository';
 export { PresenterRepository } from './presenter-repository';
+export { TutorRepository } from './tutor-repository';
+export { QuizRepository } from './quiz-repository';
 

@@ -38,7 +38,7 @@ export class MiniMaxService {
 
     try {
       const url = 'https://api.minimax.io/v1/chat/completions';
-      const body = {
+      const body: any = {
         model,
         messages: [
           {
@@ -47,6 +47,7 @@ export class MiniMaxService {
           },
         ],
         temperature,
+        max_tokens: options.maxTokens || 8192,
       };
 
       const res = await fetch(url, {
@@ -125,10 +126,12 @@ export class MiniMaxService {
         const parts = rawVoice.split('/');
         voiceId = parts[1] || 'female-shaonv';
         if (parts[2]) model = parts[2];
-      } else if (rawVoice.includes('female') || rawVoice.includes('Jenny') || rawVoice.includes('Dalia') || rawVoice.includes('Aria')) {
+      } else if (rawVoice.includes('female') || rawVoice.includes('Jenny') || rawVoice.includes('Dalia') || rawVoice.includes('Aria') || rawVoice.includes('shaonv') || rawVoice.includes('tianmei')) {
         voiceId = 'female-shaonv';
-      } else if (rawVoice.includes('male') || rawVoice.includes('Guy') || rawVoice.includes('Roger') || rawVoice.includes('Brian')) {
-        voiceId = 'male-chengshu';
+      } else if (rawVoice.includes('male') || rawVoice.includes('Guy') || rawVoice.includes('Roger') || rawVoice.includes('Brian') || rawVoice.includes('chengshu') || rawVoice.includes('magnetic')) {
+        voiceId = 'English_magnetic_man';
+      } else {
+        voiceId = rawVoice;
       }
     }
 
@@ -137,54 +140,66 @@ export class MiniMaxService {
     const sanitizedText = text.replace(/_{2,}/g, 'blank').replace(/\*/g, '').trim();
     const url = 'https://api.minimax.io/v1/t2a_v2';
 
-    const payload = {
-      model,
-      text: sanitizedText,
-      voice_setting: {
-        voice_id: voiceId,
-        speed: options.speed || 1.0,
-        pitch: options.pitch || 0,
-      },
-      audio_setting: {
-        sample_rate: options.sampleRate || 32000,
-        format: 'mp3',
-      },
+    const sendTTSRequest = async (targetVoice: string) => {
+      const payload = {
+        model,
+        text: sanitizedText,
+        voice_setting: {
+          voice_id: targetVoice,
+          speed: options.speed || 1.0,
+          pitch: options.pitch || 0,
+        },
+        audio_setting: {
+          sample_rate: options.sampleRate || 32000,
+          format: 'mp3',
+        },
+      };
+
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!res.ok) {
+        const errText = await res.text();
+        throw new Error(`MiniMax TTS Error (${res.status}): ${errText}`);
+      }
+
+      const contentType = res.headers.get('content-type') || '';
+      if (contentType.includes('application/json')) {
+        const json: any = await res.json();
+        if (json.base_resp && json.base_resp.status_code !== 0) {
+          throw new Error(`MiniMax TTS (${json.base_resp.status_code}): ${json.base_resp.status_msg}`);
+        }
+
+        const audioHexOrBase64 = json.data?.audio || json.audio;
+        if (audioHexOrBase64) {
+          try {
+            return Buffer.from(audioHexOrBase64, 'hex');
+          } catch {
+            return Buffer.from(audioHexOrBase64, 'base64');
+          }
+        }
+        throw new Error('MiniMax TTS JSON did not contain audio payload');
+      }
+
+      const arrayBuf = await res.arrayBuffer();
+      return Buffer.from(arrayBuf);
     };
 
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(payload),
-    });
-
-    if (!res.ok) {
-      const errText = await res.text();
-      throw new Error(`MiniMax TTS Error (${res.status}): ${errText}`);
-    }
-
-    const contentType = res.headers.get('content-type') || '';
-    if (contentType.includes('application/json')) {
-      const json: any = await res.json();
-      if (json.base_resp && json.base_resp.status_code !== 0) {
-        throw new Error(`MiniMax TTS (${json.base_resp.status_code}): ${json.base_resp.status_msg}`);
+    try {
+      return await sendTTSRequest(voiceId);
+    } catch (firstErr: any) {
+      if (voiceId !== 'female-shaonv') {
+        logger.warn(`[MiniMaxService] TTS con voz ${voiceId} falló (${firstErr.message}). Reintentando con voz default female-shaonv...`);
+        return await sendTTSRequest('female-shaonv');
       }
-
-      const audioHexOrBase64 = json.data?.audio || json.audio;
-      if (audioHexOrBase64) {
-        try {
-          return Buffer.from(audioHexOrBase64, 'hex');
-        } catch {
-          return Buffer.from(audioHexOrBase64, 'base64');
-        }
-      }
-      throw new Error('MiniMax TTS JSON did not contain audio payload');
+      throw firstErr;
     }
-
-    const arrayBuf = await res.arrayBuffer();
-    return Buffer.from(arrayBuf);
   }
 
   /**
