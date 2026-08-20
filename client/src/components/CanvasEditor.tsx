@@ -35,7 +35,9 @@ import {
   Scissors,
   Palette,
   Timer,
-  Zap
+  Zap,
+  Bot,
+  HelpCircle
 } from 'lucide-react';
 import { useReading } from '../hooks/useReading';
 import { useConversation } from '../hooks/useConversation';
@@ -55,6 +57,12 @@ import { PresenterPanel } from './PresenterPanel';
 import { PresenterCompactNav } from './PresenterCompactNav';
 import { useReadingGame } from '../hooks/useReadingGame';
 import { ReadingGamePanel } from './ReadingGamePanel';
+import { useAITutor } from '../hooks/useAITutor';
+import { AITutorPanel } from './AITutorPanel';
+import { AITutorFloatingBubble } from './AITutorFloatingBubble';
+import { useQuizGame } from '../hooks/useQuizGame';
+import { QuizCreatorModal } from './QuizCreatorModal';
+import { QuizPlayerWidget } from './QuizPlayerWidget';
 
 
 
@@ -86,6 +94,12 @@ interface CanvasEditorProps {
   isTeacher?: boolean;
   onPermissionsReady?: (updateFn: (allow: boolean) => void) => void;
   onPermissionsChange?: (allowDraw: boolean) => void;
+  classId?: string | null;
+  topicId?: string | null;
+  currentSlideIndex?: number;
+  onSlideChange?: (index: number) => void;
+  totalSlides?: number;
+  onReloadSlides?: () => Promise<void>;
 }
 
 export const CanvasEditor = ({ 
@@ -99,7 +113,13 @@ export const CanvasEditor = ({
   enforceOwnership = false,
   isTeacher = false,
   onPermissionsReady,
-  onPermissionsChange
+  onPermissionsChange,
+  classId,
+  topicId,
+  currentSlideIndex,
+  onSlideChange,
+  totalSlides,
+  onReloadSlides
 }: CanvasEditorProps) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const fabricCanvasRef = useRef<fabric.Canvas | null>(null);
@@ -277,6 +297,17 @@ export const CanvasEditor = ({
     isTeacher
   );
   const readingGame = useReadingGame(effectivePresenterSessionId);
+  const aiTutor = useAITutor({
+    canvasOrGetter: () => fabricCanvasRef.current,
+    saveHistory,
+    classId,
+    topicId,
+    currentSlideIndex,
+    onSlideChange,
+    onReloadSlides,
+    totalSlides,
+  });
+  const quizGame = useQuizGame(ydoc, isTeacher, effectivePresenterSessionId);
 
 
 
@@ -725,9 +756,28 @@ export const CanvasEditor = ({
       return;
     }
 
+    if (tool === 'ai-tutor') {
+      aiTutor.setShowAITutorPanel(!aiTutor.showAITutorPanel);
+      if (!aiTutor.showAITutorPanel) {
+        conversation.setShowConversationPanel(false);
+        reading.setShowReadingPanel(false);
+        readingGame.setShowReadingGamePanel(false);
+      }
+      setCurrentTool('select');
+      syncCursorForTool('select');
+      return;
+    }
+
+    if (tool === 'quiz') {
+      quizGame.setShowQuizCreator(true);
+      setCurrentTool('select');
+      syncCursorForTool('select');
+      return;
+    }
+
     setCurrentTool(tool);
     syncCursorForTool(tool);
-  }, [addText, syncCursorForTool, triggerImageUpload, reading, globalTimer, presenter, readingGame, conversation]);
+  }, [addText, syncCursorForTool, triggerImageUpload, reading, globalTimer, presenter, readingGame, conversation, aiTutor, quizGame]);
 
 
   const exportJSON = useCallback(() => {
@@ -1992,6 +2042,8 @@ export const CanvasEditor = ({
     ...(isTeacher ? [{ id: 'timer' as Tool, icon: Timer, label: 'Cronómetro', desc: 'Cronómetro / Temporizador' }] : []),
     ...(isTeacher ? [{ id: 'presenter' as Tool, icon: MonitorUp, label: 'Presentador', desc: 'Presentar archivos PPTX, DOCX, XLSX' }] : []),
     { id: 'reading-game' as Tool, icon: Zap, label: 'Reto de Lectura', desc: '⚡ Reto de Velocidad de Lectura con IA (G)' },
+    ...(isTeacher ? [{ id: 'ai-tutor' as Tool, icon: Bot, label: 'AI Tutor', desc: '🤖 Asistente y Tutor de Lecciones con IA' }] : []),
+    ...(isTeacher ? [{ id: 'quiz' as Tool, icon: HelpCircle, label: 'Quiz Interactivo', desc: '⚡ Crear y lanzar quizzes interactivos en vivo' }] : []),
   ];
 
 
@@ -2886,6 +2938,20 @@ export const CanvasEditor = ({
 
       {/* Reto de Velocidad de Lectura */}
       <ReadingGamePanel game={readingGame} />
+
+      {/* AI Tutor Panel */}
+      <AITutorPanel tutor={aiTutor} classId={classId} topicId={topicId} onReloadSlides={onReloadSlides} />
+      <AITutorFloatingBubble
+        script={aiTutor.script}
+        currentPhaseIndex={aiTutor.currentPhaseIndex}
+        isSpeaking={aiTutor.isSpeaking}
+        onOpen={() => { aiTutor.setShowAITutorPanel(true); aiTutor.setActiveTab('runtime'); }}
+        onStopSpeech={aiTutor.stopSpeech}
+      />
+
+      {/* Quiz Interactivo */}
+      <QuizCreatorModal quiz={quizGame} isTeacher={isTeacher} />
+      <QuizPlayerWidget quiz={quizGame} clientId={clientId != null ? String(clientId) : 'guest'} userName={participantsList?.find(p => p.clientId === clientId)?.name || 'Alumno'} />
     </div>
   );
 };

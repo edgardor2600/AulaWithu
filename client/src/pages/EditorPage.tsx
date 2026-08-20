@@ -175,6 +175,36 @@ export const EditorPage = () => {
     }
   };
 
+  // ✅ NUEVO: Recarga silenciosa de diapositivas — NO activa setIsLoading(true)
+  // Esto evita que el CanvasEditor se desmonte y que el panel AI Tutor desaparezca.
+  const silentReloadSlides = useCallback(async () => {
+    if (!classId) return;
+    try {
+      const data = await classService.getById(classId);
+      let slidesToLoad: Slide[] = [];
+
+      if (topicId && data.slides && data.slides.length > 0) {
+        slidesToLoad = data.slides.filter((s: any) => s.topic_id === topicId);
+      } else if (data.slides && data.slides.length > 0) {
+        slidesToLoad = data.slides;
+      }
+
+      if (slidesToLoad.length > 0) {
+        // Preservar canvas_data que ya tenemos en memoria — solo agregar los nuevos
+        slidesToLoad.forEach(slide => {
+          if (slide.canvas_data && !slidesDataRef.current.has(slide.id)) {
+            slidesDataRef.current.set(slide.id, slide.canvas_data);
+          }
+        });
+        setSlides(slidesToLoad);
+        console.log(`[EditorPage] silentReloadSlides: cargadas ${slidesToLoad.length} diapositivas sin pantalla de carga`);
+      }
+    } catch (error) {
+      console.error('[EditorPage] silentReloadSlides error:', error);
+      // No navegar ni mostrar error crítico — es una recarga silenciosa
+    }
+  }, [classId, topicId]);
+
   const createSlide = async () => {
     if (!classId) return;
 
@@ -639,6 +669,12 @@ export const EditorPage = () => {
                 onPermissionsReady={(updateFn) => {
                   updateSessionPermissionsRef.current = updateFn;
                 }}
+                classId={classId}
+                topicId={topicId}
+                currentSlideIndex={currentSlideIndex}
+                onSlideChange={(index) => setCurrentSlideIndex(index)}
+                totalSlides={slides.length}
+                onReloadSlides={silentReloadSlides}
               />
             )}
           </div>

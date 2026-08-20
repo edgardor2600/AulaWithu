@@ -17,7 +17,9 @@ export type Tool =
   | 'cut'
   | 'timer'
   | 'presenter'
-  | 'reading-game';
+  | 'reading-game'
+  | 'ai-tutor'
+  | 'quiz';
 
 
 export type BoardTheme = 'white' | 'notebook' | 'green' | 'blackboard' | 'cork';

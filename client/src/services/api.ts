@@ -6,7 +6,7 @@ import toast from 'react-hot-toast';
 // Create axios instance
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL || 'http://localhost:3002/api',
-  timeout: 60000, // 60 segundos por defecto
+  timeout: 180000, // 180 segundos (3 min) para dar tiempo a generaciones de IA extensas
   headers: {
     'Content-Type': 'application/json',
   },
