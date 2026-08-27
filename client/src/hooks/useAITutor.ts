@@ -23,189 +23,337 @@ function wrapText(text: string, charsPerLine: number): string {
   return lines.join('\n');
 }
 
-// ─── Helper: Build Rich Fabric JSON for Phase Slides ─────────────────────────
+// ─── Helper: Build Rich Fabric JSON for Phase Slides ─────────────────
 
 function buildPhaseFabricJson(phase: LessonPhase, subject: string, level: string): string {
   const objects: any[] = [];
-  const LEFT = 40;
-  const CONTENT_W = 880;
-  const GAP = 14;
-  let y = 36;
 
-  // Phase-specific color palettes
+  // ── Canvas geometry ───────────────────────────────────────────────────
+  const LEFT   = 28;
+  const TOP    = 18;
+  const TOTAL_W = 904;
+
+  // ── Dark premium palettes (one per phase) ────────────────────────────
+  // Each palette defines only accent colors. Cards always use the same dark slate
+  // background — only the accent bar color and labels change per phase.
   const PALETTES = [
-    { headerBg: '#1e3a5f', headerText: '#93c5fd', accent: '#3b82f6', accentDim: '#dbeafe', accentText: '#1d4ed8', taskBg: '#eff6ff' },
-    { headerBg: '#2d1b69', headerText: '#c4b5fd', accent: '#7c3aed', accentDim: '#ede9fe', accentText: '#6d28d9', taskBg: '#f5f3ff' },
-    { headerBg: '#0c4a6e', headerText: '#7dd3fc', accent: '#0284c7', accentDim: '#e0f2fe', accentText: '#0369a1', taskBg: '#f0f9ff' },
-    { headerBg: '#450a0a', headerText: '#fca5a5', accent: '#dc2626', accentDim: '#fee2e2', accentText: '#b91c1c', taskBg: '#fff1f2' },
-    { headerBg: '#052e16', headerText: '#86efac', accent: '#16a34a', accentDim: '#dcfce7', accentText: '#15803d', taskBg: '#f0fdf4' },
-    { headerBg: '#451a03', headerText: '#fcd34d', accent: '#d97706', accentDim: '#fef3c7', accentText: '#b45309', taskBg: '#fffbeb' },
+    // Phase 1 — Cyan / Ocean
+    { accent: '#22d3ee', accentDim: '#0e7490', pillBg: '#083344', pillText: '#67e8f9', headerBg: '#040d14', labelCol: '#22d3ee', exBorder: '#0e7490' },
+    // Phase 2 — Violet / Indigo
+    { accent: '#a78bfa', accentDim: '#6d28d9', pillBg: '#1e1040', pillText: '#c4b5fd', headerBg: '#0c0718', labelCol: '#a78bfa', exBorder: '#6d28d9' },
+    // Phase 3 — Teal / Emerald
+    { accent: '#34d399', accentDim: '#059669', pillBg: '#042f2a', pillText: '#6ee7b7', headerBg: '#020f0d', labelCol: '#34d399', exBorder: '#059669' },
+    // Phase 4 — Rose / Pink
+    { accent: '#fb7185', accentDim: '#be123c', pillBg: '#2d0a14', pillText: '#fda4af', headerBg: '#120309', labelCol: '#fb7185', exBorder: '#be123c' },
+    // Phase 5 — Amber / Gold
+    { accent: '#fbbf24', accentDim: '#b45309', pillBg: '#271a04', pillText: '#fde68a', headerBg: '#100a02', labelCol: '#fbbf24', exBorder: '#b45309' },
+    // Phase 6 — Sky / Blue
+    { accent: '#60a5fa', accentDim: '#1d4ed8', pillBg: '#0c1a3a', pillText: '#93c5fd', headerBg: '#04091a', labelCol: '#60a5fa', exBorder: '#1d4ed8' },
   ];
   const pal = PALETTES[phase.phase % PALETTES.length];
 
-  // ── 1. Header ───────────────────────────────────────────────────────────────
-  const headerH = 72;
-  objects.push({ type: 'Rect', version: '6.0.0', left: LEFT, top: y, width: CONTENT_W, height: headerH, fill: pal.headerBg, rx: 12, ry: 12 });
-  objects.push({
-    type: 'IText', version: '6.0.0',
-    left: LEFT + 20, top: y + 12,
-    text: `Fase ${phase.phase + 1}: ${phase.name}`,
-    fontSize: 24, fontWeight: 'bold', fill: pal.headerText, fontFamily: 'Inter, Arial, sans-serif',
-  });
-  objects.push({
-    type: 'IText', version: '6.0.0',
-    left: LEFT + 20, top: y + 44,
-    text: `${subject} · Nivel ${level}`,
-    fontSize: 13, fill: '#94a3b8', fontFamily: 'Inter, Arial, sans-serif',
-  });
-  // Objective badge (right side)
-  if (phase.objective) {
-    const objShort = phase.objective.length > 80 ? phase.objective.substring(0, 77) + '...' : phase.objective;
+  // ── Shared token values ────────────────────────────────────────────
+  const CARD_BG        = '#111827';  // gray-900
+  const CARD_BORDER    = '#1f2937';  // gray-800
+  const TEXT_PRIMARY   = '#f9fafb';  // white-ish
+  const TEXT_SECONDARY = '#9ca3af';  // gray-400
+  const TEXT_MUTED     = '#6b7280';  // gray-500
+  const ACCENT_BAR_W   = 4;         // colored left stripe width
+
+  // Lock helper — avoids repeating on every object
+  const LOCK = {
+    selectable: false, evented: false,
+    lockMovementX: true, lockMovementY: true,
+    lockRotation: true, lockScalingX: true, lockScalingY: true,
+    hasControls: false,
+  };
+
+  // Card render helper: dark body + colored accent left bar
+  const pushCard = (x: number, y: number, w: number, h: number, accentColor: string) => {
+    objects.push({
+      type: 'Rect', version: '6.0.0',
+      left: x, top: y, width: w, height: h,
+      fill: CARD_BG, stroke: CARD_BORDER, strokeWidth: 1.5,
+      rx: 14, ry: 14, ...LOCK,
+    });
+    objects.push({
+      type: 'Rect', version: '6.0.0',
+      left: x, top: y + 14, width: ACCENT_BAR_W, height: h - 28,
+      fill: accentColor, rx: 2, ry: 2, ...LOCK,
+    });
+  };
+
+  // Section label helper
+  const pushLabel = (x: number, y: number, icon: string, text: string, col: string) => {
     objects.push({
       type: 'IText', version: '6.0.0',
-      left: LEFT + CONTENT_W - 420, top: y + 22,
-      text: `🎯 ${objShort}`,
-      fontSize: 11, fill: '#cbd5e1', fontFamily: 'Inter, Arial, sans-serif', fontStyle: 'italic',
+      left: x, top: y,
+      text: `${icon}  ${text}`,
+      fontSize: 10, fontWeight: 'bold', fill: col,
+      fontFamily: 'Inter, Arial, sans-serif', ...LOCK,
+    });
+  };
+
+  // ════════════════════════════════════════════════════════════════════════════
+  // 1. FULL CANVAS DARK BACKGROUND
+  // ════════════════════════════════════════════════════════════════════════════
+  objects.push({
+    type: 'Rect', version: '6.0.0',
+    left: 0, top: 0, width: 960, height: 560,
+    fill: '#0a0f1a', rx: 0, ry: 0, ...LOCK,
+  });
+
+  // ════════════════════════════════════════════════════════════════════════════
+  // 2. HEADER BAR
+  // ════════════════════════════════════════════════════════════════════════════
+  const HDR_H = 72;
+
+  // Header dark base
+  objects.push({
+    type: 'Rect', version: '6.0.0',
+    left: LEFT, top: TOP, width: TOTAL_W, height: HDR_H,
+    fill: pal.headerBg,
+    stroke: pal.accent, strokeWidth: 1,
+    rx: 16, ry: 16, ...LOCK,
+  });
+  // Accent glow line at the bottom of header
+  objects.push({
+    type: 'Rect', version: '6.0.0',
+    left: LEFT, top: TOP + HDR_H - 3, width: TOTAL_W, height: 3,
+    fill: pal.accent, rx: 0, ry: 0, opacity: 0.7, ...LOCK,
+  });
+
+  // Phase pill badge
+  objects.push({
+    type: 'Rect', version: '6.0.0',
+    left: LEFT + 18, top: TOP + 23, width: 82, height: 26,
+    fill: pal.pillBg, stroke: pal.accent, strokeWidth: 1,
+    rx: 13, ry: 13, ...LOCK,
+  });
+  objects.push({
+    type: 'IText', version: '6.0.0',
+    left: LEFT + 29, top: TOP + 28,
+    text: `FASE ${phase.phase + 1}`,
+    fontSize: 11, fontWeight: 'bold', fill: pal.pillText,
+    fontFamily: 'Inter, Arial, sans-serif', ...LOCK,
+  });
+
+  // Phase name (large white)
+  objects.push({
+    type: 'IText', version: '6.0.0',
+    left: LEFT + 116, top: TOP + 13,
+    text: phase.name.length > 44 ? phase.name.substring(0, 42) + '…' : phase.name,
+    fontSize: 22, fontWeight: 'bold', fill: TEXT_PRIMARY,
+    fontFamily: 'Inter, Arial, sans-serif', ...LOCK,
+  });
+  // Subject / level
+  objects.push({
+    type: 'IText', version: '6.0.0',
+    left: LEFT + 116, top: TOP + 44,
+    text: `${subject}  ·  Nivel ${level}`,
+    fontSize: 12, fill: TEXT_SECONDARY,
+    fontFamily: 'Inter, Arial, sans-serif', ...LOCK,
+  });
+
+  // Objective (right side)
+  if (phase.objective) {
+    const objTxt = phase.objective.length > 60
+      ? phase.objective.substring(0, 58) + '…' : phase.objective;
+    objects.push({
+      type: 'IText', version: '6.0.0',
+      left: LEFT + TOTAL_W - 330, top: TOP + 28,
+      text: `🎯  ${objTxt}`,
+      fontSize: 11, fill: TEXT_MUTED, fontStyle: 'italic',
+      fontFamily: 'Inter, Arial, sans-serif', ...LOCK,
     });
   }
-  y += headerH + GAP;
 
-  // ── 2. Key Structure (most prominent) ─────────────────────────────────────
-  if (phase.key_structure && phase.key_structure.trim()) {
-    const structLines = phase.key_structure.trim().split('\n');
-    const structH = Math.max(90, structLines.length * 26 + 52);
-    objects.push({ type: 'Rect', version: '6.0.0', left: LEFT, top: y, width: CONTENT_W, height: structH, fill: '#fffbeb', stroke: pal.accent, strokeWidth: 2.5, rx: 10, ry: 10 });
-    objects.push({
-      type: 'IText', version: '6.0.0', left: LEFT + 18, top: y + 10,
-      text: '⚡ ESTRUCTURA / FÓRMULA CLAVE',
-      fontSize: 11, fontWeight: 'bold', fill: pal.accentText, fontFamily: 'Inter, Arial, sans-serif',
-    });
-    objects.push({
-      type: 'IText', version: '6.0.0', left: LEFT + 18, top: y + 30,
-      text: phase.key_structure.trim(),
-      fontSize: 17, fontWeight: 'bold', fill: '#1c1917', fontFamily: 'Courier New, monospace',
-    });
-    y += structH + GAP;
-  }
+  // ════════════════════════════════════════════════════════════════════════════
+  // 3. 2x2 CARD GRID
+  // ════════════════════════════════════════════════════════════════════════════
+  const GAP   = 16;
+  const COL_W = (TOTAL_W - GAP) / 2;  // ≈ 444px
+  const COL1_X = LEFT;
+  const COL2_X = LEFT + COL_W + GAP;
+  const ROW1_Y = TOP + HDR_H + 14;
+  const ROW1_H = 212;
+  const ROW2_Y = ROW1_Y + ROW1_H + 12;
+  const ROW2_H = 218;
 
-  // ── 3. Tutor Explanation ───────────────────────────────────────────────────
-  if (phase.tutor_says && phase.tutor_says.trim()) {
-    objects.push({
-      type: 'IText', version: '6.0.0', left: LEFT, top: y,
-      text: '🤖  Explicación del tutor',
-      fontSize: 13, fontWeight: 'bold', fill: pal.accentText, fontFamily: 'Inter, Arial, sans-serif',
-    });
-    y += 22;
-    const wrapped = wrapText(phase.tutor_says.trim(), 110);
-    const tutorLines = wrapped.split('\n').length;
-    const tutorH = Math.max(60, tutorLines * 21 + 24);
-    objects.push({ type: 'Rect', version: '6.0.0', left: LEFT, top: y, width: CONTENT_W, height: tutorH, fill: '#f8fafc', stroke: '#e2e8f0', strokeWidth: 1, rx: 8, ry: 8 });
-    objects.push({
-      type: 'IText', version: '6.0.0', left: LEFT + 16, top: y + 12,
-      text: wrapped,
-      fontSize: 14, fill: '#1e293b', fontFamily: 'Inter, Arial, sans-serif', lineHeight: 1.55,
-    });
-    y += tutorH + GAP;
-  }
+  // ─── CARD 1 (top-left): Key Structure / Concept ─────────────────────
+  pushCard(COL1_X, ROW1_Y, COL_W, ROW1_H, pal.accent);
+  pushLabel(COL1_X + 18, ROW1_Y + 14, '⚡', 'ESTRUCTURA / CONCEPTO CLAVE', pal.labelCol);
 
-  // ── 4. Explanation Points (bullets) ────────────────────────────────────────
-  if ((phase as any).explanation_points && (phase as any).explanation_points.length > 0) {
-    const points: string[] = (phase as any).explanation_points;
-    objects.push({
-      type: 'IText', version: '6.0.0', left: LEFT, top: y,
-      text: '📋  Puntos clave',
-      fontSize: 13, fontWeight: 'bold', fill: pal.accentText, fontFamily: 'Inter, Arial, sans-serif',
-    });
-    y += 22;
-    const pointsText = points.map(p => `  •  ${p}`).join('\n');
-    const pointLines = points.length;
-    const pointsH = Math.max(44, pointLines * 22 + 20);
-    objects.push({ type: 'Rect', version: '6.0.0', left: LEFT, top: y, width: CONTENT_W, height: pointsH, fill: pal.accentDim, rx: 8, ry: 8 });
-    objects.push({
-      type: 'IText', version: '6.0.0', left: LEFT + 14, top: y + 10,
-      text: pointsText,
-      fontSize: 14, fill: pal.accentText, fontFamily: 'Inter, Arial, sans-serif', lineHeight: 1.5,
-    });
-    y += pointsH + GAP;
-  }
+  const structSrc = (phase.key_structure && phase.key_structure.trim())
+    ? phase.key_structure.trim()
+    : (phase.tutor_says ? phase.tutor_says.substring(0, 200) : 'Estructura no especificada');
+  const structWrapped = wrapText(structSrc, 38).split('\n').slice(0, 8).join('\n');
+  objects.push({
+    type: 'IText', version: '6.0.0',
+    left: COL1_X + 18, top: ROW1_Y + 36,
+    text: structWrapped,
+    fontSize: 13, fill: TEXT_PRIMARY,
+    fontFamily: 'Inter, Arial, sans-serif', lineHeight: 1.55, ...LOCK,
+  });
 
-  // ── 5. Examples ─────────────────────────────────────────────────────────────
-  if ((phase as any).examples && (phase as any).examples.length > 0) {
-    const examples: any[] = (phase as any).examples;
-    objects.push({
-      type: 'IText', version: '6.0.0', left: LEFT, top: y,
-      text: '💡  Ejemplos',
-      fontSize: 13, fontWeight: 'bold', fill: pal.accentText, fontFamily: 'Inter, Arial, sans-serif',
-    });
-    y += 22;
-    for (const ex of examples) {
-      const hasNote = ex.context_note && ex.context_note.trim();
-      const hasTrans = ex.spanish_translation && ex.spanish_translation.trim();
-      const exH = hasNote ? 74 : hasTrans ? 58 : 40;
-      objects.push({ type: 'Rect', version: '6.0.0', left: LEFT, top: y, width: CONTENT_W, height: exH, fill: '#f0f9ff', stroke: '#bae6fd', strokeWidth: 1, rx: 6, ry: 6 });
-      const mainText = ex.english || ex.text || '';
-      if (mainText) {
+  // ─── CARD 2 (bottom-left): Practical Examples ─────────────────────
+  pushCard(COL1_X, ROW2_Y, COL_W, ROW2_H, pal.accentDim);
+  pushLabel(COL1_X + 18, ROW2_Y + 14, '💡', 'EJEMPLOS PRÁCTICOS', '#60a5fa');
+
+  const rawExamples = (phase as any).examples || [];
+  if (rawExamples.length > 0) {
+    let exY = ROW2_Y + 38;
+    for (let i = 0; i < Math.min(2, rawExamples.length); i++) {
+      const ex = rawExamples[i];
+      const hasNote = !!ex.context_note;
+      const exH = hasNote ? 76 : 62;
+      // Guard: stop if we'd overflow the card
+      if (exY + exH > ROW2_Y + ROW2_H - 8) break;
+
+      objects.push({
+        type: 'Rect', version: '6.0.0',
+        left: COL1_X + 14, top: exY,
+        width: COL_W - 28, height: exH,
+        fill: '#1c2433', stroke: pal.exBorder, strokeWidth: 1,
+        rx: 10, ry: 10, ...LOCK,
+      });
+      const mainTxt = ex.english || ex.text || '';
+      if (mainTxt) {
         objects.push({
-          type: 'IText', version: '6.0.0', left: LEFT + 14, top: y + 8,
-          text: mainText,
-          fontSize: 15, fontWeight: 'bold', fill: '#0369a1', fontFamily: 'Inter, Arial, sans-serif',
+          type: 'IText', version: '6.0.0',
+          left: COL1_X + 24, top: exY + 8,
+          text: wrapText(mainTxt, 40).split('\n').slice(0, 2).join('\n'),
+          fontSize: 12, fontWeight: 'bold', fill: '#93c5fd',
+          fontFamily: 'Inter, Arial, sans-serif', ...LOCK,
         });
       }
-      if (hasTrans) {
+      if (ex.spanish_translation) {
         objects.push({
-          type: 'IText', version: '6.0.0', left: LEFT + 14, top: y + 30,
-          text: `→ ${ex.spanish_translation}`,
-          fontSize: 12, fill: '#475569', fontFamily: 'Inter, Arial, sans-serif', fontStyle: 'italic',
+          type: 'IText', version: '6.0.0',
+          left: COL1_X + 24, top: exY + 31,
+          text: `→  ${String(ex.spanish_translation).substring(0, 52)}`,
+          fontSize: 11, fill: TEXT_SECONDARY, fontStyle: 'italic',
+          fontFamily: 'Inter, Arial, sans-serif', ...LOCK,
         });
       }
       if (hasNote) {
         objects.push({
-          type: 'IText', version: '6.0.0', left: LEFT + 14, top: y + 52,
-          text: `📌 ${ex.context_note}`,
-          fontSize: 11, fill: '#64748b', fontFamily: 'Inter, Arial, sans-serif',
+          type: 'IText', version: '6.0.0',
+          left: COL1_X + 24, top: exY + 51,
+          text: `📌  ${String(ex.context_note).substring(0, 50)}`,
+          fontSize: 10, fill: TEXT_MUTED,
+          fontFamily: 'Inter, Arial, sans-serif', ...LOCK,
         });
       }
-      y += exH + 8;
+      exY += exH + 8;
     }
-    y += GAP - 8;
-  }
-
-  // ── 6. Student Task ─────────────────────────────────────────────────────────
-  if (phase.student_task && phase.student_task.trim()) {
-    const taskWrapped = wrapText(`📝  Tarea: ${phase.student_task.trim()}`, 105);
-    const taskLines = taskWrapped.split('\n').length;
-    const taskH = Math.max(54, taskLines * 22 + 20);
-    objects.push({ type: 'Rect', version: '6.0.0', left: LEFT, top: y, width: CONTENT_W, height: taskH, fill: '#f0fdf4', stroke: '#86efac', strokeWidth: 2, rx: 10, ry: 10 });
+  } else {
+    const fallback = wrapText(
+      phase.tutor_says ? phase.tutor_says.substring(0, 220) : 'Escucha la explicación guiada del tutor para esta fase.',
+      39
+    ).split('\n').slice(0, 7).join('\n');
     objects.push({
-      type: 'IText', version: '6.0.0', left: LEFT + 16, top: y + 14,
-      text: taskWrapped,
-      fontSize: 16, fontWeight: 'bold', fill: '#166534', fontFamily: 'Inter, Arial, sans-serif',
-    });
-    y += taskH + GAP;
-  }
-
-  // ── 7. Exercises list (Phase 4 practice) ────────────────────────────────────
-  if (phase.exercises && phase.exercises.length > 0) {
-    objects.push({
-      type: 'IText', version: '6.0.0', left: LEFT, top: y,
-      text: `⚡  ${phase.exercises.length} Ejercicios de práctica progresiva`,
-      fontSize: 13, fontWeight: 'bold', fill: pal.accentText, fontFamily: 'Inter, Arial, sans-serif',
-    });
-    y += 24;
-    const exLines = phase.exercises.map((ex, i) => `${i + 1}. ${ex.student_task || ex.tutor_says || ''}`).join('\n');
-    const wrapped = wrapText(exLines, 105);
-    const lc = wrapped.split('\n').length;
-    const exH = Math.max(80, lc * 20 + 20);
-    objects.push({ type: 'Rect', version: '6.0.0', left: LEFT, top: y, width: CONTENT_W, height: exH, fill: pal.accentDim, rx: 8, ry: 8 });
-    objects.push({
-      type: 'IText', version: '6.0.0', left: LEFT + 14, top: y + 10,
-      text: wrapped,
-      fontSize: 14, fill: '#1e293b', fontFamily: 'Inter, Arial, sans-serif', lineHeight: 1.5,
+      type: 'IText', version: '6.0.0',
+      left: COL1_X + 18, top: ROW2_Y + 40,
+      text: fallback,
+      fontSize: 12, fill: TEXT_SECONDARY,
+      fontFamily: 'Inter, Arial, sans-serif', lineHeight: 1.55, ...LOCK,
     });
   }
 
-  return JSON.stringify({ version: '6.0.0', objects });
+  // ─── CARD 3 (top-right): Key Points / Insights ─────────────────────
+  pushCard(COL2_X, ROW1_Y, COL_W, ROW1_H, pal.accent);
+  pushLabel(COL2_X + 18, ROW1_Y + 14, '📋', 'PUNTOS CLAVE', pal.labelCol);
+
+  const rawPoints: string[] = (phase as any).explanation_points || [];
+  if (rawPoints.length > 0) {
+    let ptY = ROW1_Y + 38;
+    for (let i = 0; i < Math.min(4, rawPoints.length); i++) {
+      if (ptY > ROW1_Y + ROW1_H - 24) break;
+      const ptLine = wrapText(rawPoints[i], 36).split('\n').slice(0, 2).join('\n');
+      objects.push({
+        type: 'IText', version: '6.0.0',
+        left: COL2_X + 18, top: ptY,
+        text: `▸  ${ptLine}`,
+        fontSize: 12, fill: TEXT_PRIMARY,
+        fontFamily: 'Inter, Arial, sans-serif', lineHeight: 1.45, ...LOCK,
+      });
+      ptY += ptLine.split('\n').length > 1 ? 40 : 26;
+    }
+  } else {
+    const excerpt = wrapText(
+      phase.tutor_says ? phase.tutor_says.substring(0, 200) : '',
+      38
+    ).split('\n').slice(0, 7).join('\n');
+    objects.push({
+      type: 'IText', version: '6.0.0',
+      left: COL2_X + 18, top: ROW1_Y + 38,
+      text: excerpt,
+      fontSize: 12, fill: TEXT_SECONDARY,
+      fontFamily: 'Inter, Arial, sans-serif', lineHeight: 1.5, ...LOCK,
+    });
+  }
+
+  // ─── CARD 4 (bottom-right): Student Task ─────────────────────────
+  pushCard(COL2_X, ROW2_Y, COL_W, ROW2_H, '#10b981'); // always emerald for task card
+  pushLabel(COL2_X + 18, ROW2_Y + 14, '📝', 'TAREA DEL ESTUDIANTE', '#34d399');
+
+  const taskSrc = (phase.student_task && phase.student_task.trim())
+    ? phase.student_task.trim()
+    : 'Responde usando el micrófono o escribe tu respuesta en el panel del AI Tutor.';
+  const taskWrapped = wrapText(taskSrc, 38).split('\n').slice(0, 6).join('\n');
+  objects.push({
+    type: 'IText', version: '6.0.0',
+    left: COL2_X + 18, top: ROW2_Y + 38,
+    text: taskWrapped,
+    fontSize: 13, fontWeight: 'bold', fill: '#d1fae5',
+    fontFamily: 'Inter, Arial, sans-serif', lineHeight: 1.55, ...LOCK,
+  });
+  // Action hint at the bottom of task card
+  objects.push({
+    type: 'IText', version: '6.0.0',
+    left: COL2_X + 18, top: ROW2_Y + ROW2_H - 28,
+    text: '💬  Responde en el panel del AI Tutor →',
+    fontSize: 10, fill: '#6ee7b7', fontStyle: 'italic',
+    fontFamily: 'Inter, Arial, sans-serif', ...LOCK,
+  });
+
+  // ════════════════════════════════════════════════════════════════════════════
+  // 4. FOOTER — thin separator + instruction text
+  // ════════════════════════════════════════════════════════════════════════════
+  const footerY = ROW2_Y + ROW2_H + 10;
+  objects.push({
+    type: 'Rect', version: '6.0.0',
+    left: LEFT, top: footerY, width: TOTAL_W, height: 1,
+    fill: '#1f2937', ...LOCK,
+  });
+  objects.push({
+    type: 'IText', version: '6.0.0',
+    left: LEFT + 4, top: footerY + 8,
+    text: '🎙️  Presiona "Escuchar" en el panel lateral para reproducir la explicación guiada por voz IA',
+    fontSize: 10, fill: '#6b7280', fontStyle: 'italic',
+    fontFamily: 'Inter, Arial, sans-serif', ...LOCK,
+  });
+
+  // ── aiTutorData metadata (used by the panel at runtime) ──────────────────
+  const aiTutorData = {
+    phase: phase.phase,
+    name: phase.name,
+    objective: phase.objective,
+    tutor_says: phase.tutor_says,
+    student_task: phase.student_task,
+    key_structure: phase.key_structure,
+    exercises: phase.exercises,
+    explanation_points: (phase as any).explanation_points,
+    examples: (phase as any).examples,
+    common_error: (phase as any).common_error,
+    subject,
+    level,
+  };
+
+  return JSON.stringify({ version: '6.0.0', objects, aiTutorData });
 }
+
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -266,6 +414,21 @@ export interface TutorMaterialSummary {
   updated_at: string;
 }
 
+export interface ActiveSlidePhaseData {
+  phase?: number;
+  name?: string;
+  objective?: string;
+  tutor_says?: string;
+  student_task?: string;
+  key_structure?: string;
+  exercises?: PracticeExercise[];
+  explanation_points?: string[];
+  examples?: Array<{ english?: string; text?: string; spanish_translation?: string; context_note?: string }>;
+  common_error?: string;
+  subject?: string;
+  level?: string;
+}
+
 // ─── Module-level Persistent State (survives CanvasEditor slide remounts) ─────
 
 interface PersistentTutorState {
@@ -277,9 +440,29 @@ interface PersistentTutorState {
   level: string;
   mode: 'guided' | 'practice';
   context: string;
+  // P-02: Persiste entre remounts para evitar recrear slides duplicadas
+  lessonSlidesCreated: boolean;
 }
 
 const tutorStateCache: Record<string, PersistentTutorState> = {};
+
+function loadPersistedTutorState(cacheKey: string): Partial<PersistentTutorState> | null {
+  try {
+    const raw = localStorage.getItem(`aiTutor_state_${cacheKey}`);
+    if (raw) return JSON.parse(raw);
+  } catch (e) {
+    console.warn('[useAITutor] Failed to load persisted state from localStorage', e);
+  }
+  return null;
+}
+
+function savePersistedTutorState(cacheKey: string, state: PersistentTutorState) {
+  try {
+    localStorage.setItem(`aiTutor_state_${cacheKey}`, JSON.stringify(state));
+  } catch (e) {
+    console.warn('[useAITutor] Failed to save state to localStorage', e);
+  }
+}
 
 export interface UseAITutorOptions {
   canvasOrGetter?: fabric.Canvas | null | (() => fabric.Canvas | null);
@@ -290,6 +473,7 @@ export interface UseAITutorOptions {
   onSlideChange?: (index: number) => void;
   onReloadSlides?: () => Promise<void>;
   totalSlides?: number;
+  currentSlideInitialData?: string | null;
 }
 
 export function useAITutor(
@@ -304,6 +488,7 @@ export function useAITutor(
   let onSlideChange: ((index: number) => void) | undefined = undefined;
   let onReloadSlides: (() => Promise<void>) | undefined = undefined;
   let totalSlides: number | undefined = undefined; // ✅ NUEVO: para navegación correcta
+  let currentSlideInitialData: string | null | undefined = undefined;
 
   if (canvasOrGetterOrOptions && typeof canvasOrGetterOrOptions === 'object' && !('renderAll' in canvasOrGetterOrOptions)) {
     const opts = canvasOrGetterOrOptions as UseAITutorOptions;
@@ -314,18 +499,19 @@ export function useAITutor(
     currentSlideIndex = opts.currentSlideIndex;
     onSlideChange = opts.onSlideChange;
     onReloadSlides = opts.onReloadSlides;
-    totalSlides = opts.totalSlides; // ✅ NUEVO
+    totalSlides = opts.totalSlides;
+    currentSlideInitialData = opts.currentSlideInitialData;
   } else {
     canvasOrGetter = canvasOrGetterOrOptions as any;
     saveHistory = legacySaveHistory ?? (() => {});
   }
 
-  const cacheKey = classId || 'default_tutor_session';
-  const initialCache = tutorStateCache[cacheKey];
+  const cacheKey = classId ? `class_${classId}${topicId ? `_topic_${topicId}` : ''}` : 'default_tutor_session';
+  const initialCache = tutorStateCache[cacheKey] || loadPersistedTutorState(cacheKey);
 
   // Panel visibility
   const [showAITutorPanel, setShowAITutorPanelRaw] = useState<boolean>(initialCache?.showAITutorPanel ?? false);
-  const [activeTab, setActiveTabRaw] = useState<'generator' | 'library' | 'runtime'>(initialCache?.activeTab ?? 'generator');
+  const [activeTab, setActiveTabRaw] = useState<'generator' | 'library' | 'runtime'>(initialCache?.activeTab ?? (initialCache?.script ? 'runtime' : 'generator'));
 
   // Config
   const [subject, setSubjectRaw] = useState<string>(initialCache?.subject ?? 'English');
@@ -339,11 +525,50 @@ export function useAITutor(
   const [currentPhaseIndex, setCurrentPhaseIndex] = useState(currentSlideIndex !== undefined ? currentSlideIndex : 0);
   const [isGenerating, setIsGenerating] = useState(false);
   const [isConvertingSlides, setIsConvertingSlides] = useState(false);
-  const [lessonSlidesCreated, setLessonSlidesCreated] = useState(false); // ✅ Oculta botón tras creación
+  // P-02: Inicializar desde cache para sobrevivir remounts de slide
+  const [lessonSlidesCreated, setLessonSlidesCreatedRaw] = useState<boolean>(
+    initialCache?.lessonSlidesCreated ?? false
+  );
 
-  // Helper to persist state updates in module cache
+  // Active slide phase metadata from current slide (persists directly in canvas JSON)
+  const [activeSlidePhaseData, setActiveSlidePhaseData] = useState<ActiveSlidePhaseData | null>(null);
+
+  // Parse slide metadata whenever currentSlideInitialData changes
+  useEffect(() => {
+    if (!currentSlideInitialData || !currentSlideInitialData.trim() || currentSlideInitialData === '{}' || currentSlideInitialData === 'null') {
+      setActiveSlidePhaseData(null);
+      return;
+    }
+    try {
+      const parsed = typeof currentSlideInitialData === 'string' ? JSON.parse(currentSlideInitialData) : currentSlideInitialData;
+      if (parsed?.aiTutorData) {
+        setActiveSlidePhaseData(parsed.aiTutorData);
+        if (parsed.aiTutorData.subject) setSubjectRaw(parsed.aiTutorData.subject);
+        if (parsed.aiTutorData.level) setLevelRaw(parsed.aiTutorData.level);
+      } else {
+        let phaseTitle = '';
+        if (Array.isArray(parsed?.objects)) {
+          for (const o of parsed.objects) {
+            if (o.text && (o.text.startsWith('Fase ') || o.text.startsWith('Phase '))) {
+              phaseTitle = o.text;
+              break;
+            }
+          }
+        }
+        if (phaseTitle) {
+          setActiveSlidePhaseData({ name: phaseTitle });
+        } else {
+          setActiveSlidePhaseData(null);
+        }
+      }
+    } catch (_) {
+      setActiveSlidePhaseData(null);
+    }
+  }, [currentSlideInitialData]);
+
+  // Helper to persist state updates in module cache and localStorage
   const updateCache = useCallback((updater: Partial<PersistentTutorState>) => {
-    tutorStateCache[cacheKey] = {
+    const nextState: PersistentTutorState = {
       script: tutorStateCache[cacheKey]?.script ?? null,
       showAITutorPanel: tutorStateCache[cacheKey]?.showAITutorPanel ?? false,
       activeTab: tutorStateCache[cacheKey]?.activeTab ?? 'generator',
@@ -352,9 +577,19 @@ export function useAITutor(
       level: tutorStateCache[cacheKey]?.level ?? 'B1',
       mode: tutorStateCache[cacheKey]?.mode ?? 'guided',
       context: tutorStateCache[cacheKey]?.context ?? '',
+      // P-02: campo nuevo con default retrocompatible
+      lessonSlidesCreated: tutorStateCache[cacheKey]?.lessonSlidesCreated ?? false,
       ...updater,
     };
+    tutorStateCache[cacheKey] = nextState;
+    savePersistedTutorState(cacheKey, nextState);
   }, [cacheKey]);
+
+  // P-02: Setter persistente para lessonSlidesCreated (igual patrón que los otros setters)
+  const setLessonSlidesCreated = useCallback((val: boolean) => {
+    setLessonSlidesCreatedRaw(val);
+    updateCache({ lessonSlidesCreated: val });
+  }, [updateCache]);
 
   const setShowAITutorPanel = useCallback((val: boolean | ((prev: boolean) => boolean)) => {
     setShowAITutorPanelRaw(prev => {
@@ -404,6 +639,7 @@ export function useAITutor(
 
   // TTS
   const [isSpeaking, setIsSpeaking] = useState(false);
+  // P-04: Refs persistentes — el AudioContext se reutiliza para evitar el límite del navegador (~6 por página)
   const audioCtxRef = useRef<AudioContext | null>(null);
   const audioSourceRef = useRef<AudioBufferSourceNode | null>(null);
 
@@ -439,12 +675,34 @@ export function useAITutor(
     }
   }, [currentSlideIndex, script]);
 
+  // Helper to extract dialogue text from canvas objects if no metadata
+  const getTutorSaysFromCanvas = useCallback((): string => {
+    const cv = getCanvas();
+    if (!cv) return '';
+    const objects = cv.getObjects();
+    for (let i = 0; i < objects.length; i++) {
+      const obj = objects[i] as any;
+      const text = (obj.text || '').trim();
+      if (text.includes('Explicación del tutor') || text.includes('Tutor dice')) {
+        for (let j = i + 1; j < objects.length; j++) {
+          const nextObj = objects[j] as any;
+          const nextText = (nextObj.text || '').trim();
+          if (nextText && !nextText.startsWith('📋') && !nextText.startsWith('💡') && !nextText.startsWith('📝') && !nextText.startsWith('⚡')) {
+            return nextText;
+          }
+        }
+      }
+    }
+    return '';
+  }, [getCanvas]);
+
   // ─── TTS — Reutiliza /api/conversation/tts ──────────────────────────────────
 
   const stopSpeech = useCallback(() => {
     try {
       audioSourceRef.current?.stop();
     } catch (_) {}
+    // P-04: Limpiar solo la fuente — el AudioContext se reutiliza
     audioSourceRef.current = null;
     setIsSpeaking(false);
   }, []);
@@ -463,11 +721,17 @@ export function useAITutor(
         responseType: 'arraybuffer',
       });
 
-      const ctx = new AudioContext();
-      audioCtxRef.current = ctx;
+      // P-04: Reutilizar el AudioContext existente en lugar de crear uno nuevo por cada llamada.
+      // Chrome tiene un límite de ~6 AudioContexts por página — sin este fix se agota en sesiones largas.
+      let ctx = audioCtxRef.current;
+      if (!ctx || ctx.state === 'closed') {
+        ctx = new AudioContext();
+        audioCtxRef.current = ctx;
+      }
       if (ctx.state === 'suspended') await ctx.resume();
 
       const decoded = await ctx.decodeAudioData(response.data as ArrayBuffer);
+      // AudioBufferSourceNode no es reutilizable — crear uno nuevo para cada reproducción (es correcto)
       const source = ctx.createBufferSource();
       source.buffer = decoded;
       source.connect(ctx.destination);
@@ -483,12 +747,13 @@ export function useAITutor(
 
   const speakCurrentPhase = useCallback(async () => {
     const phase = script?.phases[currentPhaseIndex];
-    if (phase?.tutor_says) {
-      await speakText(phase.tutor_says);
+    const tutorText = phase?.tutor_says || activeSlidePhaseData?.tutor_says || getTutorSaysFromCanvas();
+    if (tutorText && tutorText.trim()) {
+      await speakText(tutorText);
     } else {
       toast('No hay diálogo para esta diapositiva');
     }
-  }, [script, currentPhaseIndex, speakText]);
+  }, [script, currentPhaseIndex, activeSlidePhaseData, getTutorSaysFromCanvas, speakText]);
 
   // ─── Microphone (Web Speech API — PTT for student) ────────────────────────
 
@@ -639,9 +904,9 @@ export function useAITutor(
   }, [getCanvas, saveHistory]);
 
   /**
-   * Draws the specified phase content onto the whiteboard canvas cleanly
+   * Draws the specified phase content onto the whiteboard canvas cleanly using the professional slide design
    */
-  const drawCurrentPhaseToBoard = useCallback((targetPhaseIndex?: number) => {
+  const drawCurrentPhaseToBoard = useCallback(async (targetPhaseIndex?: number) => {
     const cv = getCanvas();
     if (!cv) {
       toast.error('Pizarra no disponible');
@@ -659,106 +924,64 @@ export function useAITutor(
     const oldObjects = cv.getObjects().filter((o: any) => o.isAITutorPhase);
     oldObjects.forEach(o => cv.remove(o));
 
-    const center = cv.getCenter();
-    const centerY = (center as any).top ?? (center as any).y ?? 300;
-    const centerX = (center as any).left ?? (center as any).x ?? 400;
-    let offsetY = Math.max(50, centerY - 200);
-    const baseX = Math.max(50, centerX - 260);
+    try {
+      const jsonStr = buildPhaseFabricJson(currentPhase, subject, level);
+      const parsed = JSON.parse(jsonStr);
+      if (parsed.objects && parsed.objects.length > 0) {
+        const enlivened = await fabric.util.enlivenObjects(parsed.objects);
+        enlivened.forEach((obj: any) => {
+          (obj as any).isLocalOwned = true;
+          (obj as any).isAITutorPhase = true;
+          cv.add(obj);
+        });
+        cv.renderAll();
+        saveHistory();
+        toast.success(`Fase ${currentPhase.phase + 1} dibujada en la pizarra`);
+      }
+    } catch (err: any) {
+      console.error('[useAITutor] drawCurrentPhaseToBoard error:', err);
+      toast.error('Error al dibujar fase');
+    }
+  }, [getCanvas, script, currentPhaseIndex, subject, level, saveHistory]);
 
-    // 1. Phase Header
-    const headerTitle = `📌 Fase ${currentPhase.phase + 1}: ${currentPhase.name}`;
-    const headerText = new fabric.IText(headerTitle, {
-      left: baseX,
-      top: offsetY,
-      fontSize: 20,
-      fontWeight: 'bold',
-      fill: '#4f46e5',
-      fontFamily: 'Inter, sans-serif',
-      editable: true,
-    });
-    (headerText as any).isLocalOwned = true;
-    (headerText as any).isAITutorPhase = true;
-    cv.add(headerText);
-    offsetY += 34;
+  // ─── [P-10] Shared helper: create slides from a lesson script ─────────────
+  //
+  // This replaces the duplicated inline block that existed in both
+  // generateLesson and convertLessonToSlides. Single source of truth.
+  // isGenerating remains true throughout so no double-click is possible (P-09).
 
-    // 2. Key Structure / Formula Card
-    if (currentPhase.key_structure && currentPhase.key_structure.trim()) {
-      const structText = currentPhase.key_structure.trim();
-      const lines = structText.split('\n');
-      const cardHeight = Math.max(64, lines.length * 24 + 32);
-      const cardWidth = Math.max(480, Math.min(760, structText.length * 8 + 60));
-
-      const cardBg = new fabric.Rect({
-        left: baseX,
-        top: offsetY,
-        width: cardWidth,
-        height: cardHeight,
-        fill: '#f8fafc',
-        stroke: '#f59e0b',
-        strokeWidth: 2,
-        rx: 10,
-        ry: 10,
+  const _createSlidesForScript = useCallback(async (
+    phases: LessonPhase[],
+    cId: string,
+    tId: string | null | undefined,
+    reload: (() => Promise<void>) | undefined,
+  ) => {
+    toast('Creando diapositivas de la lección...');
+    for (const p of phases) {
+      const newSlide = await slideService.create(cId, {
+        title: `Fase ${p.phase + 1}: ${p.name}`,
+        topic_id: tId || undefined,
       });
-      (cardBg as any).isLocalOwned = true;
-      (cardBg as any).isAITutorPhase = true;
-      cv.add(cardBg);
-
-      const cardTitle = new fabric.IText('ESTRUCTURA CLAVE', {
-        left: baseX + 14,
-        top: offsetY + 8,
-        fontSize: 11,
-        fontWeight: 'bold',
-        fill: '#d97706',
-        fontFamily: 'Inter, sans-serif',
-        editable: false,
-      });
-      (cardTitle as any).isLocalOwned = true;
-      (cardTitle as any).isAITutorPhase = true;
-      cv.add(cardTitle);
-
-      const textContent = new fabric.IText(structText, {
-        left: baseX + 14,
-        top: offsetY + 26,
-        fontSize: 16,
-        fontWeight: 'bold',
-        fill: '#0f172a',
-        fontFamily: 'monospace, Inter, sans-serif',
-        editable: true,
-      });
-      (textContent as any).isLocalOwned = true;
-      (textContent as any).isAITutorPhase = true;
-      cv.add(textContent);
-
-      offsetY += cardHeight + 16;
+      const canvasData = buildPhaseFabricJson(p, subject, level);
+      await slideService.updateCanvas(newSlide.id, canvasData);
     }
 
-    // 3. Student Task
-    if (currentPhase.student_task && currentPhase.student_task.trim()) {
-      const taskText = `📝 Tarea: ${currentPhase.student_task.trim()}`;
-      const taskObj = new fabric.IText(taskText, {
-        left: baseX,
-        top: offsetY,
-        fontSize: 15,
-        fontWeight: 'bold',
-        fill: '#059669',
-        fontFamily: 'Inter, sans-serif',
-        editable: true,
-      });
-      (taskObj as any).isLocalOwned = true;
-      (taskObj as any).isAITutorPhase = true;
-      cv.add(taskObj);
-      offsetY += 30;
-    }
+    // Fijar panel en cache ANTES del reload silencioso
+    updateCache({ showAITutorPanel: true, activeTab: 'runtime' });
+    setShowAITutorPanel(true);
+    setActiveTab('runtime');
+    setCurrentPhaseIndex(0);
+    setLessonSlidesCreated(true);
 
-    // 4. Custom Board Actions if provided
-    if (currentPhase.board_actions && currentPhase.board_actions.length > 0) {
-      executeBoardActions(currentPhase.board_actions, baseX, offsetY);
-    }
+    // P-11: índice de la PRIMERA slide nueva = cantidad de slides ANTES de crear
+    // totalSlides se pasa desde CanvasEditor y refleja el estado antes del reload
+    const firstNewIndex = typeof totalSlides === 'number' ? totalSlides : 0;
 
-    cv.renderAll();
-    saveHistory();
-    toast.success(`Fase ${currentPhase.phase + 1} actualizada en pizarra`);
-  }, [getCanvas, script, currentPhaseIndex, executeBoardActions, saveHistory]);
+    if (reload) await reload();
+    if (onSlideChange) onSlideChange(firstNewIndex);
+
+    toast.success(`¡${phases.length} diapositivas creadas con éxito!`);
+  }, [subject, level, totalSlides, updateCache, setShowAITutorPanel, setActiveTab, setLessonSlidesCreated, onSlideChange]);
 
   // ─── Convert Lesson To Individual Slides ───────────────────────────────────
 
@@ -778,51 +1001,26 @@ export function useAITutor(
 
     setIsConvertingSlides(true);
     try {
-      toast('Creando diapositivas de la lección...');
-      for (const p of script.phases) {
-        const newSlide = await slideService.create(cId, {
-          title: `Fase ${p.phase + 1}: ${p.name}`,
-          topic_id: tId || undefined,
-        });
-
-        const canvasData = buildPhaseFabricJson(p, subject, level);
-        await slideService.updateCanvas(newSlide.id, canvasData);
-      }
-
-      // ✅ CLAVE: Fijar panel visible en cache ANTES del reload silencioso
-      updateCache({ showAITutorPanel: true, activeTab: 'runtime' });
-      setShowAITutorPanel(true);
-      setActiveTab('runtime');
-      setCurrentPhaseIndex(0);
-      setLessonSlidesCreated(true); // ✅ Ocultar botón "Crear Diapositivas"
-
-      // Calcular índice de la PRIMERA slide nueva (no la vacía inicial)
-      const firstNewSlideIndex = typeof totalSlides === 'number' ? totalSlides : 0;
-
-      if (reload) {
-        await reload();
-      }
-      if (onSlideChange) {
-        onSlideChange(firstNewSlideIndex);
-      }
-
-      toast.success(`¡${script.phases.length} diapositivas de la lección creadas con éxito!`);
+      await _createSlidesForScript(script.phases, cId, tId, reload);
     } catch (err: any) {
       console.error('[useAITutor] convertLessonToSlides error:', err);
       toast.error('Error al crear diapositivas: ' + (err.message || err));
     } finally {
       setIsConvertingSlides(false);
     }
-  }, [script, subject, level, classId, topicId, onReloadSlides, onSlideChange, updateCache, setShowAITutorPanel, setActiveTab, totalSlides]);
+  }, [script, classId, topicId, onReloadSlides, _createSlidesForScript]);
 
   // ─── Generate Lesson ──────────────────────────────────────────────────────
 
   const generateLesson = useCallback(async () => {
     if (!topic.trim()) { toast.error('Ingresa el tema de la lección'); return; }
+    // P-09: isGenerating cubre TODA la operación (generación + creación de slides)
+    // No hay ventana de doble-click entre el toast de éxito y la creación.
     setIsGenerating(true);
     setScript(null);
     setLastFeedback('');
     setLastScore(null);
+    setLessonSlidesCreated(false);
     try {
       const res = await api.post('/tutor/generate-lesson', {
         topic: topic.trim(),
@@ -838,36 +1036,10 @@ export function useAITutor(
         setActiveTab('runtime');
         toast.success(`Lección generada (${res.data.provider})`);
 
-        // Automatically create individual slides for each phase in the presentation!
+        // P-10: Reutilizar el helper compartido en lugar del bloque duplicado
         if (classId && genScript.phases?.length > 0) {
           try {
-            toast('Creando diapositivas de la lección...');
-            for (const p of genScript.phases) {
-              const newSlide = await slideService.create(classId, {
-                title: `Fase ${p.phase + 1}: ${p.name}`,
-                topic_id: topicId || undefined,
-              });
-              const canvasData = buildPhaseFabricJson(p, subject, level);
-              await slideService.updateCanvas(newSlide.id, canvasData);
-            }
-
-            // ✅ CLAVE: Fijar panel visible en cache ANTES del reload silencioso
-            updateCache({ showAITutorPanel: true, activeTab: 'runtime' });
-            setShowAITutorPanel(true);
-            setActiveTab('runtime');
-            setCurrentPhaseIndex(0);
-            setLessonSlidesCreated(true); // ✅ Ocultar botón "Crear Diapositivas"
-
-            // Navegar a la PRIMERA slide nueva (no al índice 0 que puede ser la slide vacía)
-            const firstNewIndex = typeof totalSlides === 'number' ? totalSlides : 0;
-
-            if (onReloadSlides) {
-              await onReloadSlides();
-            }
-            if (onSlideChange) {
-              onSlideChange(firstNewIndex);
-            }
-            toast.success(`¡${genScript.phases.length} diapositivas creadas en tu presentación!`);
+            await _createSlidesForScript(genScript.phases, classId, topicId, onReloadSlides);
           } catch (slideErr: any) {
             console.error('[useAITutor] Error creating automatic slides:', slideErr);
           }
@@ -879,9 +1051,10 @@ export function useAITutor(
       console.error('[useAITutor] generateLesson error:', err);
       toast.error('Error al generar la lección: ' + (err.response?.data?.message || err.message));
     } finally {
+      // P-09: Solo liberar el bloqueo cuando TODO ha terminado
       setIsGenerating(false);
     }
-  }, [topic, level, subject, context, mode, classId, topicId, onReloadSlides, onSlideChange, totalSlides, updateCache, setShowAITutorPanel, setActiveTab]);
+  }, [topic, level, subject, context, mode, classId, topicId, onReloadSlides, setActiveTab, _createSlidesForScript]);
 
   // ─── Generate Practice ────────────────────────────────────────────────────
 
@@ -976,7 +1149,7 @@ export function useAITutor(
     }
   }, [currentPhaseIndex, stopSpeech, onSlideChange, drawCurrentPhaseToBoard]);
 
-  // ─── Evaluate Answer ──────────────────────────────────────────────────────
+  // ─── Evaluate Answer (P-05: persiste en BD de forma fire-and-forget) ────────
 
   const evaluateAnswer = useCallback(async (answer: string) => {
     if (!answer.trim()) { toast.error('Escribe o graba tu respuesta primero'); return; }
@@ -994,41 +1167,78 @@ export function useAITutor(
         setLastScore(res.data.score);
         setLastFeedback(res.data.feedback);
         toast.success(`Puntuación: ${res.data.score}/100`);
+
+        // P-05: Persistir en BD — fire-and-forget, no bloquea el UI
+        const sessionKey = classId
+          ? `class_${classId}_phase_${currentPhaseIndex}`
+          : `standalone_${Date.now()}`;
+        api.post('/tutor/evaluations', {
+          session_id: sessionKey,
+          phase_index: currentPhaseIndex,
+          score: res.data.score,
+          feedback: res.data.feedback,
+        }).catch((err: any) => {
+          // Error silencioso — el alumno ya vio su score, eso es lo importante
+          console.warn('[useAITutor] Could not persist evaluation:', err?.message);
+        });
       }
     } catch (err: any) {
       toast.error('Error al evaluar la respuesta');
     } finally {
       setIsEvaluating(false);
     }
-  }, [script, currentPhaseIndex, subject, level]);
+  }, [script, currentPhaseIndex, subject, level, classId]);
 
-  // ─── Evaluate Board (Canvas Screenshot) ──────────────────────────────────
+  // ─── Evaluate Board (P-01 + P-12 fix) ───────────────────────────────────────
+  // NOTA: El modelo MiniMax-Text-01 es puramente textual y no puede interpretar imágenes.
+  // En lugar de enviar base64 (que el LLM ignora), extraemos el TEXTO real de los objetos
+  // del canvas y lo enviamos a evaluate-answer, que sí funciona correctamente.
+  // Esta solución es 100% funcional con el modelo actual y no requiere un modelo de visión.
+  // Cuando se disponga de MiniMax-VL-01 (visión), se puede restaurar la lógica base64.
 
   const captureAndEvaluateBoard = useCallback(async () => {
     const cv = getCanvas();
     if (!cv) { toast.error('Canvas no disponible'); return; }
-    const phase = script?.phases[currentPhaseIndex];
+
+    // P-01: Extraer contenido textual real del canvas en lugar de imagen base64
+    const canvasObjects = cv.getObjects() as any[];
+    const canvasTextContent = canvasObjects
+      .filter(obj => obj.text && typeof obj.text === 'string' && obj.text.trim().length > 0)
+      // Excluir etiquetas estructurales del layout (los títulos de sección del template)
+      .filter(obj => !['⚡ ESTRUCTURA / CONCEPTO CLAVE', '💡 EJEMPLOS PRÁCTICOS', '📋 PUNTOS CLAVE', '📝 TAREA DEL ESTUDIANTE'].includes(obj.text?.trim()))
+      .map(obj => obj.text.trim())
+      .join('\n');
+
+    if (!canvasTextContent.trim()) {
+      toast.error('La pizarra no tiene texto — escribe tu respuesta en la pizarra para evaluarla');
+      return;
+    }
+
+    // P-12: Usar activeSlidePhaseData como fallback si no hay script activo
+    const phase = script?.phases[currentPhaseIndex] ?? activeSlidePhaseData;
+
     setIsEvaluating(true);
     try {
-      // Export canvas as PNG base64 at reduced quality to keep payload small
-      const dataUrl = cv.toDataURL({ format: 'png', quality: 0.5, multiplier: 0.6 });
-      const base64 = dataUrl.split(',')[1];
-
-      const res = await api.post('/tutor/evaluate-board', {
-        phase_description: `${phase?.name || 'Ejercicio'}: ${phase?.objective || ''}`,
-        board_image_base64: base64,
-      }, { timeout: 180000 });
+      // Reutilizamos evaluate-answer que sí funciona con el modelo de texto
+      const res = await api.post('/tutor/evaluate-answer', {
+        question: phase?.student_task || phase?.objective || 'Ejercicio libre en pizarra',
+        expected_answer: (phase as any)?.expected_answer || '',
+        student_answer: canvasTextContent,
+        subject,
+        level,
+      });
       if (res.data?.ok) {
         setLastScore(res.data.score);
         setLastFeedback(res.data.feedback);
         toast.success(`Pizarra evaluada: ${res.data.score}/100`);
       }
     } catch (err: any) {
+      console.error('[useAITutor] captureAndEvaluateBoard error:', err);
       toast.error('Error al evaluar la pizarra');
     } finally {
       setIsEvaluating(false);
     }
-  }, [script, currentPhaseIndex]);
+  }, [getCanvas, script, currentPhaseIndex, activeSlidePhaseData, subject, level]);
 
   // ─── Library ──────────────────────────────────────────────────────────────
 
@@ -1107,6 +1317,18 @@ export function useAITutor(
     }
   }, [showAITutorPanel, activeTab, loadLibrary]);
 
+  // P-04: Cleanup del AudioContext al desmontar el componente
+  // Evita memory leaks y libera el recurso del sistema operativo
+  useEffect(() => {
+    return () => {
+      try { audioSourceRef.current?.stop(); } catch (_) {}
+      try { audioCtxRef.current?.close(); } catch (_) {}
+      audioSourceRef.current = null;
+      audioCtxRef.current = null;
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Solo al unmount — las refs no son dependencias reactivas
+
   return {
     // Panel state
     showAITutorPanel,
@@ -1125,6 +1347,8 @@ export function useAITutor(
     script,
     currentPhaseIndex,
     isGenerating,
+    // P-02: isLoadingAudio exportado para indicador en el panel (Sprint 2 P-13)
+    isLoadingAudio: false, // placeholder — se implementa en P-13
 
     // TTS
     isSpeaking,
@@ -1155,7 +1379,7 @@ export function useAITutor(
     // Slide conversion
     convertLessonToSlides,
     isConvertingSlides,
-    lessonSlidesCreated,     // ✅ NUEVO: oculta botón tras primera creación
+    lessonSlidesCreated,     // P-02: persiste entre remounts via PersistentTutorState
 
     // Navigation
     nextPhase,
@@ -1172,5 +1396,9 @@ export function useAITutor(
     // Actions
     generateLesson,
     generatePractice,
+
+    // Active Slide AI Tutor Metadata (persisted across sessions)
+    activeSlidePhaseData,
+    hasTutorData: Boolean(script || activeSlidePhaseData),
   };
 }

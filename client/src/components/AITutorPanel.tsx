@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   X, Bot, Sparkles, Play, Mic, MicOff, ChevronRight,
   ChevronLeft, Volume2, VolumeX, CheckCircle2, XCircle, Camera,
@@ -28,11 +28,21 @@ const LEVEL_OPTIONS_MATH = ['beginner', 'intermediate', 'advanced'];
 
 export const AITutorPanel: React.FC<AITutorPanelProps> = ({ tutor, classId, topicId, onReloadSlides }) => {
   const [exerciseIndex, setExerciseIndex] = useState(0);
+  // P-06: ID del material en espera de confirmación antes de eliminar
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  // P-03: Resetear el índice de ejercicio al cambiar de fase.
+  // El componente NO remonta al navegar fases — solo se re-renderiza — por lo que
+  // el estado local se mantiene. Sin este efecto, un exerciseIndex de fase anterior
+  // puede indexar fuera de rango en la nueva fase (acceso a exercises[N] = undefined).
+  useEffect(() => {
+    setExerciseIndex(0);
+  }, [tutor.currentPhaseIndex]);
 
   if (!tutor.showAITutorPanel) return null;
 
-  const phase = tutor.script?.phases[tutor.currentPhaseIndex];
-  const totalPhases = tutor.script?.phases.length ?? 0;
+  const phase = tutor.script?.phases[tutor.currentPhaseIndex] || tutor.activeSlidePhaseData;
+  const totalPhases = tutor.script?.phases.length ?? (tutor.activeSlidePhaseData ? 1 : 0);
   const levelOptions = tutor.subject.toLowerCase().includes('math') ? LEVEL_OPTIONS_MATH : LEVEL_OPTIONS_ENGLISH;
 
   const handleToggleMic = () => {
@@ -81,12 +91,12 @@ export const AITutorPanel: React.FC<AITutorPanelProps> = ({ tutor, classId, topi
         </button>
         <button
           onClick={() => tutor.setActiveTab('runtime')}
-          disabled={!tutor.script}
+          disabled={!tutor.script && !tutor.activeSlidePhaseData}
           className={`flex-1 py-2.5 text-xs font-medium text-center transition-all disabled:opacity-30 ${
             tutor.activeTab === 'runtime' ? TAB_ACTIVE : TAB_INACTIVE
           }`}
         >
-          En Clase {tutor.script ? '●' : ''}
+          En Clase {(tutor.script || tutor.activeSlidePhaseData) ? '●' : ''}
         </button>
       </div>
 
@@ -263,13 +273,31 @@ export const AITutorPanel: React.FC<AITutorPanelProps> = ({ tutor, classId, topi
                     >
                       <Play className="w-3.5 h-3.5" />
                     </button>
-                    <button
-                      onClick={() => tutor.deleteMaterial(mat.content_id)}
-                      className="p-1.5 rounded-lg bg-red-600/10 hover:bg-red-600 text-red-400 hover:text-white transition-all text-xs"
-                      title="Eliminar"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
+                    {/* P-06: Confirmación en dos pasos — evita eliminaciones accidentales */}
+                    {deletingId === mat.content_id ? (
+                      <div className="flex items-center gap-1">
+                        <button
+                          onClick={() => { tutor.deleteMaterial(mat.content_id); setDeletingId(null); }}
+                          className="px-2 py-1 rounded-lg bg-red-600 text-white text-[10px] font-bold hover:bg-red-500 transition-colors"
+                        >
+                          Confirmar
+                        </button>
+                        <button
+                          onClick={() => setDeletingId(null)}
+                          className="px-2 py-1 rounded-lg bg-slate-700 text-slate-300 text-[10px] hover:bg-slate-600 transition-colors"
+                        >
+                          No
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => setDeletingId(mat.content_id)}
+                        className="p-1.5 rounded-lg bg-red-600/10 hover:bg-red-600 text-red-400 hover:text-white transition-all text-xs"
+                        title="Eliminar"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
                   </div>
                 </div>
               ))
@@ -278,43 +306,45 @@ export const AITutorPanel: React.FC<AITutorPanelProps> = ({ tutor, classId, topi
         )}
 
         {/* ═══ TAB: RUNTIME (Class Control) ═══ */}
-        {tutor.activeTab === 'runtime' && tutor.script && (
+        {tutor.activeTab === 'runtime' && (tutor.script || tutor.activeSlidePhaseData) && (
           <div className="p-4 space-y-4">
             {/* Top Multi-Slide Creation & Save Banner */}
-            <div className="flex items-center justify-between p-2.5 bg-gradient-to-r from-indigo-950/60 to-purple-950/60 border border-indigo-500/20 rounded-xl">
-              <div className="flex items-center gap-1.5">
-                <Layers className="w-4 h-4 text-indigo-400" />
-                <span className="text-[11px] text-slate-200 font-medium">Diapositivas de Lección</span>
+            {tutor.script && (
+              <div className="flex items-center justify-between p-2.5 bg-gradient-to-r from-indigo-950/60 to-purple-950/60 border border-indigo-500/20 rounded-xl">
+                <div className="flex items-center gap-1.5">
+                  <Layers className="w-4 h-4 text-indigo-400" />
+                  <span className="text-[11px] text-slate-200 font-medium">Diapositivas de Lección</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  {classId && (
+                    !tutor.lessonSlidesCreated ? (
+                      <button
+                        onClick={() => tutor.convertLessonToSlides(classId || undefined, topicId || undefined, onReloadSlides)}
+                        disabled={tutor.isConvertingSlides}
+                        className="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-[11px] font-semibold flex items-center gap-1 shadow-md transition-all disabled:opacity-50"
+                        title="Crea 1 diapositiva por cada fase de la lección en la barra lateral"
+                      >
+                        {tutor.isConvertingSlides ? <Loader2 className="w-3 h-3 animate-spin" /> : <Layers className="w-3 h-3" />}
+                        Crear Diapositivas ({totalPhases})
+                      </button>
+                    ) : (
+                      <span className="px-2.5 py-1 bg-emerald-600/20 border border-emerald-500/30 text-emerald-300 rounded-lg text-[11px] font-semibold flex items-center gap-1">
+                        <Layers className="w-3 h-3" />
+                        ✓ {totalPhases} diapositivas creadas
+                      </span>
+                    )
+                  )}
+                  <button
+                    onClick={tutor.saveToLibrary}
+                    className="px-2.5 py-1 bg-slate-700/60 hover:bg-slate-700 text-slate-200 rounded-lg text-[11px] font-medium flex items-center gap-1 transition-all"
+                    title="Guardar en biblioteca"
+                  >
+                    <Save className="w-3 h-3" />
+                    Guardar
+                  </button>
+                </div>
               </div>
-              <div className="flex items-center gap-1.5">
-                {classId && (
-                  !tutor.lessonSlidesCreated ? (
-                    <button
-                      onClick={() => tutor.convertLessonToSlides(classId || undefined, topicId || undefined, onReloadSlides)}
-                      disabled={tutor.isConvertingSlides}
-                      className="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-[11px] font-semibold flex items-center gap-1 shadow-md transition-all disabled:opacity-50"
-                      title="Crea 1 diapositiva por cada fase de la lección en la barra lateral"
-                    >
-                      {tutor.isConvertingSlides ? <Loader2 className="w-3 h-3 animate-spin" /> : <Layers className="w-3 h-3" />}
-                      Crear Diapositivas ({totalPhases})
-                    </button>
-                  ) : (
-                    <span className="px-2.5 py-1 bg-emerald-600/20 border border-emerald-500/30 text-emerald-300 rounded-lg text-[11px] font-semibold flex items-center gap-1">
-                      <Layers className="w-3 h-3" />
-                      ✓ {totalPhases} diapositivas creadas
-                    </span>
-                  )
-                )}
-                <button
-                  onClick={tutor.saveToLibrary}
-                  className="px-2.5 py-1 bg-slate-700/60 hover:bg-slate-700 text-slate-200 rounded-lg text-[11px] font-medium flex items-center gap-1 transition-all"
-                  title="Guardar en biblioteca"
-                >
-                  <Save className="w-3 h-3" />
-                  Guardar
-                </button>
-              </div>
-            </div>
+            )}
 
             {/* Progress bar */}
             <div>
