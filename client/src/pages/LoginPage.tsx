@@ -64,7 +64,7 @@ export const LoginPage = () => {
         {/* Abstract Background Elements */}
         <div className="absolute top-[-10%] left-[-10%] w-[40vw] h-[40vw] rounded-full bg-blue-600/30 blur-[100px] pointer-events-none mix-blend-screen"></div>
         <div className="absolute bottom-[-10%] right-[-10%] w-[40vw] h-[40vw] rounded-full bg-violet-600/30 blur-[120px] pointer-events-none mix-blend-screen"></div>
-        <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-[0.05] pointer-events-none mix-blend-overlay"></div>
+        <div className="absolute inset-0 bg-[url('/noise.svg')] opacity-[0.05] pointer-events-none mix-blend-overlay"></div>
         
         {/* Brand Header */}
         <div className="relative z-10 flex items-center gap-4">

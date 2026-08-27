@@ -547,7 +547,7 @@ export const GroupManagementPage = () => {
       {/* === HEADER INMERSIVO E INTERACTIVO (PREMIUM SAAS) === */}
       <header className="bg-slate-900 border-b border-slate-800 relative z-10 shadow-lg pb-12">
         {/* Abstract Dark Layer */}
-        <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-[0.03] pointer-events-none mix-blend-overlay" />
+        <div className="absolute inset-0 bg-[url('/noise.svg')] opacity-[0.03] pointer-events-none mix-blend-overlay" />
         <div className="absolute top-[-50%] right-[-10%] w-[300px] h-[300px] bg-blue-500/20 rounded-full blur-[80px] pointer-events-none mix-blend-screen overflow-hidden" />
 
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative">

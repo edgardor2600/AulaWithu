@@ -105,7 +105,7 @@ export const DashboardPage = () => {
         <div className="bg-slate-900 border-b border-slate-800 relative overflow-hidden">
           
           {/* Fondo Abstracto del Banner */}
-          <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-5 pointer-events-none mix-blend-overlay"></div>
+          <div className="absolute inset-0 bg-[url('/noise.svg')] opacity-5 pointer-events-none mix-blend-overlay"></div>
           <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-blue-500/20 rounded-full blur-[100px] pointer-events-none mix-blend-screen translate-x-1/3 -translate-y-1/3"></div>
           <div className="absolute bottom-0 left-10 w-[400px] h-[400px] bg-indigo-500/10 rounded-full blur-[100px] pointer-events-none mix-blend-screen translate-y-1/4"></div>
 
@@ -249,7 +249,7 @@ export const DashboardPage = () => {
                       >
                         {/* Cabecera Gráfica */}
                         <div className={`relative h-28 w-full rounded-xl bg-gradient-to-tr ${gradient} overflow-hidden mb-4 shrink-0 flex items-center justify-center shadow-inner`}>
-                           <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-10 mix-blend-overlay"></div>
+                           <div className="absolute inset-0 bg-[url('/noise.svg')] opacity-10 mix-blend-overlay"></div>
                            <div className="absolute -bottom-8 -right-8 w-24 h-24 bg-white/20 rounded-full blur-xl"></div>
                            <BookOpen className="w-8 h-8 text-white/90 relative z-10 drop-shadow-sm group-hover:scale-110 transition-transform duration-500" />
                            
