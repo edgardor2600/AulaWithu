@@ -306,6 +306,7 @@ export const CanvasEditor = ({
     onSlideChange,
     onReloadSlides,
     totalSlides,
+    currentSlideInitialData: initialData,
   });
   const quizGame = useQuizGame(ydoc, isTeacher, effectivePresenterSessionId);
 
@@ -2383,7 +2384,12 @@ export const CanvasEditor = ({
       </div>
 
       {/* Mini-Map Navigator - Fixed position (Visible only on Large screens) */}
-      <div className="hidden lg:block fixed bottom-6 right-6 bg-[#1e2128] rounded-xl shadow-[0_4px_24px_rgba(0,0,0,0.5)] border border-white/10 p-3 z-20">
+      <div 
+        className="hidden lg:block fixed bottom-6 bg-[#1e2128] rounded-xl shadow-[0_4px_24px_rgba(0,0,0,0.5)] border border-white/10 p-3 z-20 transition-all duration-300 ease-in-out"
+        style={{
+          right: aiTutor.showAITutorPanel ? '420px' : '24px',
+        }}
+      >
         <div className="text-[10px] uppercase tracking-widest font-bold text-slate-400 mb-2 text-center">Navigator</div>
         <div className="relative bg-[#13151a] rounded-lg overflow-hidden border border-white/10" style={{ width: '150px', height: '100px' }}>
         <canvas 
@@ -2945,8 +2951,11 @@ export const CanvasEditor = ({
         script={aiTutor.script}
         currentPhaseIndex={aiTutor.currentPhaseIndex}
         isSpeaking={aiTutor.isSpeaking}
+        activeSlidePhaseData={aiTutor.activeSlidePhaseData}
+        isOpen={aiTutor.showAITutorPanel}
         onOpen={() => { aiTutor.setShowAITutorPanel(true); aiTutor.setActiveTab('runtime'); }}
         onStopSpeech={aiTutor.stopSpeech}
+        onSpeak={aiTutor.speakCurrentPhase}
       />
 
       {/* Quiz Interactivo */}
