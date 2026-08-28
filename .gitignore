@@ -23,6 +23,7 @@ plan_Accion_aula.md
 plan_accion.md
 DEV_NOTES.md
 PLAN_MIGRACION_POSTGRESQL.md
+auditor.md
 
 # Exclude agent internal files
 .gemini/
