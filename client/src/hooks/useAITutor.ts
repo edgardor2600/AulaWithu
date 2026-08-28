@@ -639,6 +639,9 @@ export function useAITutor(
 
   // TTS
   const [isSpeaking, setIsSpeaking] = useState(false);
+  // P-13: Estado intermedio mientras el servidor procesa el TTS (antes de que empiece la reproducción)
+  // Cierra la ventana silent de 3-6 segundos donde el usuario no sabe si funcionó el botón.
+  const [isLoadingAudio, setIsLoadingAudio] = useState(false);
   // P-04: Refs persistentes — el AudioContext se reutiliza para evitar el límite del navegador (~6 por página)
   const audioCtxRef = useRef<AudioContext | null>(null);
   const audioSourceRef = useRef<AudioBufferSourceNode | null>(null);
@@ -710,7 +713,8 @@ export function useAITutor(
   const speakText = useCallback(async (text: string, voice?: string) => {
     if (!text?.trim()) return;
     stopSpeech();
-    setIsSpeaking(true);
+    // P-13: Feedback inmediato — el botón cambia antes de que empiece la petición al servidor
+    setIsLoadingAudio(true);
     try {
       const response = await api.get('/conversation/tts', {
         params: {
@@ -720,6 +724,8 @@ export function useAITutor(
         },
         responseType: 'arraybuffer',
       });
+      setIsLoadingAudio(false);
+      setIsSpeaking(true);
 
       // P-04: Reutilizar el AudioContext existente en lugar de crear uno nuevo por cada llamada.
       // Chrome tiene un límite de ~6 AudioContexts por página — sin este fix se agota en sesiones largas.
@@ -741,6 +747,7 @@ export function useAITutor(
     } catch (err: any) {
       console.error('[useAITutor] TTS error:', err);
       toast.error('Error al reproducir audio del tutor');
+      setIsLoadingAudio(false);
       setIsSpeaking(false);
     }
   }, [stopSpeech, subject]);
@@ -1242,10 +1249,13 @@ export function useAITutor(
 
   // ─── Library ──────────────────────────────────────────────────────────────
 
-  const loadLibrary = useCallback(async () => {
+  // P-14: loadLibrary acepta búsqueda opcional — retro-compatible (sin argumento = listar todo)
+  const loadLibrary = useCallback(async (search?: string) => {
     setIsLoadingLibrary(true);
     try {
-      const res = await api.get('/tutor/materials');
+      const res = await api.get('/tutor/materials', {
+        params: search?.trim() ? { search: search.trim() } : {},
+      });
       if (res.data?.ok) setSavedMaterials(res.data.materials || []);
     } catch (err: any) {
       toast.error('Error al cargar la biblioteca');
@@ -1347,8 +1357,8 @@ export function useAITutor(
     script,
     currentPhaseIndex,
     isGenerating,
-    // P-02: isLoadingAudio exportado para indicador en el panel (Sprint 2 P-13)
-    isLoadingAudio: false, // placeholder — se implementa en P-13
+    // P-13: isLoadingAudio exportado — true durante la espera del TTS antes de que empiece el audio
+    isLoadingAudio,
 
     // TTS
     isSpeaking,

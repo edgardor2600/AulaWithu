@@ -30,6 +30,8 @@ export const AITutorPanel: React.FC<AITutorPanelProps> = ({ tutor, classId, topi
   const [exerciseIndex, setExerciseIndex] = useState(0);
   // P-06: ID del material en espera de confirmación antes de eliminar
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  // P-14: Query de búsqueda en biblioteca
+  const [librarySearch, setLibrarySearch] = useState('');
 
   // P-03: Resetear el índice de ejercicio al cambiar de fase.
   // El componente NO remonta al navegar fases — solo se re-renderiza — por lo que
@@ -38,6 +40,16 @@ export const AITutorPanel: React.FC<AITutorPanelProps> = ({ tutor, classId, topi
   useEffect(() => {
     setExerciseIndex(0);
   }, [tutor.currentPhaseIndex]);
+
+  // P-14: Debounce de búsqueda en biblioteca — lanza la carga 400ms después de que el usuario
+  // deja de tipear para evitar request por cada tecla.
+  useEffect(() => {
+    if (tutor.activeTab !== 'library') return;
+    const timer = setTimeout(() => {
+      tutor.loadLibrary(librarySearch || undefined);
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [librarySearch, tutor.activeTab]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!tutor.showAITutorPanel) return null;
 
@@ -238,12 +250,20 @@ export const AITutorPanel: React.FC<AITutorPanelProps> = ({ tutor, classId, topi
             <div className="flex items-center justify-between mb-2">
               <span className="text-xs text-slate-400 font-medium">Materiales Guardados</span>
               <button
-                onClick={tutor.loadLibrary}
+                onClick={() => tutor.loadLibrary()}
                 className="text-[11px] text-indigo-400 hover:text-indigo-300"
               >
                 Actualizar
               </button>
             </div>
+            {/* P-14: Campo de búsqueda — dispara carga con debounce vía useEffect */}
+            <input
+              type="text"
+              value={librarySearch}
+              onChange={e => setLibrarySearch(e.target.value)}
+              placeholder="Buscar por tema o título..."
+              className="w-full bg-slate-800/80 border border-white/10 text-slate-200 text-xs rounded-lg px-3 py-2 placeholder-slate-500 focus:outline-none focus:border-indigo-500/50 transition-colors"
+            />
             {tutor.isLoadingLibrary ? (
               <div className="py-8 text-center text-slate-500 text-xs flex items-center justify-center gap-2">
                 <Loader2 className="w-4 h-4 animate-spin" />
@@ -346,6 +366,22 @@ export const AITutorPanel: React.FC<AITutorPanelProps> = ({ tutor, classId, topi
               </div>
             )}
 
+            {/* P-08: Pills de contexto de la lección activa */}
+            {tutor.script && (
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="inline-flex items-center px-2.5 py-0.5 bg-indigo-500/10 border border-indigo-500/20 rounded-full">
+                  <span className="text-[10px] text-indigo-300 font-semibold truncate max-w-[180px]" title={tutor.script.topic}>
+                    {tutor.script.topic}
+                  </span>
+                </span>
+                <span className="inline-flex items-center px-2.5 py-0.5 bg-slate-700/50 border border-white/10 rounded-full">
+                  <span className="text-[10px] text-slate-400">
+                    {tutor.script.subject} · {tutor.script.level}
+                  </span>
+                </span>
+              </div>
+            )}
+
             {/* Progress bar */}
             <div>
               <div className="flex items-center justify-between mb-1.5">
@@ -399,18 +435,41 @@ export const AITutorPanel: React.FC<AITutorPanelProps> = ({ tutor, classId, topi
               </div>
             )}
 
+            {/* P-07: Error frecuente del alumno (insight pedagógico generado por la IA) */}
+            {(phase as any)?.common_error && (
+              <div className="bg-orange-500/10 border border-orange-500/20 rounded-xl p-3">
+                <div className="flex items-center gap-1.5 mb-1.5">
+                  <span className="text-[11px]">⚠️</span>
+                  <p className="text-[11px] text-orange-400 font-semibold uppercase tracking-wider">
+                    Error frecuente
+                  </p>
+                </div>
+                <p className="text-xs text-slate-300 leading-relaxed">
+                  {(phase as any).common_error}
+                </p>
+              </div>
+            )}
+
             {/* TTS + Board action buttons */}
             <div className="grid grid-cols-3 gap-2">
+              {/* P-13: Botón Escuchar con estado de carga intermedio */}
               <button
                 onClick={tutor.isSpeaking ? tutor.stopSpeech : tutor.speakCurrentPhase}
+                disabled={tutor.isLoadingAudio}
                 className={`flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-xs font-medium transition-all ${
                   tutor.isSpeaking
                     ? 'bg-red-600/20 border border-red-500/30 text-red-400 animate-pulse'
+                    : tutor.isLoadingAudio
+                    ? 'bg-indigo-600/10 border border-indigo-500/20 text-indigo-400/50 cursor-wait'
                     : 'bg-indigo-600/20 border border-indigo-500/30 text-indigo-300 hover:bg-indigo-600/40'
                 }`}
               >
-                {tutor.isSpeaking ? <VolumeX className="w-3.5 h-3.5" /> : <Volume2 className="w-3.5 h-3.5" />}
-                {tutor.isSpeaking ? 'Silenciar' : 'Escuchar'}
+                {tutor.isSpeaking
+                  ? <><VolumeX className="w-3.5 h-3.5" /> Silenciar</>
+                  : tutor.isLoadingAudio
+                  ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Cargando...</>
+                  : <><Volume2 className="w-3.5 h-3.5" /> Escuchar</>
+                }
               </button>
 
               <button

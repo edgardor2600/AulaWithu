@@ -139,24 +139,47 @@ export class TutorRepository {
 
   /**
    * List all materials (lightweight — no script_json)
+   * P-14: Acepta búsqueda opcional + limit/offset para paginación futura.
+   * Retro-compatible: llamadas sin parámetros retornan los últimos 50.
    */
-  static async getAllMaterials(mode?: 'guided' | 'practice'): Promise<TutorMaterialSummary[]> {
+  static async getAllMaterials(
+    mode?: 'guided' | 'practice',
+    search?: string,
+    limit = 50,
+    offset = 0
+  ): Promise<{ materials: TutorMaterialSummary[]; total: number }> {
     await this.ensureTablesExist();
     try {
       const params: any[] = [];
-      const where = mode ? `WHERE mode = $${params.push(mode)}` : '';
+      const conditions: string[] = [];
+
+      if (mode) conditions.push(`mode = $${params.push(mode)}`);
+      if (search?.trim()) {
+        const term = `%${search.trim()}%`;
+        conditions.push(`(title ILIKE $${params.push(term)} OR topic ILIKE $${params.push(term)})`);
+      }
+
+      const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+
+      const countRow = await getOne(
+        `SELECT COUNT(*) as total FROM ai_tutor_materials ${where}`,
+        params
+      );
+      const total = parseInt((countRow as any)?.total || '0', 10);
+
+      const safeLimit = Math.min(limit, 200);
       const rows = await getAll(
         `SELECT id, content_id, title, topic, subject, level, mode, context, source_kind, created_by, created_at, updated_at
          FROM ai_tutor_materials
          ${where}
          ORDER BY updated_at DESC
-         LIMIT 200`,
+         LIMIT $${params.push(safeLimit)} OFFSET $${params.push(offset)}`,
         params
       );
-      return (rows || []) as TutorMaterialSummary[];
+      return { materials: (rows || []) as TutorMaterialSummary[], total };
     } catch (err: any) {
       logger.error(`[TutorRepository] Error in getAllMaterials: ${err.message}`);
-      return [];
+      return { materials: [], total: 0 };
     }
   }
 
