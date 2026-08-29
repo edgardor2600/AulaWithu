@@ -37,7 +37,6 @@ import {
   Timer,
   Zap,
   Bot,
-  HelpCircle
 } from 'lucide-react';
 import { useReading } from '../hooks/useReading';
 import { useConversation } from '../hooks/useConversation';
@@ -63,6 +62,7 @@ import { AITutorFloatingBubble } from './AITutorFloatingBubble';
 import { useQuizGame } from '../hooks/useQuizGame';
 import { QuizCreatorModal } from './QuizCreatorModal';
 import { QuizPlayerWidget } from './QuizPlayerWidget';
+import { QuizAppBarButton } from './quiz/QuizAppBarButton';
 
 
 
@@ -764,13 +764,6 @@ export const CanvasEditor = ({
         reading.setShowReadingPanel(false);
         readingGame.setShowReadingGamePanel(false);
       }
-      setCurrentTool('select');
-      syncCursorForTool('select');
-      return;
-    }
-
-    if (tool === 'quiz') {
-      quizGame.setShowQuizCreator(true);
       setCurrentTool('select');
       syncCursorForTool('select');
       return;
@@ -2044,7 +2037,7 @@ export const CanvasEditor = ({
     ...(isTeacher ? [{ id: 'presenter' as Tool, icon: MonitorUp, label: 'Presentador', desc: 'Presentar archivos PPTX, DOCX, XLSX' }] : []),
     { id: 'reading-game' as Tool, icon: Zap, label: 'Reto de Lectura', desc: '⚡ Reto de Velocidad de Lectura con IA (G)' },
     ...(isTeacher ? [{ id: 'ai-tutor' as Tool, icon: Bot, label: 'AI Tutor', desc: '🤖 Asistente y Tutor de Lecciones con IA' }] : []),
-    ...(isTeacher ? [{ id: 'quiz' as Tool, icon: HelpCircle, label: 'Quiz Interactivo', desc: '⚡ Crear y lanzar quizzes interactivos en vivo' }] : []),
+    // Note: Quiz Interactivo is handled by QuizAppBarButton (Q-04) — not in tools[]
   ];
 
 
@@ -2111,6 +2104,10 @@ export const CanvasEditor = ({
                     </button>
                   );
                 })}
+                {/* Q-04: QuizAppBarButton — decoupled, always visible for teacher */}
+                {isTeacher && (
+                  <QuizAppBarButton quiz={quizGame} isTeacher={isTeacher} />
+                )}
               </div>
 
               {/* Divider */}
