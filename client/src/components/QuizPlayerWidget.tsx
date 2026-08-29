@@ -29,6 +29,23 @@ export const QuizPlayerWidget: React.FC<QuizPlayerWidgetProps> = ({ quiz, client
 
   if (!quiz.isQuizActive || !quiz.activeQuiz) return null;
 
+  // Podium / end screen
+  if (quiz.quizPhase === 'podium') {
+    return (
+      <div
+        id="quiz-player-widget"
+        className="fixed bottom-6 right-6 z-50 w-[360px] bg-[#0d1117]/97 backdrop-blur-2xl border border-violet-500/30 rounded-2xl shadow-[0_16px_60px_rgba(139,92,246,0.25)] overflow-hidden animate-fade-in"
+      >
+        <div className="px-4 py-6 text-center space-y-3">
+          <div className="text-4xl">🎉</div>
+          <p className="text-white font-bold text-base">¡Quiz finalizado!</p>
+          <p className="text-2xl font-black text-violet-300">{quiz.myScore} pts</p>
+          <p className="text-[11px] text-slate-400">Racha máxima: {quiz.streak} 🔥</p>
+        </div>
+      </div>
+    );
+  }
+
   const question = quiz.activeQuiz.questions[quiz.currentQuestionIndex];
   if (!question) return null;
 
@@ -107,8 +124,12 @@ export const QuizPlayerWidget: React.FC<QuizPlayerWidgetProps> = ({ quiz, client
         {(question.type === 'multiple_choice') && question.options && (
           <div className="space-y-1.5">
             {question.options.map((opt, i) => {
-              const isSelected = hasAnswered && quiz.myAnswers[question.id]?.answer === i;
-              const isCorrect = hasAnswered && i === Number(question.correct);
+              const myAnswer = quiz.myAnswers[question.id]?.answer;
+              const isSelected = quiz.hasAnsweredCurrent && myAnswer === i;
+              // After reveal: highlight using revealedAnswer
+              const isCorrect = quiz.revealedAnswer?.questionId === question.id
+                ? i === Number(quiz.revealedAnswer.correct)
+                : false;
               return (
                 <button
                   key={i}
@@ -138,8 +159,11 @@ export const QuizPlayerWidget: React.FC<QuizPlayerWidgetProps> = ({ quiz, client
         {question.type === 'true_false' && (
           <div className="grid grid-cols-2 gap-2">
             {['Verdadero', 'Falso'].map((label, i) => {
-              const isSelected = hasAnswered && quiz.myAnswers[question.id]?.answer === i;
-              const isCorrect = hasAnswered && i === Number(question.correct);
+              const myAnswer = quiz.myAnswers[question.id]?.answer;
+              const isSelected = quiz.hasAnsweredCurrent && myAnswer === i;
+              const isCorrect = quiz.revealedAnswer?.questionId === question.id
+                ? i === Number(quiz.revealedAnswer.correct)
+                : false;
               return (
                 <button
                   key={i}
@@ -350,6 +374,14 @@ export const QuizPlayerWidget: React.FC<QuizPlayerWidgetProps> = ({ quiz, client
         )}
 
         {/* ─── Feedback ─── */}
+        {/* Waiting for reveal */}
+        {hasAnswered && !feedback && quiz.quizPhase === 'question' && (
+          <div className="rounded-xl p-3 border bg-slate-700/20 border-white/8 flex items-center gap-2">
+            <div className="w-3 h-3 rounded-full bg-violet-500 animate-pulse shrink-0" />
+            <span className="text-xs text-slate-400">Respuesta enviada — esperando reveal del profe...</span>
+          </div>
+        )}
+        {/* Reveal feedback */}
         {hasAnswered && feedback && (
           <div className={`rounded-xl p-3 border ${
             feedback.isCorrect
@@ -361,7 +393,9 @@ export const QuizPlayerWidget: React.FC<QuizPlayerWidgetProps> = ({ quiz, client
                 ? <CheckCircle2 className="w-4 h-4 text-emerald-400" />
                 : <XCircle className="w-4 h-4 text-red-400" />}
               <span className={`text-xs font-bold ${feedback.isCorrect ? 'text-emerald-400' : 'text-red-400'}`}>
-                {feedback.isCorrect ? '¡Correcto! +100 pts' : 'Incorrecto'}
+                {feedback.isCorrect
+                  ? `¡Correcto! +${feedback.score ?? 0} pts${quiz.streak > 1 ? ` 🔥×${quiz.streak}` : ''}`
+                  : 'Incorrecto'}
               </span>
             </div>
             {feedback.explanation && (

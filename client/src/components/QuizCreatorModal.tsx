@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import {
   X, HelpCircle, Sparkles, Library, Play, Trash2, Save, Loader2,
   ChevronRight, ChevronLeft, Users, CheckCircle2,
-  SkipForward, StopCircle,
+  SkipForward, Eye, Trophy, XCircle,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import type { useQuizGame } from '../hooks/useQuizGame';
@@ -322,23 +322,41 @@ export const QuizCreatorModal: React.FC<QuizCreatorModalProps> = ({ quiz, isTeac
           {/* ═══ MONITOR (Teacher only) ═══ */}
           {activeTab === 'monitor' && quiz.isQuizActive && quiz.activeQuiz && (
             <div className="p-5 space-y-4">
+              {/* Phase indicator */}
+              <div className="flex items-center gap-2">
+                <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider border ${
+                  quiz.quizPhase === 'question'    ? 'bg-violet-500/20 border-violet-500/40 text-violet-300' :
+                  quiz.quizPhase === 'reveal'      ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-300' :
+                  quiz.quizPhase === 'leaderboard' ? 'bg-amber-500/20 border-amber-500/40 text-amber-300' :
+                  quiz.quizPhase === 'podium'      ? 'bg-rose-500/20 border-rose-500/40 text-rose-300' :
+                  'bg-slate-700/40 border-white/10 text-slate-400'
+                }`}>
+                  {quiz.quizPhase === 'question' ? '⏱ Respondiendo' :
+                   quiz.quizPhase === 'reveal'   ? '✅ Revelado' :
+                   quiz.quizPhase === 'leaderboard' ? '🏆 Leaderboard' :
+                   quiz.quizPhase === 'podium'   ? '🎉 Podio' : quiz.quizPhase}
+                </span>
+                <span className="text-[11px] text-slate-400">
+                  P {quiz.currentQuestionIndex + 1} / {quiz.activeQuiz.questions.length}
+                </span>
+              </div>
+
               {/* Current question info */}
               <div className="bg-slate-800/40 border border-white/8 rounded-xl p-4">
-                <div className="flex items-center justify-between mb-2">
-                  <p className="text-[11px] text-slate-400 uppercase tracking-wider">Pregunta Actual</p>
-                  <span className="text-xs text-violet-400">{quiz.currentQuestionIndex + 1} / {quiz.activeQuiz.questions.length}</span>
-                </div>
                 <p className="text-sm text-white font-medium">
                   {quiz.activeQuiz.questions[quiz.currentQuestionIndex]?.sentence}
                 </p>
-                {/* Timer bar */}
-                <div className="mt-3 h-2 bg-white/5 rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-violet-500 rounded-full transition-all duration-500"
-                    style={{ width: `${(quiz.timeLeft / quiz.questionTimeLimit) * 100}%` }}
-                  />
-                </div>
-                <p className="text-[11px] text-slate-400 mt-1 text-right">{quiz.timeLeft}s</p>
+                {quiz.quizPhase === 'question' && (
+                  <>
+                    <div className="mt-3 h-2 bg-white/5 rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-violet-500 rounded-full transition-all duration-500"
+                        style={{ width: `${(quiz.timeLeft / quiz.questionTimeLimit) * 100}%` }}
+                      />
+                    </div>
+                    <p className="text-[11px] text-slate-400 mt-1 text-right">{quiz.timeLeft}s</p>
+                  </>
+                )}
               </div>
 
               {/* Student progress */}
@@ -346,39 +364,66 @@ export const QuizCreatorModal: React.FC<QuizCreatorModalProps> = ({ quiz, isTeac
                 <div className="flex items-center gap-2 mb-2">
                   <Users className="w-3.5 h-3.5 text-slate-400" />
                   <p className="text-[11px] text-slate-400 uppercase tracking-wider font-medium">
-                    Alumnos que respondieron: {quiz.studentProgress.filter(p => p.hasAnswered).length}
+                    Respondieron: {quiz.studentProgress.filter(p => p.hasAnswered).length}
                   </p>
                 </div>
-                <div className="space-y-1 max-h-40 overflow-y-auto">
+                <div className="space-y-1 max-h-36 overflow-y-auto">
                   {quiz.studentProgress.length === 0 ? (
                     <p className="text-xs text-slate-500">Esperando respuestas...</p>
                   ) : (
-                    quiz.studentProgress.map(p => (
-                      <div key={p.clientId} className="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-slate-800/40">
-                        <CheckCircle2 className={`w-3.5 h-3.5 ${p.hasAnswered ? 'text-emerald-400' : 'text-slate-600'}`} />
-                        <span className="text-xs text-slate-300 flex-1 truncate">{p.name}</span>
-                        {p.hasAnswered && <span className="text-[11px] text-emerald-400">{p.score}pts</span>}
-                      </div>
-                    ))
+                    quiz.studentProgress
+                      .sort((a, b) => b.score - a.score)
+                      .map((p, i) => (
+                        <div key={p.clientId} className="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-slate-800/40">
+                          <span className="text-[10px] text-slate-500 w-4 text-center">{i + 1}</span>
+                          <CheckCircle2 className={`w-3.5 h-3.5 ${p.hasAnswered ? 'text-emerald-400' : 'text-slate-600'}`} />
+                          <span className="text-xs text-slate-300 flex-1 truncate">{p.name}</span>
+                          {p.hasAnswered && <span className="text-[11px] text-emerald-400 font-bold">{p.score}pts</span>}
+                        </div>
+                      ))
                   )}
                 </div>
               </div>
 
-              {/* Teacher controls */}
-              <div className="flex gap-2">
+              {/* Teacher FSM Controls */}
+              <div className="space-y-2">
+                {/* Reveal — only in question phase */}
+                {quiz.quizPhase === 'question' && (
+                  <button
+                    onClick={quiz.revealCurrentAnswer}
+                    className="w-full flex items-center justify-center gap-2 py-2.5 bg-emerald-600/20 hover:bg-emerald-600/40 border border-emerald-500/30 text-emerald-300 rounded-xl text-sm font-semibold transition-all"
+                  >
+                    <Eye className="w-4 h-4" />
+                    Revelar Respuesta
+                  </button>
+                )}
+
+                {/* Next question / Podium — from reveal phase */}
+                {(quiz.quizPhase === 'reveal' || quiz.quizPhase === 'question') && (
+                  <div className="flex gap-2">
+                    <button
+                      onClick={quiz.skipToNextQuestion}
+                      className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-violet-600/20 hover:bg-violet-600/40 border border-violet-500/30 text-violet-300 rounded-xl text-sm font-medium transition-all"
+                    >
+                      <SkipForward className="w-4 h-4" />
+                      {quiz.currentQuestionIndex + 1 >= quiz.activeQuiz.questions.length ? 'Ver Podio' : 'Siguiente'}
+                    </button>
+                    <button
+                      onClick={quiz.stopQuiz}
+                      className="flex items-center justify-center gap-2 px-4 py-2.5 bg-rose-600/20 hover:bg-rose-600/40 border border-rose-500/30 text-rose-400 rounded-xl text-sm font-medium transition-all"
+                    >
+                      <Trophy className="w-4 h-4" />
+                    </button>
+                  </div>
+                )}
+
+                {/* Force close */}
                 <button
-                  onClick={quiz.skipToNextQuestion}
-                  className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-violet-600/20 hover:bg-violet-600/40 border border-violet-500/30 text-violet-300 rounded-xl text-sm font-medium transition-all"
+                  onClick={quiz.forceStopQuiz}
+                  className="w-full flex items-center justify-center gap-2 py-2 text-[11px] text-slate-500 hover:text-red-400 hover:bg-red-500/5 rounded-lg transition-all"
                 >
-                  <SkipForward className="w-4 h-4" />
-                  Siguiente
-                </button>
-                <button
-                  onClick={quiz.stopQuiz}
-                  className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-red-600/20 hover:bg-red-600/40 border border-red-500/30 text-red-400 rounded-xl text-sm font-medium transition-all"
-                >
-                  <StopCircle className="w-4 h-4" />
-                  Terminar
+                  <XCircle className="w-3.5 h-3.5" />
+                  Terminar y Cerrar
                 </button>
               </div>
             </div>
