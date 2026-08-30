@@ -60,9 +60,10 @@ import { useAITutor } from '../hooks/useAITutor';
 import { AITutorPanel } from './AITutorPanel';
 import { AITutorFloatingBubble } from './AITutorFloatingBubble';
 import { useQuizGame } from '../hooks/useQuizGame';
-import { QuizCreatorModal } from './QuizCreatorModal';
-import { QuizPlayerWidget } from './QuizPlayerWidget';
+import { QuizCreatorModal } from './quiz/QuizCreatorModal';
+import { QuizPlayerWidget } from './quiz/QuizPlayerWidget';
 import { QuizAppBarButton } from './quiz/QuizAppBarButton';
+import { QuizPodiumModal } from './quiz/QuizPodiumModal';
 
 
 
@@ -2104,10 +2105,8 @@ export const CanvasEditor = ({
                     </button>
                   );
                 })}
-                {/* Q-04: QuizAppBarButton — decoupled, always visible for teacher */}
-                {isTeacher && (
-                  <QuizAppBarButton quiz={quizGame} isTeacher={isTeacher} />
-                )}
+                {/* QuizAppBarButton — decoupled, always visible for teacher, visible for students when active */}
+                <QuizAppBarButton quiz={quizGame} isTeacher={isTeacher} />
               </div>
 
               {/* Divider */}
@@ -2957,7 +2956,15 @@ export const CanvasEditor = ({
 
       {/* Quiz Interactivo */}
       <QuizCreatorModal quiz={quizGame} isTeacher={isTeacher} />
-      <QuizPlayerWidget quiz={quizGame} clientId={clientId != null ? String(clientId) : 'guest'} userName={participantsList?.find(p => p.clientId === clientId)?.name || 'Alumno'} />
+      {!isTeacher && (
+        <QuizPlayerWidget
+          quiz={quizGame}
+          clientId={clientId != null ? String(clientId) : 'guest'}
+          userName={participantsList?.find(p => p.clientId === clientId)?.name || 'Alumno'}
+          isTeacher={isTeacher}
+        />
+      )}
+      <QuizPodiumModal quiz={quizGame} isTeacher={isTeacher} />
     </div>
   );
 };

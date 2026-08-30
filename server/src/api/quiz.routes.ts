@@ -243,7 +243,7 @@ router.get(
 
 /**
  * DELETE /api/quiz/materials/:id
- * Delete a quiz from the library
+ * Delete a quiz from the library (with creator / admin ownership check)
  */
 router.delete(
   '/materials/:id',
@@ -252,6 +252,23 @@ router.delete(
     try {
       const id = parseInt(req.params.id, 10);
       if (isNaN(id)) return res.status(400).json({ ok: false, message: 'Invalid quiz id' });
+
+      // Verificar existencia y pertenencia
+      const existingQuiz = await QuizRepository.getQuizById(id);
+      if (!existingQuiz) {
+        return res.status(404).json({ ok: false, message: 'Quiz no encontrado' });
+      }
+
+      const isOwner = !existingQuiz.created_by || 
+        existingQuiz.created_by === String(req.user?.userId) || 
+        existingQuiz.created_by === String(req.user?.id) ||
+        existingQuiz.created_by === req.user?.email;
+      const isAdmin = req.user?.role === 'admin';
+
+      if (!isOwner && !isAdmin) {
+        return res.status(403).json({ ok: false, message: 'No tienes permisos para eliminar este quiz' });
+      }
+
       const deleted = await QuizRepository.deleteQuiz(id);
       res.status(200).json({ ok: true, deleted });
     } catch (err: any) {
@@ -292,6 +309,39 @@ router.post(
 );
 
 /**
+ * POST /api/quiz/sessions/:sessionId/finalize
+ * Finalize session and save batch student results at once
+ */
+router.post(
+  '/sessions/:sessionId/finalize',
+  authMiddleware,
+  asyncHandler(async (req: any, res: any) => {
+    const { sessionId } = req.params;
+    const { quiz_id, results } = req.body;
+    if (!sessionId || !quiz_id || !Array.isArray(results)) {
+      return res.status(400).json({ ok: false, message: 'sessionId, quiz_id, and results array are required' });
+    }
+    try {
+      const studentResults = results.map((r: any) => ({
+        quiz_id: Number(quiz_id),
+        session_id: sessionId,
+        student_id: r.student_id || r.clientId,
+        student_name: r.student_name || r.name,
+        score: r.score ?? 0,
+        total_questions: r.total_questions ?? 0,
+        answers_json: r.answers_json || [],
+      }));
+
+      await QuizRepository.saveBatchResults(studentResults);
+      res.status(200).json({ ok: true, count: studentResults.length });
+    } catch (err: any) {
+      logger.error(`[quiz] Error in POST /sessions/:sessionId/finalize: ${err.message}`);
+      res.status(500).json({ ok: false, message: err.message });
+    }
+  })
+);
+
+/**
  * GET /api/quiz/results/:quizId/session/:sessionId
  * Get all student results for a quiz in a session
  */
@@ -313,3 +363,4 @@ router.get(
 );
 
 export default router;
+

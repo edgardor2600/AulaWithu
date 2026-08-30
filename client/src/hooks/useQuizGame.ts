@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import * as Y from 'yjs';
 import api from '../services/api';
 import toast from 'react-hot-toast';
@@ -57,6 +57,8 @@ export interface StudentProgress {
   name: string;
   hasAnswered: boolean;
   score: number;
+  currentIsCorrect?: boolean;
+  currentScore?: number;
 }
 
 export interface AnswerRecord {
@@ -86,11 +88,19 @@ function sanitizeQuizForBroadcast(quiz: Quiz): Quiz {
 
 // ─── Q-03: Temporal-Decay Scoring Engine ──────────────────────────────────────
 
-function computeTimedScore(elapsedMs: number, timeLimitSec: number, streak: number): number {
+function computeTimedScore(elapsedMs: number, timeLimitSec: number, currentStreak: number): number {
   const elapsed = elapsedMs / 1000;
-  const timeRatio = Math.max(0.3, 1 - elapsed / Math.max(1, timeLimitSec));
-  const streakMultiplier = Math.min(2.0, 1 + streak * 0.1);
-  return Math.floor(1000 * timeRatio * streakMultiplier);
+  const remainingRatio = Math.max(0, Math.min(1, (timeLimitSec - elapsed) / Math.max(1, timeLimitSec)));
+  // Speed bonus up to 500 points
+  const basePlusSpeed = 1000 + Math.round(remainingRatio * 500);
+  // Streak multipliers: 1x, 1.1x, 1.2x, 1.4x, 1.5x (max)
+  let streakMultiplier = 1.0;
+  if (currentStreak === 1) streakMultiplier = 1.1;
+  else if (currentStreak === 2) streakMultiplier = 1.2;
+  else if (currentStreak === 3) streakMultiplier = 1.4;
+  else if (currentStreak >= 4) streakMultiplier = 1.5;
+
+  return Math.round(basePlusSpeed * streakMultiplier);
 }
 
 // ─── Hook ─────────────────────────────────────────────────────────────────────
@@ -101,6 +111,7 @@ export function useQuizGame(
   sessionId: string
 ) {
   const [showQuizCreator, setShowQuizCreator] = useState(false);
+  const [isWidgetMinimized, setIsWidgetMinimized] = useState(false);
 
   const [topic, setTopic] = useState('');
   const [subject, setSubject] = useState('English');
@@ -198,22 +209,40 @@ export function useQuizGame(
 
     const handleAnswersUpdate = () => {
       if (!isTeacher) return;
+      const qIndex = (yQuiz.get('questionIndex') as number | undefined) ?? 0;
+      const quizObj = yQuiz.get('quiz') as Quiz | undefined;
+      const currentQuestionId = quizObj?.questions?.[qIndex]?.id;
+
       const progressMap = new Map<string, StudentProgress>();
       yAnswers.forEach((rawVal: unknown, key: string) => {
         const val = rawVal as Record<string, any>;
         if (!key.includes('_')) return;
         const clientId = String(val?.clientId ?? key.split('_')[0]);
         const score = (val?.score as number) || 0;
+        const qId = val?.questionId;
+        const isCurrentQ = currentQuestionId !== undefined && qId === currentQuestionId;
+        const hasAnsweredCurrent = isCurrentQ ? Boolean(val?.hasAnswered || val?.answer !== undefined) : false;
+        const isCorrect = isCurrentQ ? val?.isCorrect : undefined;
+        const currentScore = isCurrentQ ? score : undefined;
+
         const existing = progressMap.get(clientId);
         if (!existing) {
           progressMap.set(clientId, {
             clientId,
             name: (val?.name as string) || clientId,
-            hasAnswered: true,
+            hasAnswered: hasAnsweredCurrent,
             score,
+            currentIsCorrect: isCorrect,
+            currentScore,
           });
         } else {
-          progressMap.set(clientId, { ...existing, score: existing.score + score });
+          progressMap.set(clientId, {
+            ...existing,
+            score: existing.score + score,
+            hasAnswered: existing.hasAnswered || hasAnsweredCurrent,
+            currentIsCorrect: isCorrect !== undefined ? isCorrect : existing.currentIsCorrect,
+            currentScore: currentScore !== undefined ? currentScore : existing.currentScore,
+          });
         }
       });
       setStudentProgress(Array.from(progressMap.values()));
@@ -508,6 +537,7 @@ export function useQuizGame(
     }
     ydoc?.transact(() => {
       yQuiz.set('questionIndex', next);
+      yQuiz.set('questionTimeLimit', QUESTION_TIME_LIMIT);
       yQuiz.set('questionStartedAt', Date.now());
       yQuiz.set('phase', 'question' as QuizPhase);
       yQuiz.delete('revealedAnswer');
@@ -621,10 +651,22 @@ export function useQuizGame(
     if (showQuizCreator) loadLibrary();
   }, [showQuizCreator, loadLibrary]);
 
+  const extendTime = useCallback((seconds = 15) => {
+    const yQuiz = yQuizRef.current;
+    if (!yQuiz) return;
+    const currentLimit = (yQuiz.get('questionTimeLimit') as number | undefined) ?? QUESTION_TIME_LIMIT;
+    const newLimit = currentLimit + seconds;
+    ydoc?.transact(() => {
+      yQuiz.set('questionTimeLimit', newLimit);
+    });
+    toast.success(`+${seconds}s añadidos al tiempo`);
+  }, [ydoc]);
+
   // ─── Return ───────────────────────────────────────────────────────────────────
 
   return {
     showQuizCreator, setShowQuizCreator,
+    isWidgetMinimized, setIsWidgetMinimized,
     topic, setTopic,
     subject, setSubject,
     level, setLevel,
@@ -649,9 +691,12 @@ export function useQuizGame(
     launchQuiz, stopQuiz, forceStopQuiz,
     skipToNextQuestion, revealCurrentAnswer,
     showLeaderboard, showPodium, getResults,
+    extendTime,
     // TTS
     isSpeaking, speakQuestion, stopSpeaking,
     // Speech
     isListening, startListening, stopListening,
+    // Session (exposed for persistence calls in QuizPodiumModal)
+    sessionId,
   };
 }

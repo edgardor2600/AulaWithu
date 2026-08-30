@@ -75,6 +75,13 @@ export class QuizRepository {
           created_at       TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
         )
       `);
+      // Performance indexes for faster session retrieval and sorting
+      await runQuery(`
+        CREATE INDEX IF NOT EXISTS idx_quiz_results_session ON quiz_student_results(session_id, quiz_id);
+      `);
+      await runQuery(`
+        CREATE INDEX IF NOT EXISTS idx_quizzes_created ON quizzes(created_at DESC);
+      `);
       this.tableInitialized = true;
     } catch (err: any) {
       logger.warn(`[QuizRepository] Could not auto-create tables: ${err.message}`);
@@ -186,6 +193,44 @@ export class QuizRepository {
   }
 
   /**
+   * Save batch results for multiple students at once (single multi-row query for high performance)
+   */
+  static async saveBatchResults(results: StudentResultData[]): Promise<void> {
+    if (!results || results.length === 0) return;
+    await this.ensureTablesExist();
+    try {
+      const values: any[] = [];
+      const placeholders: string[] = [];
+
+      results.forEach((data, i) => {
+        const offset = i * 7;
+        placeholders.push(
+          `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}::jsonb)`
+        );
+        values.push(
+          data.quiz_id,
+          data.session_id,
+          data.student_id || null,
+          data.student_name || null,
+          data.score,
+          data.total_questions,
+          JSON.stringify(data.answers_json || [])
+        );
+      });
+
+      const query = `
+        INSERT INTO quiz_student_results
+          (quiz_id, session_id, student_id, student_name, score, total_questions, answers_json)
+        VALUES ${placeholders.join(', ')}
+      `;
+
+      await runQuery(query, values);
+    } catch (err: any) {
+      logger.error(`[QuizRepository] Error in saveBatchResults: ${err.message}`);
+    }
+  }
+
+  /**
    * Get all results for a quiz in a specific session
    */
   static async getResultsBySession(quizId: number, sessionId: string): Promise<StudentResult[]> {
@@ -194,7 +239,7 @@ export class QuizRepository {
       const rows = await getAll(
         `SELECT * FROM quiz_student_results
          WHERE quiz_id = $1 AND session_id = $2
-         ORDER BY created_at ASC`,
+         ORDER BY score DESC, created_at ASC`,
         [quizId, sessionId]
       );
       return (rows || []) as StudentResult[];
