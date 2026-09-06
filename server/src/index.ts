@@ -27,6 +27,7 @@ import { errorHandler } from './middleware/error.middleware';
 import { generalLimiter, authLimiter } from './middleware/rate-limit.middleware';
 import { testConnection } from './db/database';
 import { logger } from './utils/logger';
+import { IpaService } from './services/ipa.service';
 
 dotenv.config();
 
@@ -162,6 +163,8 @@ const server = http.createServer(app);
 server.listen(PORT, async () => {
   logger.info(`Server running on port ${PORT} [${isProd ? 'PRODUCTION' : 'DEVELOPMENT'}]`);
   await testConnection();
+  // Cargar diccionarios fonéticos IPA en memoria al arrancar (125k palabras O(1))
+  IpaService.initialize().catch(err => logger.error('[IpaService] Init error:', err));
 });
 
 // Setup Yjs WebSocket

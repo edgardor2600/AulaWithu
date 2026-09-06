@@ -4,6 +4,7 @@ import { asyncHandler } from '../middleware/error.middleware';
 import { logger } from '../utils/logger';
 import { uploadSingle } from '../config/multer.config';
 import { MiniMaxService } from '../services/minimax.service';
+import { IpaService } from '../services/ipa.service';
 import multer from 'multer';
 import path from 'path';
 
@@ -73,15 +74,52 @@ router.get(
 
 /**
  * POST /api/reading/ipa
- * Obtener la transcripción fonética IPA de un conjunto de textos con MiniMax
- * Access: Authenticated users
+ * Transcripción fonética IPA de alta velocidad:
+ * 1. Soporta el formato estructurado de useReading.ts: { items: [{ id, text }], accent, preferred_lang, engine }
+ * 2. Soporta formato legacy: { words: [...] } o { text: "..." }
+ * 3. Utiliza IpaService en memoria (125k palabras O(1)) con fallback a MiniMax si se solicita 'ai'
  */
 router.post(
   '/ipa',
   authMiddleware,
   asyncHandler(async (req: any, res: any) => {
     try {
-      const { words, text } = req.body;
+      const { items, words, text, accent = 'us', preferred_lang = 'auto', engine = 'local' } = req.body;
+
+      // FORMATO A: Cliente React useReading.ts ({ items: [{ id, text }] })
+      if (Array.isArray(items) && items.length > 0) {
+        // Si el cliente pide explícitamente motor IA y no local
+        if (engine === 'ai') {
+          try {
+            const allWords = items.map((it: any) => it.text).join(' ').split(/\s+/).filter(Boolean);
+            const aiMap = await MiniMaxService.generateIPA(allWords);
+            const aiItems = items.map((it: any) => ({
+              id: it.id,
+              text: it.text,
+              ipa: it.text.split(/\s+/).map((w: string) => aiMap[w] || w).join(' ')
+            }));
+            return res.status(200).json({ ok: true, items: aiItems, engine: 'ai', accent });
+          } catch (aiErr: any) {
+            logger.warn(`[reading/ipa] AI engine fallback to local: ${aiErr.message}`);
+          }
+        }
+
+        // Motor local en memoria O(1) ultra-rápido (< 5ms)
+        const transcribedItems = await IpaService.transcribeItems(items, {
+          accent: accent === 'uk' ? 'uk' : 'us',
+          preferred_lang: preferred_lang || 'auto',
+          engine
+        });
+
+        return res.status(200).json({
+          ok: true,
+          items: transcribedItems,
+          engine: 'local',
+          accent: accent === 'uk' ? 'uk' : 'us'
+        });
+      }
+
+      // FORMATO B: Legacy { words: [...] } o { text: "..." }
       let wordsList: string[] = [];
       if (Array.isArray(words)) {
         wordsList = words;
@@ -89,16 +127,47 @@ router.post(
         wordsList = text.split(/\s+/).filter(Boolean);
       }
 
-      const ipaMap = await MiniMaxService.generateIPA(wordsList);
-      res.status(200).json({
+      if (wordsList.length > 0) {
+        // Si se pide explícitamente motor IA
+        if (engine === 'ai') {
+          try {
+            const ipaMap = await MiniMaxService.generateIPA(wordsList);
+            return res.status(200).json({ ok: true, ipa: ipaMap, data: ipaMap, engine: 'ai' });
+          } catch (aiErr: any) {
+            logger.warn(`[reading/ipa] AI engine fallback to local for words: ${aiErr.message}`);
+          }
+        }
+
+        // Resolución local instantánea
+        const targetAccent = accent === 'uk' ? 'uk' : 'us';
+        const ipaMap: Record<string, string> = {};
+        for (const w of wordsList) {
+          const cleanW = String(w || '').trim();
+          if (!cleanW) continue;
+          ipaMap[cleanW] = IpaService.getWordIpa(cleanW, targetAccent) || IpaService.transcribeText(cleanW, { accent: targetAccent });
+        }
+
+        return res.status(200).json({
+          ok: true,
+          ipa: ipaMap,
+          data: ipaMap,
+          engine: 'local',
+          accent: targetAccent
+        });
+      }
+
+      // Si no se proporcionaron items ni words
+      return res.status(200).json({
         ok: true,
-        ipa: ipaMap,
-        data: ipaMap,
+        items: [],
+        ipa: {},
+        data: {}
       });
     } catch (error: any) {
       logger.error(`Error in POST /api/reading/ipa: ${error.message}`);
       res.status(200).json({
         ok: true,
+        items: [],
         ipa: {},
         data: {},
       });
