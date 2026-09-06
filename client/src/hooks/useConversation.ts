@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import * as Y from 'yjs';
 import * as fabric from 'fabric';
 import api from '../services/api';
 import toast from 'react-hot-toast';
@@ -33,7 +34,9 @@ export interface Story {
 
 export const useConversation = (
   canvas: fabric.Canvas | null,
-  saveHistory: () => void
+  saveHistory: () => void,
+  ydoc?: Y.Doc | null,
+  isTeacher?: boolean
 ) => {
   const [showConversationPanel, setShowConversationPanel] = useState(false);
   const [dialogueText, setDialogueText] = useState('');
@@ -87,6 +90,9 @@ export const useConversation = (
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const playTimeoutRef = useRef<any>(null);
   const isContinuousPlayRef = useRef(false);
+
+  // Yjs: track last audio params key to avoid replaying the same clip on unrelated map updates
+  const lastAudioTtsParamsKeyRef = useRef<string>('');
 
   // Load API key and Image settings from localStorage on mount
   useEffect(() => {
@@ -183,6 +189,100 @@ export const useConversation = (
     }
   }, []);
 
+  // ─── Yjs: Student observer ────────────────────────────────────────────────────
+  // When the teacher plays a clip, students receive the TTS params via Yjs and
+  // reproduce the audio autonomously in their own browser.
+  useEffect(() => {
+    if (!ydoc || isTeacher) return;
+
+    const yConversation = ydoc.getMap<any>('activeConversation');
+
+    const handleConversationChange = () => {
+      const remoteClips     = yConversation.get('clips')            as DialogueLine[] | undefined;
+      const remoteSpeakers  = yConversation.get('speakers')         as Record<string, SpeakerConfig> | undefined;
+      const remoteIsPlaying = yConversation.get('isPlaying')        as boolean | undefined;
+      const remoteClipIdx   = yConversation.get('currentClipIndex') as number | undefined;
+      const remoteShowSub   = yConversation.get('showSubtitles')    as boolean | undefined;
+      const remoteAudioParams = yConversation.get('audioTtsParams') as { text: string; voice: string; mode: string } | null;
+
+      // Sync display state so the student UI reflects the teacher's view
+      if (remoteClips !== undefined)    setClips(remoteClips);
+      if (remoteSpeakers !== undefined) setSpeakers(remoteSpeakers);
+      if (remoteClipIdx !== undefined)  setCurrentClipIndex(remoteClipIdx);
+      if (remoteShowSub !== undefined)  setShowSubtitles(remoteShowSub);
+      if (remoteIsPlaying !== undefined) setIsPlaying(remoteIsPlaying);
+
+      // Deduplicate playback: only trigger when audioTtsParams actually changes
+      const paramsKey = remoteAudioParams
+        ? `${remoteClipIdx}::${remoteAudioParams.text}`
+        : '';
+
+      if (remoteIsPlaying && remoteAudioParams && paramsKey !== lastAudioTtsParamsKeyRef.current) {
+        lastAudioTtsParamsKeyRef.current = paramsKey;
+
+        if (remoteAudioParams.mode === 'server') {
+          let token = '';
+          try {
+            const authStr = localStorage.getItem('auth-storage');
+            if (authStr) token = JSON.parse(authStr)?.token || '';
+          } catch (_) {}
+
+          const params = new URLSearchParams({
+            text: remoteAudioParams.text,
+            voice: remoteAudioParams.voice,
+            rate: '1',
+            pitch: '1',
+          });
+          const baseUrl = api.defaults.baseURL || '';
+          const audioUrl = `${baseUrl}/conversation/tts?${params.toString()}${
+            token ? `&token=${encodeURIComponent(token)}` : ''
+          }`;
+
+          const audio = audioRef.current;
+          if (audio) {
+            audio.onended = null;
+            audio.onerror = null;
+            audio.src = audioUrl;
+            audio.play().catch((err) => {
+              if (err.name !== 'AbortError') {
+                console.error('[conversation-student] Playback failed:', err);
+              }
+            });
+          }
+        } else if (remoteAudioParams.mode === 'browser') {
+          if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+            window.speechSynthesis.cancel();
+            const utter = new SpeechSynthesisUtterance(remoteAudioParams.text);
+            window.speechSynthesis.speak(utter);
+          }
+        }
+      } else if (remoteIsPlaying === false) {
+        // Teacher stopped — stop student audio too
+        lastAudioTtsParamsKeyRef.current = '';
+        const audio = audioRef.current;
+        if (audio) {
+          try { audio.pause(); audio.src = ''; } catch (_) {}
+        }
+        if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+          window.speechSynthesis.cancel();
+        }
+      }
+    };
+
+    yConversation.observe(handleConversationChange);
+    // Sync immediately (student joins mid-playback)
+    handleConversationChange();
+
+    return () => {
+      yConversation.unobserve(handleConversationChange);
+      lastAudioTtsParamsKeyRef.current = '';
+      const audio = audioRef.current;
+      if (audio) {
+        try { audio.pause(); audio.src = ''; } catch (_) {}
+      }
+    };
+  }, [ydoc, isTeacher]);
+
   const reportAgentStatus = useCallback(async (status: string, message: string) => {
     try {
       await api.post('/conversation/agent/status', { status, message });
@@ -213,11 +313,20 @@ export const useConversation = (
     if (!keepPlayingState) {
       setIsPlaying(false);
       reportAgentStatus('idle', 'Listo');
+      // Yjs: broadcast stop to students
+      if (ydoc && isTeacher) {
+        const yConv = ydoc.getMap<any>('activeConversation');
+        ydoc.transact(() => {
+          yConv.set('isPlaying', false);
+          yConv.set('currentClipIndex', -1);
+          yConv.set('audioTtsParams', null);
+        });
+      }
     }
     if (!keepContinuous) {
       isContinuousPlayRef.current = false;
     }
-  }, [reportAgentStatus]);
+  }, [reportAgentStatus, ydoc, isTeacher]);
 
   // Parse dialogue text manually (fallback plan)
   const parseDialogueManually = (text: string) => {
@@ -574,6 +683,19 @@ Por favor, genera el material educativo completo siguiendo este formato estricto
     const speakerConf = speakers[clip.speaker];
     const voice = speakerConf?.voice || 'en-US-JennyNeural';
 
+    // Yjs: broadcast clip state so students see subtitle and play audio autonomously
+    if (ydoc && isTeacher) {
+      const yConv = ydoc.getMap<any>('activeConversation');
+      ydoc.transact(() => {
+        yConv.set('isPlaying', true);
+        yConv.set('currentClipIndex', idx);
+        yConv.set('currentText', clip.text);
+        yConv.set('currentSpeaker', clip.speaker);
+        yConv.set('showSubtitles', showSubtitles);
+        yConv.set('audioTtsParams', { text: clip.text, voice, mode: audioMode });
+      });
+    }
+
     if (audioMode === 'browser') {
       if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
         const utterance = new SpeechSynthesisUtterance(clip.text);
@@ -864,6 +986,20 @@ Por favor, genera el material educativo completo siguiendo este formato estricto
     setClips(story.clips || []);
     setImageUrl(story.imageUrl || '');
     toast.success(`Diálogo "${story.title}" cargado`);
+    // Yjs: broadcast the new story so students can follow along
+    if (ydoc && isTeacher) {
+      const yConv = ydoc.getMap<any>('activeConversation');
+      ydoc.transact(() => {
+        yConv.set('storyId', story.id);
+        yConv.set('title', story.title);
+        yConv.set('clips', story.clips || []);
+        yConv.set('speakers', story.speakers || {});
+        yConv.set('clipsSerial', Date.now());
+        yConv.set('isPlaying', false);
+        yConv.set('currentClipIndex', -1);
+        yConv.set('audioTtsParams', null);
+      });
+    }
   };
 
   // Stories library: Delete single story
@@ -1171,7 +1307,31 @@ CRITICAL DIRECTIONS FOR THE IMAGE GENERATOR:
     setCharNames('');
     setImageUrl('');
     toast.success('Datos limpiados');
+    // Yjs: clear the shared state so students see idle state
+    if (ydoc && isTeacher) {
+      const yConv = ydoc.getMap<any>('activeConversation');
+      ydoc.transact(() => {
+        yConv.set('isPlaying', false);
+        yConv.set('currentClipIndex', -1);
+        yConv.set('audioTtsParams', null);
+        yConv.set('clips', []);
+        yConv.set('speakers', {});
+        yConv.set('clipsSerial', 0);
+      });
+    }
   };
+
+  /**
+   * setShowSubtitlesYjs — wrapper that also broadcasts subtitle toggle to Yjs.
+   * Export this instead of the raw setState so students receive the update.
+   */
+  const setShowSubtitlesYjs = useCallback((val: boolean) => {
+    setShowSubtitles(val);
+    if (ydoc && isTeacher) {
+      const yConv = ydoc.getMap<any>('activeConversation');
+      yConv.set('showSubtitles', val);
+    }
+  }, [ydoc, isTeacher]);
 
   const seekAudio = (time: number) => {
     if (audioRef.current) {
@@ -1337,7 +1497,7 @@ CRITICAL DIRECTIONS FOR THE IMAGE GENERATOR:
     imageUrl,
     setImageUrl,
     showSubtitles,
-    setShowSubtitles,
+    setShowSubtitles: setShowSubtitlesYjs,
     
     // ✅ NUEVO: Progreso y Carga de Audio
     audioProgress,

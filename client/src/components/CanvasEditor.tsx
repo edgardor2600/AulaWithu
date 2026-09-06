@@ -41,6 +41,10 @@ import {
 import { useReading } from '../hooks/useReading';
 import { useConversation } from '../hooks/useConversation';
 import { ConversationPanel } from './ConversationPanel';
+import { ConversationStudentWidget } from './ConversationStudentWidget';
+import { useReadingGame } from '../hooks/useReadingGame';
+import { ReadingGamePanel } from './ReadingGamePanel';
+import { ReadingGameSpectatorPanel } from './ReadingGameSpectatorPanel';
 import { useGlobalTimer } from '../hooks/useGlobalTimer';
 import { GlobalTimerPanel } from './GlobalTimerPanel';
 import toast from 'react-hot-toast';
@@ -54,8 +58,6 @@ import { BOARD_THEMES, type Tool, type BoardTheme } from '../types/canvas';
 import { usePresenter } from '../hooks/usePresenter';
 import { PresenterPanel } from './PresenterPanel';
 import { PresenterCompactNav } from './PresenterCompactNav';
-import { useReadingGame } from '../hooks/useReadingGame';
-import { ReadingGamePanel } from './ReadingGamePanel';
 import { useAITutor } from '../hooks/useAITutor';
 import { AITutorPanel } from './AITutorPanel';
 import { AITutorStudentWidget } from './AITutorStudentWidget';
@@ -288,7 +290,7 @@ export const CanvasEditor = ({
   const hasInitialFitRef = useRef(false);
 
   const reading = useReading(fabricCanvasRef.current, saveHistory);
-  const conversation = useConversation(fabricCanvasRef.current, saveHistory);
+  const conversation = useConversation(fabricCanvasRef.current, saveHistory, ydoc, isTeacher);
   const globalTimer = useGlobalTimer(ydoc, isTeacher);
 
   const effectivePresenterSessionId = sessionId || (slideId ? `slide_${slideId}` : 'standalone_session');
@@ -298,7 +300,7 @@ export const CanvasEditor = ({
     ydoc,
     isTeacher
   );
-  const readingGame = useReadingGame(effectivePresenterSessionId);
+  const readingGame = useReadingGame(effectivePresenterSessionId, ydoc, isTeacher);
   const aiTutor = useAITutor({
     canvasOrGetter: () => fabricCanvasRef.current,
     saveHistory,
@@ -2782,7 +2784,11 @@ export const CanvasEditor = ({
         </div>
       )}
 
-      <ConversationPanel conversation={conversation} />
+      {/* Conversation Panel — Teacher only (full controls) */}
+      {isTeacher && <ConversationPanel conversation={conversation} />}
+
+      {/* Conversation Student Widget — Student only (display-only, driven by Yjs) */}
+      {!isTeacher && <ConversationStudentWidget conversation={conversation} />}
 
       {/* Subtítulos Flotantes Sincronizados de la Conversación */}
       {conversation.showSubtitles && conversation.isPlaying && conversation.currentClipIndex !== -1 && conversation.currentClipIndex < conversation.clips.length && (() => {
@@ -2946,9 +2952,21 @@ export const CanvasEditor = ({
       />
 
 
+      {/* Reto de Velocidad de Lectura — Panel completo para profesor */}
+      {isTeacher && <ReadingGamePanel game={readingGame} />}
 
-      {/* Reto de Velocidad de Lectura */}
-      <ReadingGamePanel game={readingGame} />
+      {/* Reading Game Spectator Panel — Alumno sigue la sesión en tiempo real vía Yjs */}
+      {!isTeacher && (
+        <ReadingGameSpectatorPanel
+          phase={readingGame.remotePhase}
+          storyTitle={readingGame.remoteStoryTitle}
+          storyText={readingGame.remoteStoryText}
+          activeWordIndex={readingGame.remoteActiveWordIndex}
+          countdown={readingGame.remoteCountdown}
+          liveWords={readingGame.remoteLiveWords}
+          lastEvaluation={readingGame.remoteLastEvaluation}
+        />
+      )}
 
       {/* AI Tutor Panel & Student Widget */}
       {isTeacher ? (

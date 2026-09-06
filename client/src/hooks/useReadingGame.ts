@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
+import * as Y from 'yjs';
 import api from '../services/api';
 import toast from 'react-hot-toast';
 
@@ -57,7 +58,11 @@ export type ChunkSize = 'small' | 'medium' | 'large';
 
 // ─── Hook ─────────────────────────────────────────────────────────────────────
 
-export function useReadingGame(sessionId: string | null) {
+export function useReadingGame(
+  sessionId: string | null,
+  ydoc?: Y.Doc | null,
+  isTeacher?: boolean
+) {
   // UI panel state
   const [showReadingGamePanel, setShowReadingGamePanel] = useState(false);
   const [activeTab, setActiveTab] = useState<'config' | 'playing' | 'results' | 'history'>('config');
@@ -126,6 +131,23 @@ export function useReadingGame(sessionId: string | null) {
   const micStreamRef       = useRef<MediaStream | null>(null);
   const audioCtxRef        = useRef<AudioContext | null>(null);
 
+  // Yjs: debounce timer for broadcasting word-advance events
+  const yjsBroadcastTimerRef = useRef<any>(null);
+
+  // Student spectator state (populated from Yjs when isTeacher === false)
+  const [remotePhase, setRemotePhase] = useState<'idle' | 'countdown' | 'reading' | 'evaluating' | 'results'>('idle');
+  const [remoteStoryText, setRemoteStoryText] = useState('');
+  const [remoteStoryTitle, setRemoteStoryTitle] = useState('');
+  const [remoteActiveWordIndex, setRemoteActiveWordIndex] = useState(0);
+  const [remoteCountdown, setRemoteCountdown] = useState<number | null>(null);
+  const [remoteLiveWords, setRemoteLiveWords] = useState<{ text: string; result?: 'ok' | 'bad' }[]>([]);
+  const [remoteLastEvaluation, setRemoteLastEvaluation] = useState<{
+    overall_score: number;
+    pronunciation_score: number;
+    feedback: string;
+    transcript: string;
+  } | null>(null);
+
   // ─── Helpers ───────────────────────────────────────────────────────────────
 
   const numberMap: Record<string, string> = {
@@ -133,6 +155,22 @@ export function useReadingGame(sessionId: string | null) {
     '6': 'six', '7': 'seven', '8': 'eight', '9': 'nine', '10': 'ten',
     '7:00': 'seven', '8:00': 'eight', '9:00': 'nine', '10:00': 'ten'
   };
+
+  /**
+   * broadcastReadingYjs — debounced helper to write game state to Yjs.
+   * Batches rapid word-advance ticks (max once per 200ms) to avoid saturating
+   * the WebSocket with one message per word.
+   */
+  const broadcastReadingYjs = useCallback((updates: Record<string, any>) => {
+    if (!ydoc || !isTeacher) return;
+    if (yjsBroadcastTimerRef.current) clearTimeout(yjsBroadcastTimerRef.current);
+    yjsBroadcastTimerRef.current = setTimeout(() => {
+      const yReading = ydoc.getMap<any>('activeReadingGame');
+      ydoc.transact(() => {
+        Object.entries(updates).forEach(([k, v]) => yReading.set(k, v));
+      });
+    }, 200);
+  }, [ydoc, isTeacher]);
 
   const normalizeWord = (w: string) => {
     const clean = String(w || '').toLowerCase().replace(/[.,\/#!$%\^&\*;:{}=\-_`~()?"']/g, '').trim();
@@ -407,6 +445,23 @@ export function useReadingGame(sessionId: string | null) {
     setAudioBlob(null);
     audioChunksRef.current = [];
 
+    // Yjs: broadcast initial state to students immediately
+    if (ydoc && isTeacher) {
+      const yReading = ydoc.getMap<any>('activeReadingGame');
+      ydoc.transact(() => {
+        yReading.set('phase', 'countdown');
+        yReading.set('storyTitle', storyTitle);
+        yReading.set('storyText', storyText);
+        yReading.set('wpm', wpm);
+        yReading.set('activeWordIndex', 0);
+        yReading.set('countdown', 3);
+        yReading.set('liveWords', initLive);
+        yReading.set('elapsedSeconds', 0);
+        yReading.set('lastEvaluation', null);
+        yReading.set('targetStudentId', null);
+      });
+    }
+
     try {
       const stream    = await ensureStream();
       const mimeType  = pickMimeType();
@@ -430,17 +485,31 @@ export function useReadingGame(sessionId: string | null) {
         if (cd > 0) {
           setCountdown(cd);
         } else {
-          clearInterval(countdownRef.current);
-          countdownRef.current = null;
-          setCountdown(null);
-
-          // Start recording
+            clearInterval(countdownRef.current);
+            countdownRef.current = null;
+            setCountdown(null);
+          }
+          // Yjs: update countdown for students
+          if (ydoc && isTeacher) {
+            const yReading = ydoc.getMap<any>('activeReadingGame');
+            yReading.set('countdown', cd > 0 ? cd : null);
+          } // Start recording
           recorder.start(200);
           setIsPlaying(true);
           setActiveWordIndex(0);
           setRecordingSeconds(0);
           setIsSentencePaused(false);
           setActiveTab('playing');
+
+          // Yjs: transition to 'reading' phase
+          if (ydoc && isTeacher) {
+            const yReading = ydoc.getMap<any>('activeReadingGame');
+            ydoc.transact(() => {
+              yReading.set('phase', 'reading');
+              yReading.set('countdown', null);
+              yReading.set('activeWordIndex', 0);
+            });
+          }
 
           // Timer
           timerIntervalRef.current = setInterval(() =>
@@ -475,6 +544,13 @@ export function useReadingGame(sessionId: string | null) {
             });
             setLiveWords([...currentWordsRef.current]);
 
+            // Yjs: debounced broadcast of word position and live colors to students
+            broadcastReadingYjs({
+              activeWordIndex: next,
+              liveWords: currentWordsRef.current.map(w => ({ text: w.text, result: w.result })),
+              elapsedSeconds: Math.floor((Date.now() - Date.now()) / 1000), // approximate; refreshed via timer
+            });
+
             // Sentence mode: pause at chunk boundary
             if (isSentenceMode && chunkEnds.includes(next - 1)) {
               setIsSentencePaused(true);
@@ -489,7 +565,6 @@ export function useReadingGame(sessionId: string | null) {
               try { rec.start(); } catch (_) {}
             }
           }
-        }
       }, 1000);
 
     } catch (err: any) {
@@ -497,7 +572,7 @@ export function useReadingGame(sessionId: string | null) {
       toast.error('Permiso de micrófono denegado o no disponible.');
       setCountdown(null);
     }
-  }, [isPlaying, isEvaluating, storyText, wpm, isSentenceMode, chunkSize, useSystemAudio, ensureStream, initSpeechRecognition]);
+  }, [isPlaying, isEvaluating, storyText, wpm, isSentenceMode, chunkSize, useSystemAudio, ensureStream, initSpeechRecognition, ydoc, isTeacher, storyTitle, broadcastReadingYjs]);
 
   /** Advance past current chunk boundary (Space key or button) */
   const advanceChunk = useCallback(() => {
@@ -553,7 +628,16 @@ export function useReadingGame(sessionId: string | null) {
       try { mediaRecorderRef.current.stop(); } catch (_) {}
     }
     releaseStreams();
-  }, [releaseStreams]);
+
+    // Yjs: signal idle to students
+    if (ydoc && isTeacher) {
+      const yReading = ydoc.getMap<any>('activeReadingGame');
+      ydoc.transact(() => {
+        yReading.set('phase', 'idle');
+        yReading.set('countdown', null);
+      });
+    }
+  }, [releaseStreams, ydoc, isTeacher]);
 
   const stopAndEvaluate = useCallback(async () => {
     if (isEvaluating) return;
@@ -561,6 +645,12 @@ export function useReadingGame(sessionId: string | null) {
     const lastWordIdx = lastWordIdxRef.current;
     stopPlayback();
     setIsEvaluating(true);
+
+    // Yjs: signal evaluating phase to students
+    if (ydoc && isTeacher) {
+      const yReading = ydoc.getMap<any>('activeReadingGame');
+      yReading.set('phase', 'evaluating');
+    }
 
     const words = storyText.trim().split(/\s+/).filter(Boolean);
     const activeWordsText = words.slice(0, lastWordIdx + 1).join(' ');
@@ -637,6 +727,21 @@ export function useReadingGame(sessionId: string | null) {
 
         setEvaluation(result);
 
+        // Yjs: publish results so students see the final scores and word alignment
+        if (ydoc && isTeacher) {
+          const yReading = ydoc.getMap<any>('activeReadingGame');
+          ydoc.transact(() => {
+            yReading.set('phase', 'results');
+            yReading.set('liveWords', evalWords.map(ew => ({ text: ew.word, result: ew.status })));
+            yReading.set('lastEvaluation', {
+              overall_score:      result.overall_score,
+              pronunciation_score: result.pronunciation_score,
+              feedback:           result.feedback,
+              transcript:         result.transcript,
+            });
+          });
+        }
+
         // Update live words with final alignment
         setLiveWords(prev => prev.map((w, idx) => {
           if (idx > lastWordIdx) return { ...w, result: undefined };
@@ -699,7 +804,7 @@ export function useReadingGame(sessionId: string | null) {
     } finally {
       setIsEvaluating(false);
     }
-  }, [isEvaluating, stopPlayback, audioBlob, storyText, level, isSentenceMode, chunkSize, storyTitle, wpm, sessionId]);
+  }, [isEvaluating, stopPlayback, audioBlob, storyText, level, isSentenceMode, chunkSize, storyTitle, wpm, sessionId, ydoc, isTeacher]);
 
   // ─── TTS Functions ──────────────────────────────────────────────────────────
 
@@ -1046,7 +1151,43 @@ export function useReadingGame(sessionId: string | null) {
     if (showReadingGamePanel && activeTab === 'history') loadHistory();
   }, [showReadingGamePanel, activeTab, loadHistory]);
 
+  /**
+   * Student observer: subscribe to Yjs activeReadingGame map and update local
+   * remote* state so ReadingGameSpectatorPanel can render the live game.
+   */
+  useEffect(() => {
+    if (!ydoc || isTeacher) return;
+
+    const yReading = ydoc.getMap<any>('activeReadingGame');
+
+    const handleReadingChange = () => {
+      const phase    = yReading.get('phase')           as string | undefined;
+      const sText    = yReading.get('storyText')       as string | undefined;
+      const sTitle   = yReading.get('storyTitle')      as string | undefined;
+      const wordIdx  = yReading.get('activeWordIndex') as number | undefined;
+      const cd       = yReading.get('countdown')       as number | null;
+      const words    = yReading.get('liveWords')       as { text: string; result?: 'ok' | 'bad' }[] | undefined;
+      const evalData = yReading.get('lastEvaluation')  as any;
+
+      if (phase !== undefined)   setRemotePhase(phase as any);
+      if (sText !== undefined)   setRemoteStoryText(sText);
+      if (sTitle !== undefined)  setRemoteStoryTitle(sTitle);
+      if (wordIdx !== undefined) setRemoteActiveWordIndex(wordIdx);
+      setRemoteCountdown(cd ?? null);
+      if (words !== undefined)   setRemoteLiveWords(words);
+      setRemoteLastEvaluation(evalData ?? null);
+    };
+
+    yReading.observe(handleReadingChange);
+    handleReadingChange(); // sync current state on mount (student joins mid-game)
+
+    return () => {
+      yReading.unobserve(handleReadingChange);
+    };
+  }, [ydoc, isTeacher]);
+
   // ─── Return API ─────────────────────────────────────────────────────────────
+
 
   return {
     // Panel visibility
@@ -1110,5 +1251,14 @@ export function useReadingGame(sessionId: string | null) {
     loadHistory,
     reuseHistoryItem,
     deleteHistoryItem,
+
+    // Student spectator state (synced from Yjs when !isTeacher)
+    remotePhase,
+    remoteStoryText,
+    remoteStoryTitle,
+    remoteActiveWordIndex,
+    remoteCountdown,
+    remoteLiveWords,
+    remoteLastEvaluation,
   };
 }
