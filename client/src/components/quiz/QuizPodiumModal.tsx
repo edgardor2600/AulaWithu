@@ -9,7 +9,7 @@
  *   - Full class leaderboard with rankings and accuracy
  *   - CSV Export & session close controls for the teacher
  */
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   Trophy, Crown, Sparkles, Download, X, Users
 } from 'lucide-react';
@@ -32,8 +32,15 @@ export const QuizPodiumModal: React.FC<QuizPodiumModalProps> = ({
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   // Guard: prevent double-finalize on StrictMode double-mount or phase re-renders
   const finalizedRef = useRef<boolean>(false);
+  const [isDismissed, setIsDismissed] = useState(false);
 
   const isPodiumActive = quiz.quizPhase === 'podium';
+
+  useEffect(() => {
+    if (isPodiumActive) {
+      setIsDismissed(false);
+    }
+  }, [isPodiumActive]);
 
   // ─── Auto-Finalize: persist batch results to PostgreSQL when podium mounts ───
   useEffect(() => {
@@ -76,7 +83,7 @@ export const QuizPodiumModal: React.FC<QuizPodiumModalProps> = ({
 
   // Sound fanfare & Confetti on mount
   useEffect(() => {
-    if (!isPodiumActive) return;
+    if (!isPodiumActive || isDismissed) return;
 
     quizAudio.playPodium();
 
@@ -155,15 +162,27 @@ export const QuizPodiumModal: React.FC<QuizPodiumModalProps> = ({
     window.addEventListener('resize', handleResize);
 
     return () => {
-      cancelAnimationFrame(animationFrameId);
+      if (animationFrameId) {
+        cancelAnimationFrame(animationFrameId);
+      }
       window.removeEventListener('resize', handleResize);
     };
-  }, [isPodiumActive]);
+  }, [isPodiumActive, isDismissed]);
 
-  if (!isPodiumActive) return null;
+  if (!isPodiumActive || isDismissed) return null;
 
   // Sort students by total score descending
-  const sortedStudents = [...quiz.studentProgress].sort((a, b) => b.score - a.score);
+  let sortedStudents = [...quiz.studentProgress].sort((a, b) => b.score - a.score);
+  if (sortedStudents.length === 0 && !isTeacher) {
+    sortedStudents = [
+      {
+        clientId: 'me',
+        name: 'Tú',
+        score: quiz.myScore,
+        hasAnswered: true,
+      },
+    ];
+  }
   const first = sortedStudents[0];
   const second = sortedStudents[1];
   const third = sortedStudents[2];
@@ -190,7 +209,12 @@ export const QuizPodiumModal: React.FC<QuizPodiumModalProps> = ({
     document.body.removeChild(link);
   };
 
-  const handleClose = () => {
+  const handleClose = (e?: React.MouseEvent) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    setIsDismissed(true);
     if (onClose) onClose();
     if (isTeacher) {
       quiz.forceStopQuiz();
@@ -223,6 +247,7 @@ export const QuizPodiumModal: React.FC<QuizPodiumModalProps> = ({
           </div>
 
           <button
+            type="button"
             onClick={handleClose}
             className="text-slate-400 hover:text-white p-2 rounded-xl hover:bg-white/10 transition-colors"
           >

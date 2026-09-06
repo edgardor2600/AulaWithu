@@ -79,6 +79,11 @@ export const QuizPlayerWidget: React.FC<QuizPlayerWidgetProps> = ({
     prevTimeLeftRef.current = quiz.timeLeft;
   }, [quiz.timeLeft, quiz.quizPhase, hasAnswered, quiz.isQuizActive]);
 
+  // Register student identity in useQuizGame
+  useEffect(() => {
+    quiz.registerStudentClient(clientId, userName);
+  }, [clientId, userName, quiz.registerStudentClient]);
+
   // Sound FX: answer reveal — safe: no-ops when question is null
   useEffect(() => {
     if (!question) return;
@@ -274,6 +279,54 @@ export const QuizPlayerWidget: React.FC<QuizPlayerWidgetProps> = ({
 
       {/* Question Body */}
       <div className="p-4 space-y-3 max-h-[420px] overflow-y-auto custom-scrollbar">
+        {/* Answer Submitted Waiting Banner */}
+        {hasAnswered && !revealedAnswer && (
+          <div className="p-2.5 rounded-xl bg-violet-950/40 border border-violet-500/30 text-xs flex items-center justify-between text-violet-200 animate-pulse shadow-sm">
+            <span className="flex items-center gap-2 font-medium">
+              <Clock className="w-3.5 h-3.5 text-amber-400 animate-spin" />
+              Respuesta enviada — Esperando corrección...
+            </span>
+            <span className="text-[10px] bg-violet-600/30 px-2 py-0.5 rounded-full font-bold text-violet-300 border border-violet-400/30">
+              Listo ✓
+            </span>
+          </div>
+        )}
+
+        {/* Feedback Area when Answer is Revealed (Prominent Top Banner) */}
+        {revealedAnswer && (
+          <div
+            className={`p-3.5 rounded-xl border text-xs space-y-1.5 shadow-lg transition-all ${
+              quiz.lastAnswerFeedback?.isCorrect
+                ? 'bg-emerald-950/70 border-emerald-500/60 text-emerald-200 shadow-emerald-950/50'
+                : 'bg-rose-950/70 border-rose-500/60 text-rose-200 shadow-rose-950/50'
+            }`}
+          >
+            <div className="flex items-center justify-between font-bold text-sm">
+              <span className="flex items-center gap-1.5">
+                {quiz.lastAnswerFeedback?.isCorrect ? '✨ ¡Correcto!' : '❌ Incorrecto'}
+              </span>
+              {quiz.lastAnswerFeedback?.score !== undefined && quiz.lastAnswerFeedback.score > 0 ? (
+                <span className="text-emerald-300 font-mono text-xs font-extrabold bg-emerald-500/20 px-2.5 py-0.5 rounded-full border border-emerald-500/40">
+                  +{quiz.lastAnswerFeedback.score} pts
+                </span>
+              ) : (
+                <span className="text-rose-300 font-mono text-xs font-extrabold bg-rose-500/20 px-2.5 py-0.5 rounded-full border border-rose-500/40">
+                  +0 pts
+                </span>
+              )}
+            </div>
+            {quiz.lastAnswerFeedback?.explanation ? (
+              <p className="text-[11px] opacity-90 leading-relaxed pt-1 border-t border-white/10">
+                {quiz.lastAnswerFeedback.explanation}
+              </p>
+            ) : revealedAnswer.explanation ? (
+              <p className="text-[11px] opacity-90 leading-relaxed pt-1 border-t border-white/10">
+                {revealedAnswer.explanation}
+              </p>
+            ) : null}
+          </div>
+        )}
+
         {/* Question Prompt */}
         {question.question && (
           <p className="text-xs text-slate-400 font-medium leading-tight">{question.question}</p>
@@ -349,29 +402,6 @@ export const QuizPlayerWidget: React.FC<QuizPlayerWidgetProps> = ({
             revealedAnswer={revealedAnswer}
             onSubmit={handleSubmit}
           />
-        )}
-
-        {/* Feedback Area when Answer is Revealed */}
-        {revealedAnswer && quiz.lastAnswerFeedback && (
-          <div
-            className={`p-3 rounded-xl border text-xs space-y-1 animate-fade-in ${
-              quiz.lastAnswerFeedback.isCorrect
-                ? 'bg-emerald-950/40 border-emerald-500/40 text-emerald-200'
-                : 'bg-rose-950/40 border-rose-500/40 text-rose-200'
-            }`}
-          >
-            <div className="flex items-center justify-between font-bold">
-              <span>{quiz.lastAnswerFeedback.isCorrect ? '✨ ¡Correcto!' : '❌ Incorrecto'}</span>
-              {quiz.lastAnswerFeedback.score !== undefined && quiz.lastAnswerFeedback.score > 0 && (
-                <span className="text-emerald-300 font-mono">+{quiz.lastAnswerFeedback.score} pts</span>
-              )}
-            </div>
-            {quiz.lastAnswerFeedback.explanation && (
-              <p className="text-[11px] opacity-90 leading-relaxed pt-1">
-                {quiz.lastAnswerFeedback.explanation}
-              </p>
-            )}
-          </div>
         )}
       </div>
     </div>

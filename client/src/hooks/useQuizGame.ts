@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import * as Y from 'yjs';
 import api from '../services/api';
 import toast from 'react-hot-toast';
+import { quizAudio } from '../services/quizAudioEngine';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -168,11 +169,18 @@ export function useQuizGame(
   // Q-02: Teacher local full quiz (with answers)
   const localFullQuizRef = useRef<Quiz | null>(null);
 
-  // Q-03: Scoring timestamps
+  // Q-03: Scoring timestamps & student identity
   const myClientIdRef = useRef<string | undefined>(undefined);
+  const myUserNameRef = useRef<string | undefined>(undefined);
   const answerSubmittedAtRef = useRef<number>(0);
 
   const prevQuestionIndexRef = useRef<number>(-1);
+  const autoAdvanceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const registerStudentClient = useCallback((clientId: string, userName?: string) => {
+    myClientIdRef.current = clientId;
+    if (userName) myUserNameRef.current = userName;
+  }, []);
 
   // ─── Yjs Sync ────────────────────────────────────────────────────────────────
 
@@ -204,11 +212,12 @@ export function useQuizGame(
         setHasAnsweredCurrent(false);
         setPendingAnswer(null);
         setLastAnswerFeedback(null);
+        setTimeLeft(tLimit);
       }
     };
 
     const handleAnswersUpdate = () => {
-      if (!isTeacher) return;
+      // Synced for BOTH teacher and students so the leaderboard and podium are populated for everyone
       const qIndex = (yQuiz.get('questionIndex') as number | undefined) ?? 0;
       const quizObj = yQuiz.get('quiz') as Quiz | undefined;
       const currentQuestionId = quizObj?.questions?.[qIndex]?.id;
@@ -256,7 +265,7 @@ export function useQuizGame(
       yQuiz.unobserve(handleQuizUpdate);
       yAnswers.unobserve(handleAnswersUpdate);
     };
-  }, [ydoc, isTeacher]);
+  }, [ydoc]);
 
   // ─── Q-02/03: Evaluate at reveal ─────────────────────────────────────────────
 
@@ -265,7 +274,34 @@ export function useQuizGame(
     const { questionId, correct, explanation } = revealedAnswer;
 
     const myRecord = myAnswers[questionId];
-    if (!myRecord) return;
+    const yAnswers = yAnswersRef.current;
+    const clientId = myClientIdRef.current;
+
+    if (!myRecord) {
+      // Student ran out of time or did not answer
+      setLastAnswerFeedback({
+        isCorrect: false,
+        explanation: explanation || 'Se agotó el tiempo para responder esta pregunta.',
+        score: 0,
+      });
+      setStreak(0);
+      quizAudio.playIncorrect();
+
+      if (yAnswers && clientId) {
+        ydoc?.transact(() => {
+          yAnswers.set(`${clientId}_${questionId}`, {
+            answer: '',
+            isCorrect: false,
+            score: 0,
+            name: yAnswers.get(`${clientId}_${questionId}`)?.name || myUserNameRef.current || clientId,
+            clientId,
+            questionId,
+            hasAnswered: false,
+          });
+        });
+      }
+      return;
+    }
 
     const question = activeQuiz?.questions.find(q => q.id === questionId);
     if (!question) return;
@@ -287,48 +323,102 @@ export function useQuizGame(
     if (isCorrect) {
       setMyScore(prev => prev + score);
       setStreak(prev => prev + 1);
+      quizAudio.playCorrect(streak + 1);
     } else {
       setStreak(0);
+      quizAudio.playIncorrect();
     }
 
-    const yAnswers = yAnswersRef.current;
-    const clientId = myClientIdRef.current;
     if (yAnswers && clientId) {
       ydoc?.transact(() => {
         yAnswers.set(`${clientId}_${questionId}`, {
           answer: myRecord.answer,
           isCorrect,
           score,
-          name: yAnswers.get(`${clientId}_${questionId}`)?.name || clientId,
+          name: yAnswers.get(`${clientId}_${questionId}`)?.name || myUserNameRef.current || clientId,
           clientId,
           questionId,
+          hasAnswered: true,
         });
       });
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [revealedAnswer]);
+  }, [revealedAnswer, isTeacher]);
 
   // ─── Timer ────────────────────────────────────────────────────────────────────
 
   useEffect(() => {
     if (!isQuizActive || !questionStartedAt || quizPhase !== 'question') {
-      if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
+      if (timerIntervalRef.current) {
+        clearInterval(timerIntervalRef.current);
+        timerIntervalRef.current = null;
+      }
       return;
     }
 
-    if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
+    if (timerIntervalRef.current) {
+      clearInterval(timerIntervalRef.current);
+      timerIntervalRef.current = null;
+    }
 
-    timerIntervalRef.current = setInterval(() => {
+    // Immediate calculation so timeLeft never lags behind on phase change
+    const tick = () => {
       const elapsed = Math.floor((Date.now() - questionStartedAt) / 1000);
       const remaining = Math.max(0, questionTimeLimit - elapsed);
       setTimeLeft(remaining);
-      if (remaining === 0 && timerIntervalRef.current) clearInterval(timerIntervalRef.current);
-    }, 500);
+      if (remaining === 0 && timerIntervalRef.current) {
+        clearInterval(timerIntervalRef.current);
+        timerIntervalRef.current = null;
+      }
+    };
+
+    tick();
+    timerIntervalRef.current = setInterval(tick, 500);
 
     return () => {
-      if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
+      if (timerIntervalRef.current) {
+        clearInterval(timerIntervalRef.current);
+        timerIntervalRef.current = null;
+      }
     };
   }, [isQuizActive, quizPhase, questionStartedAt, questionTimeLimit]);
+
+  // ─── Teacher: Auto-Advance & Auto-Reveal ──────────────────────────────────────
+
+  useEffect(() => {
+    if (!isTeacher || !isQuizActive) return;
+
+    // 1. When question timer reaches 0, teacher client automatically reveals answer
+    // Timestamp Guard: physically verify that at least questionTimeLimit seconds have elapsed
+    if (quizPhase === 'question' && questionStartedAt > 0) {
+      const elapsedMs = Date.now() - questionStartedAt;
+      const hasActuallyExpired = elapsedMs >= questionTimeLimit * 1000;
+
+      if (timeLeft === 0 && hasActuallyExpired) {
+        revealCurrentAnswer();
+      }
+    }
+
+    // 2. When in reveal phase, wait 4.5s for all students to view feedback, then auto-advance
+    if (quizPhase === 'reveal') {
+      if (autoAdvanceTimerRef.current) clearTimeout(autoAdvanceTimerRef.current);
+      autoAdvanceTimerRef.current = setTimeout(() => {
+        skipToNextQuestion();
+      }, 4500);
+    } else {
+      if (autoAdvanceTimerRef.current) {
+        clearTimeout(autoAdvanceTimerRef.current);
+        autoAdvanceTimerRef.current = null;
+      }
+    }
+
+    return () => {
+      if (autoAdvanceTimerRef.current) {
+        clearTimeout(autoAdvanceTimerRef.current);
+        autoAdvanceTimerRef.current = null;
+      }
+    };
+  }, [isTeacher, isQuizActive, quizPhase, timeLeft, questionStartedAt, questionTimeLimit]);
 
   // ─── TTS ──────────────────────────────────────────────────────────────────────
 
@@ -466,6 +556,10 @@ export function useQuizGame(
     if (!yQuiz) { toast.error('No hay conexión Yjs activa'); return; }
 
     localFullQuizRef.current = quiz;
+    try {
+      sessionStorage.setItem(`fullQuiz_${sessionId}`, JSON.stringify(quiz));
+    } catch (_) {}
+
     const safeQuiz = sanitizeQuizForBroadcast(quiz);
 
     ydoc?.transact(() => {
@@ -487,14 +581,21 @@ export function useQuizGame(
     setStreak(0);
     setMyAnswers({});
     prevQuestionIndexRef.current = -1;
+    setTimeLeft(QUESTION_TIME_LIMIT);
     toast.success('Quiz lanzado en vivo 🚀');
-  }, [ydoc]);
+  }, [ydoc, sessionId]);
 
   const revealCurrentAnswer = useCallback(() => {
     const yQuiz = yQuizRef.current;
     if (!yQuiz) return;
     const qIndex = (yQuiz.get('questionIndex') as number | undefined) ?? 0;
-    const fullQuiz = localFullQuizRef.current;
+    let fullQuiz = localFullQuizRef.current;
+    if (!fullQuiz) {
+      try {
+        const saved = sessionStorage.getItem(`fullQuiz_${sessionId}`);
+        if (saved) fullQuiz = JSON.parse(saved);
+      } catch (_) {}
+    }
     if (!fullQuiz) { toast.error('No hay respuestas disponibles'); return; }
     const question = fullQuiz.questions[qIndex];
     if (!question) return;
@@ -508,9 +609,13 @@ export function useQuizGame(
       yQuiz.set('revealedAnswer', revealed);
       yQuiz.set('phase', 'reveal' as QuizPhase);
     });
-  }, [ydoc]);
+  }, [ydoc, sessionId]);
 
   const stopQuiz = useCallback(() => {
+    if (autoAdvanceTimerRef.current) {
+      clearTimeout(autoAdvanceTimerRef.current);
+      autoAdvanceTimerRef.current = null;
+    }
     const yQuiz = yQuizRef.current;
     if (!yQuiz) return;
     ydoc?.transact(() => { yQuiz.set('phase', 'podium' as QuizPhase); });
@@ -518,6 +623,10 @@ export function useQuizGame(
   }, [ydoc]);
 
   const forceStopQuiz = useCallback(() => {
+    if (autoAdvanceTimerRef.current) {
+      clearTimeout(autoAdvanceTimerRef.current);
+      autoAdvanceTimerRef.current = null;
+    }
     const yQuiz = yQuizRef.current;
     if (!yQuiz) return;
     ydoc?.transact(() => { yQuiz.set('phase', 'idle' as QuizPhase); });
@@ -525,6 +634,10 @@ export function useQuizGame(
   }, [ydoc]);
 
   const skipToNextQuestion = useCallback(() => {
+    if (autoAdvanceTimerRef.current) {
+      clearTimeout(autoAdvanceTimerRef.current);
+      autoAdvanceTimerRef.current = null;
+    }
     const yQuiz = yQuizRef.current;
     if (!yQuiz) return;
     const fullQuiz = localFullQuizRef.current ?? activeQuiz;
@@ -535,6 +648,9 @@ export function useQuizGame(
       ydoc?.transact(() => { yQuiz.set('phase', 'podium' as QuizPhase); });
       return;
     }
+
+    setTimeLeft(QUESTION_TIME_LIMIT);
+
     ydoc?.transact(() => {
       yQuiz.set('questionIndex', next);
       yQuiz.set('questionTimeLimit', QUESTION_TIME_LIMIT);
@@ -686,6 +802,7 @@ export function useQuizGame(
     hasAnsweredCurrent, lastAnswerFeedback,
     spokenText, setSpokenText,
     submitAnswer, submitResults,
+    registerStudentClient,
     // Teacher
     studentProgress, sessionResults,
     launchQuiz, stopQuiz, forceStopQuiz,
