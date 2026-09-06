@@ -32,8 +32,10 @@ export function useYjs(
   const [participants, setParticipants] = useState<number>(0);
   const [participantsList, setParticipantsList] = useState<Array<{
     clientId: number;
+    userId?: string;
     name: string;
     color: string;
+    isTeacher?: boolean;
   }>>([]);
   
   // Yjs document and provider refs
@@ -102,59 +104,92 @@ export function useYjs(
     // Awareness for participant tracking
     const awareness = provider.awareness;
     
-    // Get user info from localStorage (support auth-storage format)
-    let user = null;
-    try {
-      const authStr = localStorage.getItem('auth-storage');
-      if (authStr) {
-        const parsed = JSON.parse(authStr);
-        user = parsed.user;
+    // Get user info from authStore or localStorage
+    const authUser = useAuthStore.getState().user;
+    let user = authUser || null;
+    if (!user) {
+      try {
+        const authStr = localStorage.getItem('auth-storage');
+        if (authStr) {
+          const parsed = JSON.parse(authStr);
+          user = parsed.user;
+        }
+        
+        // Fallback for legacy format
+        if (!user) {
+          const userStr = localStorage.getItem('user');
+          user = userStr ? JSON.parse(userStr) : null;
+        }
+      } catch (e) {
+        console.error('Error parsing user data:', e);
       }
-      
-      // Fallback for legacy format
-      if (!user) {
-        const userStr = localStorage.getItem('user');
-        user = userStr ? JSON.parse(userStr) : null;
-      }
-    } catch (e) {
-      console.error('Error parsing user data:', e);
     }
 
+    const currentUserId = user?.id || null;
     const userName = user?.name || 'Anonymous';
-    const userColor = getRandomColor();
+    const userColor = user?.avatar_color || getRandomColor();
     
     awareness.on('change', () => {
       const states = Array.from(awareness.getStates().entries());
-      setParticipants(states.length);
       
-      // Build participants list with names and colors
-      const participantsData = states
-        .map(([clientId, state]: [number, any]) => ({
-          clientId,
-          name: state.user?.name || 'Anonymous',
-          color: state.user?.color || '#999999',
+      // Build raw participants list with full metadata
+      const rawParticipants = states
+        .map(([cId, state]: [number, any]) => ({
+          clientId: cId,
+          userId: state.user?.userId as string | undefined,
+          name: (state.user?.name as string) || 'Anonymous',
+          color: (state.user?.color as string) || '#999999',
+          isTeacher: !!state.user?.isTeacher,
         }))
-        .filter((p) => p.name); // Remove invalid entries
+        .filter((p) => p.name);
+
+      // Deduplicate participants by userId:
+      // If the same user has multiple connections (e.g. from Ctrl+F5 or reload),
+      // keep only one, prioritizing the local active connection (ydoc.clientID).
+      const deduplicatedMap = new Map<string, typeof rawParticipants[0]>();
+      const anonymousList: typeof rawParticipants = [];
+
+      for (const p of rawParticipants) {
+        if (p.userId) {
+          const existing = deduplicatedMap.get(p.userId);
+          if (!existing) {
+            deduplicatedMap.set(p.userId, p);
+          } else if (p.clientId === ydocRef.current?.clientID) {
+            // Prioritize our own active local client ID
+            deduplicatedMap.set(p.userId, p);
+          }
+        } else {
+          anonymousList.push(p);
+        }
+      }
+
+      const deduplicatedParticipants = [
+        ...Array.from(deduplicatedMap.values()),
+        ...anonymousList,
+      ];
+
+      setParticipants(deduplicatedParticipants.length);
+      setParticipantsList(deduplicatedParticipants);
       
-      setParticipantsList(participantsData);
-      
-      // ✅ NUEVO: Reintentar cargar objetos si clientID ahora está disponible
+      // Reintentar cargar objetos si clientID ahora está disponible
       if (ydocRef.current?.clientID && yCanvasRef.current) {
         loadFromYjs();
       }
     });
 
-    // Set local awareness state with user info
+    // Set local awareness state with user info including userId and role
     awareness.setLocalStateField('user', {
+      userId: currentUserId,
       name: userName,
       color: userColor,
       clientId: ydoc.clientID,
+      isTeacher,
     });
 
-    // ✅ NUEVO: Mapa compartido para permisos de sesión
+    // ✅ Mapa compartido para permisos de sesión
     const ySessionPermissions = ydoc.getMap('sessionPermissions');
     
-    // ✅ NUEVO: Mapa compartido para sincronizar viewport (pan/zoom)
+    // ✅ Mapa compartido para sincronizar viewport (pan/zoom)
     const yViewport = ydoc.getMap('viewport');
     
     // Listener para cambios en permisos (para estudiantes)
@@ -163,11 +198,12 @@ export function useYjs(
       if (allowDraw !== undefined && !isTeacher && canvas) {
         console.log('🔄 Permissions updated from server:', allowDraw);
         
-        // ✅ NUEVO: Re-aplicar permisos a todos los objetos
+        // Re-aplicar permisos a todos los objetos
         const myClientId = ydocRef.current?.clientID;
         canvas.forEachObject((obj: any) => {
           const createdBy = obj.createdBy;
-          const isOwner = createdBy === myClientId;
+          const creatorUserId = obj.creatorUserId;
+          const isOwner = (creatorUserId && currentUserId && creatorUserId === currentUserId) || (createdBy === myClientId);
           
           // Si allowDraw es true, desbloquear objetos propios
           // Si allowDraw es false, bloquear todo
@@ -176,6 +212,7 @@ export function useYjs(
           console.log('🔓 Updating object permissions:', {
             objectId: obj.id,
             createdBy,
+            creatorUserId,
             isOwner,
             allowDraw,
             shouldLock
@@ -200,7 +237,6 @@ export function useYjs(
         
         canvas.renderAll();
         
-        // ✅ NUEVO: Notificar al componente padre
         if (onPermissionsChangeRef.current) {
           onPermissionsChangeRef.current(!!allowDraw);
         }
@@ -209,7 +245,7 @@ export function useYjs(
     
     ySessionPermissions.observe(handlePermissionsChange);
 
-    // ✅ NUEVO: Sincronización de viewport RELATIVA (pan/zoom)
+    // Sincronización de viewport RELATIVA (pan/zoom)
     let isApplyingViewport = false;
     
     // Listener para cambios de viewport (estudiantes siguen área del profe)
@@ -248,45 +284,51 @@ export function useYjs(
     // Broadcast del área visible (solo profesor)
     let viewportBroadcastTimeout: number | null = null;
     
-    const broadcastViewportArea = () => {
-      if (!isTeacher || !canvas || isApplyingViewport) return;
+    const broadcastViewport = () => {
+      if (!isTeacher || !canvas) return;
       
-      if (viewportBroadcastTimeout) clearTimeout(viewportBroadcastTimeout);
+      // Debounce para no saturar la red mientras se hace pan continuo
+      if (viewportBroadcastTimeout) {
+        clearTimeout(viewportBroadcastTimeout);
+      }
       
-      viewportBroadcastTimeout = setTimeout(() => {
+      viewportBroadcastTimeout = window.setTimeout(() => {
         const vpt = canvas.viewportTransform;
-        if (vpt) {
-          const zoom = canvas.getZoom();
-          // Calcular coordenadas mundo de lo que el profesor está viendo
-          const x1 = -vpt[4] / zoom;
-          const y1 = -vpt[5] / zoom;
-          const x2 = x1 + canvas.getWidth() / zoom;
-          const y2 = y1 + canvas.getHeight() / zoom;
-          
-          yViewport.set('area', { x1, y1, x2, y2 });
-        }
-      }, 50) as unknown as number;
+        if (!vpt) return;
+        
+        const zoom = canvas.getZoom();
+        // Esquina superior izquierda del área visible en coords del lienzo
+        const x1 = -vpt[4] / zoom;
+        const y1 = -vpt[5] / zoom;
+        // Esquina inferior derecha
+        const x2 = x1 + canvas.getWidth() / zoom;
+        const y2 = y1 + canvas.getHeight() / zoom;
+        
+        console.log('📡 Broadcasting teacher viewport area:', { x1, y1, x2, y2 });
+        yViewport.set('area', { x1, y1, x2, y2 });
+      }, 50); // 50ms debounce
     };
     
+    // Escuchar eventos de pan y zoom solo si es profesor
     if (isTeacher) {
-      canvas.on('mouse:wheel', broadcastViewportArea);
-      canvas.on('mouse:move', () => {
-        if ((canvas as any)._isPanning) broadcastViewportArea();
+      canvas.on('mouse:wheel', broadcastViewport);
+      canvas.on('mouse:move', (opt) => {
+        // Solo broadcast si está arrastrando con Espacio o botón central
+        if (opt.e && ((opt.e as any).buttons === 4 || (canvas as any).isDragging)) {
+          broadcastViewport();
+        }
       });
-      canvas.on('mouse:up', broadcastViewportArea);
-      
-      // Broadcast inicial
-      broadcastViewportArea();
+      // Broadcast inicial para sincronizar a los estudiantes que ya están
+      setTimeout(broadcastViewport, 500);
     }
 
     /**
-     * Load existing objects from Yjs to Fabric canvas
-     * Called on initial sync
+     * Fabric ← Yjs: Load all objects from Yjs to canvas
      */
-    function loadFromYjs() {
-      if (!canvas || !yCanvas) return;
+    async function loadFromYjs() {
+      if (!canvas || !yCanvas || isRemoteChangeRef.current) return;
 
-      // ✅ NUEVO: Esperar a que clientId esté disponible
+      // Esperar a que clientId esté disponible
       if (!ydocRef.current?.clientID) {
         console.log('⏳ Waiting for clientID before loading objects...');
         return;
@@ -302,7 +344,7 @@ export function useYjs(
         }
       });
 
-      // ✅ CRÍTICO: Aplicar permisos inmediatamente después de cargar
+      // Aplicar permisos inmediatamente después de cargar
       if (isReadOnly && !isTeacher) {
         console.log('🔐 Applying read-only lock to all objects for student...');
         canvas.forEachObject((obj: any) => {
@@ -334,8 +376,7 @@ export function useYjs(
     async function addObjectToCanvas(objectData: any, objectId: string) {
       if (!canvas) return;
 
-      // ✅ PREVENCIÓN DE DUPLICADOS: Verificar si ya existe antes de procesar
-      // Esto evita que condiciones de carrera creen copias "fantasma"
+      // Prevenir duplicados
       const existingObject = canvas.getObjects().find((o: any) => o.id === objectId);
       if (existingObject) {
         console.log('⚠️ Object already exists, skipping add:', objectId);
@@ -347,39 +388,30 @@ export function useYjs(
         const objects = await fabric.util.enlivenObjects([objectData]);
         const obj = objects[0];
         
-        // Check if it's a valid FabricObject (not a gradient, filter, etc.)
+        // Check if it's a valid FabricObject
         if (obj && typeof obj === 'object' && 'type' in obj) {
-          // Set custom ID for tracking
           (obj as any).id = objectId;
           
-          // Apply read-only or ownership restrictions
-          // @ts-ignore - Fabric.js types are complex, using any for property access
           const createdBy = (obj as any).createdBy;
-          const isOwner = createdBy === ydocRef.current?.clientID;
+          const creatorUserId = (obj as any).creatorUserId;
+          const isOwner = (creatorUserId && currentUserId && creatorUserId === currentUserId) || (createdBy === ydocRef.current?.clientID);
           
-          // ✅ MODIFICADO: Lógica de bloqueo mejorada con prioridad clara
-          // PRIORIDAD 1: Si es profesor, NUNCA bloquear (puede editar todo)
-          // PRIORIDAD 2: Si isReadOnly está activo, bloquear TODO (modo view-only)
-          // PRIORIDAD 3: Si enforceOwnership está activo, bloquear objetos que no son propios
           let shouldLock = false;
           
           if (isTeacher) {
-            // Profesor: siempre puede editar
             shouldLock = false;
           } else if ((objectData as any).isLocalOwned && isOwner) {
-            // Objeto TTS local propio: siempre editable
             shouldLock = false;
           } else if (isReadOnly) {
-            // Estudiante en modo view-only: bloquear TODO
             shouldLock = true;
           } else if (enforceOwnership && !isOwner) {
-            // Estudiante con permisos pero solo puede editar lo suyo
             shouldLock = true;
           }
 
           console.log('🔐 Object permissions:', {
             objectId,
             createdBy,
+            creatorUserId,
             myClientId: ydocRef.current?.clientID,
             isOwner,
             isTeacher,
@@ -406,7 +438,6 @@ export function useYjs(
               fabricObj.selectable = false;
             }
           } else {
-            // ✅ NUEVO: Asegurar que objetos desbloqueados estén completamente editables
             const fabricObj = obj as any;
             fabricObj.selectable = true;
             fabricObj.evented = true;
@@ -425,18 +456,10 @@ export function useYjs(
             }
           }
           
-          
-          // Cast to any to avoid type issues with Fabric.js complex types
           isRemoteChangeRef.current = true;
-          
-          // CRITICAL: Ensure coordinates are calculated before adding
           (obj as any).setCoords();
-          
           canvas.add(obj as any);
-          
-          // Force render for critical updates like paths
           canvas.requestRenderAll();
-          
           isRemoteChangeRef.current = false;
           
           syncedObjectsRef.current.add(objectId);
@@ -460,8 +483,11 @@ export function useYjs(
       if (!(obj as any).createdBy && ydocRef.current) {
         (obj as any).createdBy = ydocRef.current.clientID;
       }
+      if (!(obj as any).creatorUserId && currentUserId) {
+        (obj as any).creatorUserId = currentUserId;
+      }
 
-      const objectData = (obj as any).toJSON(['id', 'createdBy', 'isLocalOwned']); // Include custom props
+      const objectData = (obj as any).toJSON(['id', 'createdBy', 'creatorUserId', 'isLocalOwned']);
       yCanvas.set(objectId, objectData);
       syncedObjectsRef.current.add(objectId);
     }
@@ -472,8 +498,7 @@ export function useYjs(
     function syncYjsToFabric(event: Y.YMapEvent<any>) {
       if (!canvas || isRemoteChangeRef.current) return;
 
-      // ✅ CRÍTICO: Ignorar eventos originados por este mismo cliente (Echo suppression)
-      // Si no filtramos esto, nuestros propios cambios vuelven y pueden causar duplicados o loops visuales
+      // Ignorar eventos originados por este mismo cliente
       if (event.transaction.origin === ydocRef.current?.clientID || event.transaction.local) {
         return;
       }
@@ -482,28 +507,22 @@ export function useYjs(
 
       event.changes.keys.forEach((change, key) => {
         if (change.action === 'add' || change.action === 'update') {
-          // Find existing object
           const existingObj = canvas.getObjects().find((o: any) => o.id === key);
           
           if (existingObj) {
-            // Update existing object
             const newData = yCanvas.get(key);
             if (newData) {
-              // ✅ CRÍTICO: Filtrar propiedades read-only de Fabric.js
-              // 'type' y 'version' son read-only y causan errores si intentamos setearlas
               const { type, version, ...updateData } = newData as any;
               existingObj.set(updateData);
               existingObj.setCoords();
             }
           } else {
-            // Add new object
             const objectData = yCanvas.get(key);
             if (objectData) {
               addObjectToCanvas(objectData, key);
             }
           }
         } else if (change.action === 'delete') {
-          // Remove deleted object
           const objToRemove = canvas.getObjects().find((o: any) => o.id === key);
           if (objToRemove) {
             canvas.remove(objToRemove);
@@ -516,14 +535,11 @@ export function useYjs(
       isRemoteChangeRef.current = false;
     }
 
-
-
-
-
-    // ✅ MEJORADO: Guardar referencias a funciones para cleanup específico
+    // Fabric Event Handlers
     const handlePathCreated = (e: any) => {
       if (e.path && ydocRef.current) {
         (e.path as any).createdBy = ydocRef.current.clientID;
+        if (currentUserId) (e.path as any).creatorUserId = currentUserId;
         console.log('✨ Path created with owner:', ydocRef.current.clientID);
       }
     };
@@ -531,17 +547,18 @@ export function useYjs(
     const handleObjectAdded = (e: any) => {
       if (e.target && !isRemoteChangeRef.current) {
         if ((e.target as any).excludeFromSync) return;
-        // Asegurar createdBy antes de sincronizar
         if (!(e.target as any).createdBy && ydocRef.current) {
           (e.target as any).createdBy = ydocRef.current.clientID;
           console.log('✨ Object ownership assigned on add:', ydocRef.current.clientID);
+        }
+        if (!(e.target as any).creatorUserId && currentUserId) {
+          (e.target as any).creatorUserId = currentUserId;
         }
         syncFabricToYjs(e.target);
       }
     };
 
     const handleObjectModified = (e: any) => {
-      // Don't sync if read-only or remote change
       if (isReadOnly || isRemoteChangeRef.current) return;
 
       if (e.target) {
@@ -551,7 +568,6 @@ export function useYjs(
     };
 
     const handleObjectRemoved = (e: any) => {
-      // Don't sync if read-only or remote change
       if (isReadOnly || isRemoteChangeRef.current) return;
 
       if (e.target && yCanvas) {
@@ -573,33 +589,50 @@ export function useYjs(
     // Listen to Yjs changes
     yCanvas.observe(syncYjsToFabric);
 
+    // Manejador para notificar salida antes de que la ventana o pestaña se destruya
+    const handleBeforeUnload = () => {
+      if (providerRef.current) {
+        try {
+          providerRef.current.awareness.setLocalState(null);
+        } catch (e) {
+          // ignore error during browser teardown
+        }
+      }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    window.addEventListener('pagehide', handleBeforeUnload);
+
     // Cleanup
     return () => {
       console.log('🔌 Disconnecting Yjs for room:', roomName);
       
-      // ✅ MEJORADO: Remove Fabric listeners específicos (no todos)
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      window.removeEventListener('pagehide', handleBeforeUnload);
+      
       canvas.off('path:created', handlePathCreated);
       canvas.off('object:added', handleObjectAdded);
       canvas.off('object:modified', handleObjectModified);
       canvas.off('object:removed', handleObjectRemoved);
       
-      // Unobserve Yjs
       yCanvas.unobserve(syncYjsToFabric);
       
-      // ✅ NUEVO: Limpiar observer de permisos
       const ySessionPermissions = ydoc.getMap('sessionPermissions');
       ySessionPermissions.unobserve(handlePermissionsChange);
       
-      // ✅ NUEVO: Limpiar observer de viewport
       yViewport.unobserve(handleViewportChange);
       
-      // ✅ NUEVO: Limpiar timeout de viewport si existe
       if (viewportBroadcastTimeout) {
         clearTimeout(viewportBroadcastTimeout);
       }
       
-      // Disconnect provider
-      provider.disconnect();
+      // Notificar a Yjs Awareness que este cliente se retiró antes de cerrar el socket
+      try {
+        provider.awareness.setLocalState(null);
+      } catch (e) {
+        // ignore
+      }
+
+      // Disconnect & destroy provider
       provider.destroy();
       
       // Clear refs
@@ -608,7 +641,7 @@ export function useYjs(
       yCanvasRef.current = null;
       syncedObjectsRef.current.clear();
     };
-  }, [roomName, canvas, enabled, isReadOnly, enforceOwnership, isTeacher]);  // ✅ MODIFICADO: Agregar isTeacher
+  }, [roomName, canvas, enabled, isReadOnly, enforceOwnership, isTeacher]);
 
   return {
     isConnected,
@@ -618,7 +651,6 @@ export function useYjs(
     ydoc: ydocRef.current,
     provider: providerRef.current,
     awareness: providerRef.current?.awareness || null,
-    // ✅ NUEVO: Función para actualizar permisos (solo profesor)
     updateSessionPermissions: (allowStudentDraw: boolean) => {
       if (ydocRef.current && isTeacher) {
         const ySessionPermissions = ydocRef.current.getMap('sessionPermissions');

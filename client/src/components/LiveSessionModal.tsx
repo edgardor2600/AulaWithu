@@ -6,7 +6,13 @@ import { ParticipantsList } from './ParticipantsList';
 interface LiveSessionModalProps {
   sessionCode: string;
   participants: number;
-  participantsList?: Array<{ clientId: number; name: string; color: string }>;
+  participantsList?: Array<{
+    clientId: number;
+    userId?: string;
+    name: string;
+    color: string;
+    isTeacher?: boolean;
+  }>;
   currentClientId?: number;
   allowStudentDraw: boolean;
   onTogglePermissions: (allow: boolean) => void;

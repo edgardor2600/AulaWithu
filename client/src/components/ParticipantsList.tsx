@@ -2,8 +2,10 @@ import { Users } from 'lucide-react';
 
 interface Participant {
   clientId: number;
+  userId?: string;
   name: string;
   color: string;
+  isTeacher?: boolean;
 }
 
 interface ParticipantsListProps {
@@ -12,7 +14,25 @@ interface ParticipantsListProps {
 }
 
 export const ParticipantsList = ({ participants, currentUserId }: ParticipantsListProps) => {
-  if (participants.length === 0) {
+  // Defensive deduplication: ensure no duplicate userId or clientId is rendered
+  const uniqueParticipants: Participant[] = [];
+  const seenUserIds = new Set<string>();
+  const seenClientIds = new Set<number>();
+
+  for (const p of participants) {
+    if (p.userId) {
+      if (!seenUserIds.has(p.userId)) {
+        seenUserIds.add(p.userId);
+        seenClientIds.add(p.clientId);
+        uniqueParticipants.push(p);
+      }
+    } else if (!seenClientIds.has(p.clientId)) {
+      seenClientIds.add(p.clientId);
+      uniqueParticipants.push(p);
+    }
+  }
+
+  if (uniqueParticipants.length === 0) {
     return null;
   }
 
@@ -21,12 +41,12 @@ export const ParticipantsList = ({ participants, currentUserId }: ParticipantsLi
       <div className="flex items-center space-x-2 mb-3">
         <Users className="w-5 h-5 text-gray-700" />
         <h3 className="font-semibold text-gray-900">
-          Connected ({participants.length})
+          Connected ({uniqueParticipants.length})
         </h3>
       </div>
 
       <div className="space-y-2 max-h-64 overflow-y-auto">
-        {participants.map((participant) => {
+        {uniqueParticipants.map((participant) => {
           const isCurrentUser = participant.clientId === currentUserId;
           
           return (
@@ -48,10 +68,15 @@ export const ParticipantsList = ({ participants, currentUserId }: ParticipantsLi
 
               {/* Name */}
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-gray-900 truncate">
-                  {participant.name}
+                <p className="text-sm font-medium text-gray-900 truncate flex items-center gap-1.5">
+                  <span className="truncate">{participant.name}</span>
+                  {participant.isTeacher && (
+                    <span className="text-[10px] uppercase font-semibold bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded">
+                      Teacher
+                    </span>
+                  )}
                   {isCurrentUser && (
-                    <span className="ml-2 text-xs text-blue-600 font-normal">
+                    <span className="text-xs text-blue-600 font-normal">
                       (You)
                     </span>
                   )}
