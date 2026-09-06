@@ -1,4 +1,4 @@
-import { SlidesRepository, ClassesRepository, StudentCopiesRepository, SessionsRepository } from '../db/repositories';
+import { SlidesRepository, ClassesRepository, StudentCopiesRepository, SessionsRepository, EnrollmentsRepository } from '../db/repositories';
 import { Slide } from '../types/database';
 import { NotFoundError, ForbiddenError, ValidationError } from '../utils/AppError';
 
@@ -38,12 +38,44 @@ export class SlideService {
     return slide;
   }
 
-  // Get slide by ID
-  static async getById(slideId: string): Promise<Slide> {
+  // Get slide by ID (protected by class ownership, enrollment, or active live session)
+  static async getById(slideId: string, userId?: string, userRole?: string): Promise<Slide> {
     const slide = await SlidesRepository.getById(slideId);
     if (!slide) {
       throw new NotFoundError('Slide');
     }
+
+    // Role-based read access control
+    if (userId && userRole && userRole !== 'admin') {
+      const classData = await ClassesRepository.getById(slide.class_id);
+      if (!classData) {
+        throw new NotFoundError('Class');
+      }
+
+      if (userRole === 'teacher') {
+        if (classData.teacher_id !== userId) {
+          throw new ForbiddenError('You do not have permission to view this slide');
+        }
+      } else if (userRole === 'student') {
+        const studentClasses = await EnrollmentsRepository.getStudentClasses(userId);
+        const isEnrolled = studentClasses.includes(slide.class_id);
+
+        if (!isEnrolled) {
+          // Permiso para live session activa:
+          const activeSession = await SessionsRepository.getActiveBySlide(slideId);
+          if (!activeSession) {
+            throw new ForbiddenError('You do not have permission to view this slide');
+          }
+          if (activeSession.group_id) {
+            const isGroupEnrolled = await EnrollmentsRepository.isEnrolled(activeSession.group_id, userId);
+            if (!isGroupEnrolled) {
+              throw new ForbiddenError('You are not enrolled in the group for this live session');
+            }
+          }
+        }
+      }
+    }
+
     return slide;
   }
 

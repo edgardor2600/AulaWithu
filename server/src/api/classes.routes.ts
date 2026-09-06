@@ -124,8 +124,10 @@ router.get(
   validate,
   asyncHandler(async (req: any, res: any) => {
     const { id } = req.params;
+    const userId = req.user.userId;
+    const userRole = req.user.role;
 
-    const classData = await ClassService.getById(id);
+    const classData = await ClassService.getById(id, userId, userRole);
 
     res.status(200).json({
       success: true,

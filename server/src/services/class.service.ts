@@ -35,12 +35,27 @@ export class ClassService {
     return newClass;
   }
 
-  // Get class by ID with slides
-  static async getById(classId: string): Promise<any> {
+  // Get class by ID with slides (protected by ownership and enrollment)
+  static async getById(classId: string, userId?: string, userRole?: string): Promise<any> {
     const classData = await ClassesRepository.getById(classId);
 
     if (!classData) {
       throw new NotFoundError('Class');
+    }
+
+    // Role-based read access control
+    if (userId && userRole && userRole !== 'admin') {
+      if (userRole === 'teacher') {
+        if (classData.teacher_id !== userId) {
+          throw new ForbiddenError('You do not have permission to view this class');
+        }
+      } else if (userRole === 'student') {
+        const studentClasses = await EnrollmentsRepository.getStudentClasses(userId);
+        const isEnrolled = studentClasses.includes(classId);
+        if (!isEnrolled) {
+          throw new ForbiddenError('You are not enrolled in this class');
+        }
+      }
     }
 
     // Get slides for this class
