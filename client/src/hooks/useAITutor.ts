@@ -1,5 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import * as fabric from 'fabric';
+import * as Y from 'yjs';
 import api from '../services/api';
 import toast from 'react-hot-toast';
 import { slideService } from '../services/slideService';
@@ -464,6 +465,16 @@ function savePersistedTutorState(cacheKey: string, state: PersistentTutorState) 
   }
 }
 
+export interface AITutorSubmission {
+  clientId: string;
+  studentName: string;
+  phaseIndex: number;
+  answer: string;
+  score?: number;
+  feedback?: string;
+  timestamp: number;
+}
+
 export interface UseAITutorOptions {
   canvasOrGetter?: fabric.Canvas | null | (() => fabric.Canvas | null);
   saveHistory?: () => void;
@@ -474,6 +485,8 @@ export interface UseAITutorOptions {
   onReloadSlides?: () => Promise<void>;
   totalSlides?: number;
   currentSlideInitialData?: string | null;
+  isTeacher?: boolean;
+  ydoc?: Y.Doc | null;
 }
 
 export function useAITutor(
@@ -489,6 +502,8 @@ export function useAITutor(
   let onReloadSlides: (() => Promise<void>) | undefined = undefined;
   let totalSlides: number | undefined = undefined; // ✅ NUEVO: para navegación correcta
   let currentSlideInitialData: string | null | undefined = undefined;
+  let isTeacher = false;
+  let ydoc: Y.Doc | null = null;
 
   if (canvasOrGetterOrOptions && typeof canvasOrGetterOrOptions === 'object' && !('renderAll' in canvasOrGetterOrOptions)) {
     const opts = canvasOrGetterOrOptions as UseAITutorOptions;
@@ -501,6 +516,8 @@ export function useAITutor(
     onReloadSlides = opts.onReloadSlides;
     totalSlides = opts.totalSlides;
     currentSlideInitialData = opts.currentSlideInitialData;
+    isTeacher = Boolean(opts.isTeacher ?? false);
+    ydoc = opts.ydoc ?? null;
   } else {
     canvasOrGetter = canvasOrGetterOrOptions as any;
     saveHistory = legacySaveHistory ?? (() => {});
@@ -532,6 +549,70 @@ export function useAITutor(
 
   // Active slide phase metadata from current slide (persists directly in canvas JSON)
   const [activeSlidePhaseData, setActiveSlidePhaseData] = useState<ActiveSlidePhaseData | null>(null);
+
+  // Student participation & live responses
+  const [isAnsweringAllowed, setIsAnsweringAllowed] = useState(false);
+  const [showStudentWidget, setShowStudentWidget] = useState(false);
+  const [submissions, setSubmissions] = useState<AITutorSubmission[]>([]);
+
+  const yAITutorStateRef = useRef<Y.Map<any> | null>(null);
+  const yAITutorSubmissionsRef = useRef<Y.Map<any> | null>(null);
+
+  // Yjs real-time synchronization for AI Tutor
+  useEffect(() => {
+    if (!ydoc) return;
+
+    const yAITutorState = ydoc.getMap('aiTutorState');
+    const yAITutorSubmissions = ydoc.getMap('aiTutorSubmissions');
+    yAITutorStateRef.current = yAITutorState;
+    yAITutorSubmissionsRef.current = yAITutorSubmissions;
+
+    const handleStateUpdate = () => {
+      const allowed = Boolean(yAITutorState.get('isAnsweringAllowed'));
+      setIsAnsweringAllowed(allowed);
+
+      const remotePhase = yAITutorState.get('currentPhaseIndex') as number | undefined;
+      if (!isTeacher && remotePhase !== undefined) {
+        setCurrentPhaseIndex(prev => {
+          if (prev !== remotePhase) {
+            setStudentInput('');
+            setLastFeedback('');
+            setLastScore(null);
+            return remotePhase;
+          }
+          return prev;
+        });
+      }
+
+      const remoteScript = yAITutorState.get('script') as LessonScript | undefined;
+      if (!isTeacher && remoteScript) {
+        setScriptRaw(remoteScript);
+      }
+    };
+
+    const handleSubmissionsUpdate = () => {
+      const list: AITutorSubmission[] = [];
+      yAITutorSubmissions.forEach((rawVal: unknown) => {
+        const val = rawVal as AITutorSubmission;
+        if (val && val.phaseIndex === currentPhaseIndex) {
+          list.push(val);
+        }
+      });
+      list.sort((a, b) => b.timestamp - a.timestamp);
+      setSubmissions(list);
+    };
+
+    yAITutorState.observe(handleStateUpdate);
+    yAITutorSubmissions.observe(handleSubmissionsUpdate);
+
+    handleStateUpdate();
+    handleSubmissionsUpdate();
+
+    return () => {
+      yAITutorState.unobserve(handleStateUpdate);
+      yAITutorSubmissions.unobserve(handleSubmissionsUpdate);
+    };
+  }, [ydoc, isTeacher, currentPhaseIndex]);
 
   // Parse slide metadata whenever currentSlideInitialData changes
   useEffect(() => {
@@ -899,6 +980,10 @@ export function useAITutor(
    * Used by the "Limpiar" button in AITutorPanel
    */
   const clearCurrentSlide = useCallback(() => {
+    if (!isTeacher) {
+      toast.error('Solo el profesor puede limpiar la diapositiva');
+      return;
+    }
     const cv = getCanvas();
     if (!cv) {
       toast.error('Pizarra no disponible');
@@ -908,12 +993,16 @@ export function useAITutor(
     cv.renderAll();
     saveHistory();
     toast.success('Diapositiva limpiada');
-  }, [getCanvas, saveHistory]);
+  }, [isTeacher, getCanvas, saveHistory]);
 
   /**
    * Draws the specified phase content onto the whiteboard canvas cleanly using the professional slide design
    */
   const drawCurrentPhaseToBoard = useCallback(async (targetPhaseIndex?: number) => {
+    if (!isTeacher) {
+      toast.error('Solo el profesor puede proyectar en la pizarra');
+      return;
+    }
     const cv = getCanvas();
     if (!cv) {
       toast.error('Pizarra no disponible');
@@ -993,6 +1082,10 @@ export function useAITutor(
   // ─── Convert Lesson To Individual Slides ───────────────────────────────────
 
   const convertLessonToSlides = useCallback(async (targetClassId?: string, targetTopicId?: string, reloadCb?: () => Promise<void>) => {
+    if (!isTeacher) {
+      toast.error('Solo el profesor puede crear diapositivas');
+      return;
+    }
     const cId = targetClassId || classId;
     const tId = targetTopicId || topicId;
     const reload = reloadCb || onReloadSlides;
@@ -1015,11 +1108,15 @@ export function useAITutor(
     } finally {
       setIsConvertingSlides(false);
     }
-  }, [script, classId, topicId, onReloadSlides, _createSlidesForScript]);
+  }, [isTeacher, script, classId, topicId, onReloadSlides, _createSlidesForScript]);
 
   // ─── Generate Lesson ──────────────────────────────────────────────────────
 
   const generateLesson = useCallback(async () => {
+    if (!isTeacher) {
+      toast.error('Solo el profesor puede diseñar lecciones');
+      return;
+    }
     if (!topic.trim()) { toast.error('Ingresa el tema de la lección'); return; }
     // P-09: isGenerating cubre TODA la operación (generación + creación de slides)
     // No hay ventana de doble-click entre el toast de éxito y la creación.
@@ -1043,6 +1140,15 @@ export function useAITutor(
         setActiveTab('runtime');
         toast.success(`Lección generada (${res.data.provider})`);
 
+        const yState = yAITutorStateRef.current;
+        if (yState) {
+          ydoc?.transact(() => {
+            yState.set('script', genScript);
+            yState.set('currentPhaseIndex', 0);
+            yState.set('isAnsweringAllowed', false);
+          });
+        }
+
         // P-10: Reutilizar el helper compartido en lugar del bloque duplicado
         if (classId && genScript.phases?.length > 0) {
           try {
@@ -1061,11 +1167,15 @@ export function useAITutor(
       // P-09: Solo liberar el bloqueo cuando TODO ha terminado
       setIsGenerating(false);
     }
-  }, [topic, level, subject, context, mode, classId, topicId, onReloadSlides, setActiveTab, _createSlidesForScript]);
+  }, [isTeacher, topic, level, subject, context, mode, classId, topicId, onReloadSlides, setActiveTab, _createSlidesForScript, ydoc]);
 
   // ─── Generate Practice ────────────────────────────────────────────────────
 
   const generatePractice = useCallback(async () => {
+    if (!isTeacher) {
+      toast.error('Solo el profesor puede generar prácticas');
+      return;
+    }
     if (!topic.trim()) { toast.error('Ingresa el tema'); return; }
     setIsGenerating(true);
     try {
@@ -1097,6 +1207,15 @@ export function useAITutor(
         setActiveTab('runtime');
         toast.success('Ejercicios de práctica generados');
 
+        const yState = yAITutorStateRef.current;
+        if (yState) {
+          ydoc?.transact(() => {
+            yState.set('script', practiceScript);
+            yState.set('currentPhaseIndex', 0);
+            yState.set('isAnsweringAllowed', false);
+          });
+        }
+
         if (classId) {
           try {
             const newSlide = await slideService.create(classId, {
@@ -1116,11 +1235,12 @@ export function useAITutor(
     } finally {
       setIsGenerating(false);
     }
-  }, [topic, level, subject, classId, topicId, onReloadSlides]);
+  }, [isTeacher, topic, level, subject, classId, topicId, onReloadSlides, ydoc]);
 
   // ─── Slide & Phase Navigation ("Siguiente" / "Anterior") ───────────────────
 
   const nextPhase = useCallback(() => {
+    if (!isTeacher) return;
     if (!script) return;
     const maxIdx = script.phases.length - 1;
     if (currentPhaseIndex >= maxIdx) return;
@@ -1131,15 +1251,24 @@ export function useAITutor(
     setLastScore(null);
     stopSpeech();
 
+    const yState = yAITutorStateRef.current;
+    if (yState) {
+      ydoc?.transact(() => {
+        yState.set('currentPhaseIndex', next);
+        yState.set('isAnsweringAllowed', false);
+      });
+    }
+
     // If presentation slide navigation is available, navigate to that slide!
     if (onSlideChange) {
       onSlideChange(next);
     } else {
       drawCurrentPhaseToBoard(next);
     }
-  }, [script, currentPhaseIndex, stopSpeech, onSlideChange, drawCurrentPhaseToBoard]);
+  }, [isTeacher, script, currentPhaseIndex, stopSpeech, onSlideChange, drawCurrentPhaseToBoard, ydoc]);
 
   const prevPhase = useCallback(() => {
+    if (!isTeacher) return;
     if (currentPhaseIndex <= 0) return;
     const prev = currentPhaseIndex - 1;
     setCurrentPhaseIndex(prev);
@@ -1148,13 +1277,21 @@ export function useAITutor(
     setLastScore(null);
     stopSpeech();
 
+    const yState = yAITutorStateRef.current;
+    if (yState) {
+      ydoc?.transact(() => {
+        yState.set('currentPhaseIndex', prev);
+        yState.set('isAnsweringAllowed', false);
+      });
+    }
+
     // If presentation slide navigation is available, navigate to that slide!
     if (onSlideChange) {
       onSlideChange(prev);
     } else {
       drawCurrentPhaseToBoard(prev);
     }
-  }, [currentPhaseIndex, stopSpeech, onSlideChange, drawCurrentPhaseToBoard]);
+  }, [isTeacher, currentPhaseIndex, stopSpeech, onSlideChange, drawCurrentPhaseToBoard, ydoc]);
 
   // ─── Evaluate Answer (P-05: persiste en BD de forma fire-and-forget) ────────
 
@@ -1265,6 +1402,10 @@ export function useAITutor(
   }, []);
 
   const saveToLibrary = useCallback(async () => {
+    if (!isTeacher) {
+      toast.error('Solo el profesor puede guardar lecciones');
+      return;
+    }
     if (!script) { toast.error('No hay lección activa para guardar'); return; }
     try {
       const contentId = `tutor_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
@@ -1285,9 +1426,13 @@ export function useAITutor(
     } catch (err: any) {
       toast.error('Error al guardar la lección');
     }
-  }, [script, mode, subject, level, context, loadLibrary]);
+  }, [isTeacher, script, mode, subject, level, context, loadLibrary]);
 
   const loadFromLibrary = useCallback(async (contentId: string) => {
+    if (!isTeacher) {
+      toast.error('Solo el profesor puede cargar lecciones');
+      return;
+    }
     try {
       const res = await api.get(`/tutor/materials/${contentId}`);
       if (res.data?.ok && res.data?.material?.script_json) {
@@ -1304,13 +1449,26 @@ export function useAITutor(
         setLastScore(null);
         setActiveTab('runtime');
         toast.success(`Lección cargada: ${mat.title}`);
+
+        const yState = yAITutorStateRef.current;
+        if (yState) {
+          ydoc?.transact(() => {
+            yState.set('script', mat.script_json);
+            yState.set('currentPhaseIndex', 0);
+            yState.set('isAnsweringAllowed', false);
+          });
+        }
       }
     } catch (err: any) {
       toast.error('Error al cargar la lección');
     }
-  }, []);
+  }, [isTeacher, ydoc]);
 
   const deleteMaterial = useCallback(async (contentId: string) => {
+    if (!isTeacher) {
+      toast.error('Solo el profesor puede eliminar lecciones');
+      return;
+    }
     try {
       await api.delete(`/tutor/materials/${contentId}`);
       setSavedMaterials(prev => prev.filter(m => m.content_id !== contentId));
@@ -1318,7 +1476,81 @@ export function useAITutor(
     } catch (err: any) {
       toast.error('Error al eliminar el material');
     }
-  }, []);
+  }, [isTeacher]);
+
+  // Teacher toggle student response permissions
+  const toggleAnsweringAllowed = useCallback((allowed?: boolean) => {
+    if (!isTeacher) {
+      toast.error('Solo el profesor puede habilitar o bloquear respuestas');
+      return;
+    }
+    const next = allowed !== undefined ? allowed : !isAnsweringAllowed;
+    setIsAnsweringAllowed(next);
+    const yState = yAITutorStateRef.current;
+    if (yState) {
+      ydoc?.transact(() => {
+        yState.set('isAnsweringAllowed', next);
+      });
+    }
+    toast(next ? '🔓 Respuestas de alumnos abiertas' : '🔒 Respuestas de alumnos bloqueadas', {
+      icon: next ? '🔓' : '🔒',
+    });
+  }, [isTeacher, isAnsweringAllowed, ydoc]);
+
+  // Student answer submission with evaluation and live sync to teacher
+  const submitStudentAnswer = useCallback(async (
+    answer: string,
+    studentName: string,
+    clientId: string
+  ): Promise<{ score: number; feedback: string } | null> => {
+    if (!answer.trim()) {
+      toast.error('Escribe o dicta tu respuesta primero');
+      return null;
+    }
+    const phase = script?.phases[currentPhaseIndex] || activeSlidePhaseData;
+    setIsEvaluating(true);
+    try {
+      const res = await api.post('/tutor/evaluate-answer', {
+        question: phase?.student_task || phase?.objective || 'Ejercicio guiado',
+        expected_answer: (phase as any)?.expected_answer || '',
+        student_answer: answer.trim(),
+        subject,
+        level,
+      });
+      if (res.data?.ok) {
+        const score = res.data.score;
+        const feedback = res.data.feedback;
+        setLastScore(score);
+        setLastFeedback(feedback);
+        toast.success(`Evaluación recibida: ${score}/100`);
+
+        // Record in Yjs so teacher sees it live
+        const ySubs = yAITutorSubmissionsRef.current;
+        if (ySubs && clientId) {
+          ydoc?.transact(() => {
+            const record: AITutorSubmission = {
+              clientId,
+              studentName: studentName || 'Alumno',
+              phaseIndex: currentPhaseIndex,
+              answer: answer.trim(),
+              score,
+              feedback,
+              timestamp: Date.now(),
+            };
+            ySubs.set(`${clientId}_phase_${currentPhaseIndex}`, record);
+          });
+        }
+        return { score, feedback };
+      }
+      return null;
+    } catch (err: any) {
+      console.error('[useAITutor] submitStudentAnswer error:', err);
+      toast.error('Error al evaluar la respuesta');
+      return null;
+    } finally {
+      setIsEvaluating(false);
+    }
+  }, [script, activeSlidePhaseData, currentPhaseIndex, subject, level, ydoc]);
 
   // Load library when panel opens on library tab
   useEffect(() => {
@@ -1340,6 +1572,15 @@ export function useAITutor(
   }, []); // Solo al unmount — las refs no son dependencias reactivas
 
   return {
+    // Role & Sync
+    isTeacher,
+    isAnsweringAllowed,
+    toggleAnsweringAllowed,
+    submissions,
+    submitStudentAnswer,
+    showStudentWidget,
+    setShowStudentWidget,
+
     // Panel state
     showAITutorPanel,
     setShowAITutorPanel,

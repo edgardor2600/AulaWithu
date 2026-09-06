@@ -11,6 +11,8 @@ interface AITutorFloatingBubbleProps {
   onOpen: () => void;
   onStopSpeech: () => void;
   onSpeak?: () => void;
+  isTeacher?: boolean;
+  isAnsweringAllowed?: boolean;
 }
 
 export const AITutorFloatingBubble: React.FC<AITutorFloatingBubbleProps> = ({
@@ -22,6 +24,8 @@ export const AITutorFloatingBubble: React.FC<AITutorFloatingBubbleProps> = ({
   onOpen,
   onStopSpeech,
   onSpeak,
+  isTeacher = false,
+  isAnsweringAllowed = false,
 }) => {
   // If panel is already open or neither script nor active slide metadata exists, do not show bubble
   if (isOpen || (!script && !activeSlidePhaseData)) return null;
@@ -36,14 +40,18 @@ export const AITutorFloatingBubble: React.FC<AITutorFloatingBubbleProps> = ({
       style={{ pointerEvents: 'auto' }}
     >
       {/* Main bubble */}
-      <div className="flex items-center gap-3 bg-[#0d1117]/95 backdrop-blur-xl border border-indigo-500/30 rounded-2xl px-3 py-2.5 shadow-[0_8px_32px_rgba(99,102,241,0.25)] max-w-[280px]">
+      <div className={`flex items-center gap-3 bg-[#0d1117]/95 backdrop-blur-xl border rounded-2xl px-3 py-2.5 max-w-[280px] transition-all duration-300 ${
+        !isTeacher && isAnsweringAllowed
+          ? 'border-emerald-500/50 shadow-[0_8px_32px_rgba(16,185,129,0.3)]'
+          : 'border-indigo-500/30 shadow-[0_8px_32px_rgba(99,102,241,0.25)]'
+      }`}>
         {/* Animated bot icon */}
         <div 
           onClick={onOpen}
           className={`relative shrink-0 w-8 h-8 rounded-xl bg-indigo-500/15 border flex items-center justify-center cursor-pointer transition-all ${
             isSpeaking ? 'border-indigo-400 shadow-[0_0_10px_rgba(99,102,241,0.4)]' : 'border-indigo-500/30 hover:bg-indigo-500/25'
           }`}
-          title="Abrir panel de AI Tutor"
+          title={isTeacher ? "Abrir panel de AI Tutor" : "Abrir tutor interactivo"}
         >
           <Bot className={`w-4 h-4 text-indigo-400 ${isSpeaking ? 'animate-pulse' : ''}`} />
           {isSpeaking && (
@@ -53,9 +61,16 @@ export const AITutorFloatingBubble: React.FC<AITutorFloatingBubbleProps> = ({
 
         {/* Phase info */}
         <div className="flex-1 min-w-0 cursor-pointer" onClick={onOpen}>
-          <p className="text-[10px] text-indigo-400/70 uppercase tracking-wider font-medium">
-            {phaseLabel}
-          </p>
+          <div className="flex items-center gap-1.5">
+            <p className="text-[10px] text-indigo-400/70 uppercase tracking-wider font-medium">
+              {phaseLabel}
+            </p>
+            {!isTeacher && isAnsweringAllowed && (
+              <span className="text-[9px] font-bold px-1.5 py-0.2 bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 rounded-full animate-pulse">
+                ¡Tu turno!
+              </span>
+            )}
+          </div>
           <p className="text-xs text-slate-300 font-semibold truncate">{phaseTitle}</p>
         </div>
 

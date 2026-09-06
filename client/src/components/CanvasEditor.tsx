@@ -58,6 +58,7 @@ import { useReadingGame } from '../hooks/useReadingGame';
 import { ReadingGamePanel } from './ReadingGamePanel';
 import { useAITutor } from '../hooks/useAITutor';
 import { AITutorPanel } from './AITutorPanel';
+import { AITutorStudentWidget } from './AITutorStudentWidget';
 import { AITutorFloatingBubble } from './AITutorFloatingBubble';
 import { useQuizGame } from '../hooks/useQuizGame';
 import { QuizCreatorModal } from './quiz/QuizCreatorModal';
@@ -308,6 +309,8 @@ export const CanvasEditor = ({
     onReloadSlides,
     totalSlides,
     currentSlideInitialData: initialData,
+    isTeacher,
+    ydoc,
   });
   const quizGame = useQuizGame(ydoc, isTeacher, effectivePresenterSessionId);
 
@@ -759,11 +762,15 @@ export const CanvasEditor = ({
     }
 
     if (tool === 'ai-tutor') {
-      aiTutor.setShowAITutorPanel(!aiTutor.showAITutorPanel);
-      if (!aiTutor.showAITutorPanel) {
-        conversation.setShowConversationPanel(false);
-        reading.setShowReadingPanel(false);
-        readingGame.setShowReadingGamePanel(false);
+      if (isTeacher) {
+        aiTutor.setShowAITutorPanel(!aiTutor.showAITutorPanel);
+        if (!aiTutor.showAITutorPanel) {
+          conversation.setShowConversationPanel(false);
+          reading.setShowReadingPanel(false);
+          readingGame.setShowReadingGamePanel(false);
+        }
+      } else {
+        aiTutor.setShowStudentWidget(!aiTutor.showStudentWidget);
       }
       setCurrentTool('select');
       syncCursorForTool('select');
@@ -2379,73 +2386,75 @@ export const CanvasEditor = ({
         </div>
       </div>
 
-      {/* Mini-Map Navigator - Fixed position (Visible only on Large screens) */}
-      <div 
-        className="hidden lg:block fixed bottom-6 bg-[#1e2128] rounded-xl shadow-[0_4px_24px_rgba(0,0,0,0.5)] border border-white/10 p-3 z-20 transition-all duration-300 ease-in-out"
-        style={{
-          right: aiTutor.showAITutorPanel ? '420px' : '24px',
-        }}
-      >
-        <div className="text-[10px] uppercase tracking-widest font-bold text-slate-400 mb-2 text-center">Navigator</div>
-        <div className="relative bg-[#13151a] rounded-lg overflow-hidden border border-white/10" style={{ width: '150px', height: '100px' }}>
-        <canvas 
-          ref={miniMapCanvasRef} 
-          width={150} 
-          height={100} 
-          className="cursor-move rounded"
-          onMouseDown={(e) => {
-            isDraggingMiniMapRef.current = true;
-            const canvas = fabricCanvasRef.current;
-            if (canvas && miniMapStateRef.current) {
-               const rect = e.currentTarget.getBoundingClientRect();
-               const { minX, minY, scale, offsetX = 0, offsetY = 0 } = miniMapStateRef.current as any;
-               
-               // Calcular posición clickeada en coords mundo
-               const x = e.clientX - rect.left - offsetX;
-               const y = e.clientY - rect.top - offsetY;
-               
-               const targetX = x / scale + minX;
-               const targetY = y / scale + minY;
-               
-               // Centrar vista ahí
-               const zoom = canvas.getZoom();
-               const vpt = canvas.viewportTransform!;
-               // vpt[4] es translate X. Formula: center_screen_x - target_world_x * zoom
-               vpt[4] = -targetX * zoom + canvas.getWidth() / 2;
-               vpt[5] = -targetY * zoom + canvas.getHeight() / 2;
-               
-               canvas.requestRenderAll();
-               updateMiniMap();
-            }
+      {/* Mini-Map Navigator - Fixed position (Visible only for Teacher on Large screens) */}
+      {isTeacher && (
+        <div 
+          className="hidden lg:block fixed bottom-6 bg-[#1e2128] rounded-xl shadow-[0_4px_24px_rgba(0,0,0,0.5)] border border-white/10 p-3 z-20 transition-all duration-300 ease-in-out"
+          style={{
+            right: aiTutor.showAITutorPanel ? '420px' : '24px',
           }}
-          onMouseMove={(e) => {
-            if (isDraggingMiniMapRef.current) {
-               const canvas = fabricCanvasRef.current;
-               if (canvas && miniMapStateRef.current) {
-                   const rect = e.currentTarget.getBoundingClientRect();
-                   const { minX, minY, scale, offsetX = 0, offsetY = 0 } = miniMapStateRef.current as any;
-                   
-                   const x = e.clientX - rect.left - offsetX;
-                   const y = e.clientY - rect.top - offsetY;
-                   
-                   const targetX = x / scale + minX;
-                   const targetY = y / scale + minY;
-                   
-                   const zoom = canvas.getZoom();
-                   const vpt = canvas.viewportTransform!;
-                   vpt[4] = -targetX * zoom + canvas.getWidth() / 2;
-                   vpt[5] = -targetY * zoom + canvas.getHeight() / 2;
-                   
-                   canvas.requestRenderAll();
-                   updateMiniMap();
-               }
-            }
-          }}
-          onMouseUp={() => isDraggingMiniMapRef.current = false}
-          onMouseLeave={() => isDraggingMiniMapRef.current = false}
-        />
+        >
+          <div className="text-[10px] uppercase tracking-widest font-bold text-slate-400 mb-2 text-center">Navigator</div>
+          <div className="relative bg-[#13151a] rounded-lg overflow-hidden border border-white/10" style={{ width: '150px', height: '100px' }}>
+            <canvas 
+              ref={miniMapCanvasRef} 
+              width={150} 
+              height={100} 
+              className="cursor-move rounded"
+              onMouseDown={(e) => {
+                isDraggingMiniMapRef.current = true;
+                const canvas = fabricCanvasRef.current;
+                if (canvas && miniMapStateRef.current) {
+                  const rect = e.currentTarget.getBoundingClientRect();
+                  const { minX, minY, scale, offsetX = 0, offsetY = 0 } = miniMapStateRef.current as any;
+                  
+                  // Calcular posición clickeada en coords mundo
+                  const x = e.clientX - rect.left - offsetX;
+                  const y = e.clientY - rect.top - offsetY;
+                  
+                  const targetX = x / scale + minX;
+                  const targetY = y / scale + minY;
+                  
+                  // Centrar vista ahí
+                  const zoom = canvas.getZoom();
+                  const vpt = canvas.viewportTransform!;
+                  // vpt[4] es translate X. Formula: center_screen_x - target_world_x * zoom
+                  vpt[4] = -targetX * zoom + canvas.getWidth() / 2;
+                  vpt[5] = -targetY * zoom + canvas.getHeight() / 2;
+                  
+                  canvas.requestRenderAll();
+                  updateMiniMap();
+                }
+              }}
+              onMouseMove={(e) => {
+                if (isDraggingMiniMapRef.current) {
+                  const canvas = fabricCanvasRef.current;
+                  if (canvas && miniMapStateRef.current) {
+                    const rect = e.currentTarget.getBoundingClientRect();
+                    const { minX, minY, scale, offsetX = 0, offsetY = 0 } = miniMapStateRef.current as any;
+                    
+                    const x = e.clientX - rect.left - offsetX;
+                    const y = e.clientY - rect.top - offsetY;
+                    
+                    const targetX = x / scale + minX;
+                    const targetY = y / scale + minY;
+                    
+                    const zoom = canvas.getZoom();
+                    const vpt = canvas.viewportTransform!;
+                    vpt[4] = -targetX * zoom + canvas.getWidth() / 2;
+                    vpt[5] = -targetY * zoom + canvas.getHeight() / 2;
+                    
+                    canvas.requestRenderAll();
+                    updateMiniMap();
+                  }
+                }
+              }}
+              onMouseUp={() => isDraggingMiniMapRef.current = false}
+              onMouseLeave={() => isDraggingMiniMapRef.current = false}
+            />
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Hidden file input for image uploads */}
       <input
@@ -2941,17 +2950,34 @@ export const CanvasEditor = ({
       {/* Reto de Velocidad de Lectura */}
       <ReadingGamePanel game={readingGame} />
 
-      {/* AI Tutor Panel */}
-      <AITutorPanel tutor={aiTutor} classId={classId} topicId={topicId} onReloadSlides={onReloadSlides} />
+      {/* AI Tutor Panel & Student Widget */}
+      {isTeacher ? (
+        <AITutorPanel tutor={aiTutor} classId={classId} topicId={topicId} onReloadSlides={onReloadSlides} />
+      ) : (
+        <AITutorStudentWidget
+          tutor={aiTutor}
+          studentName={participantsList?.find(p => p.clientId === clientId)?.name || 'Alumno'}
+          clientId={clientId != null ? String(clientId) : 'guest'}
+        />
+      )}
       <AITutorFloatingBubble
         script={aiTutor.script}
         currentPhaseIndex={aiTutor.currentPhaseIndex}
         isSpeaking={aiTutor.isSpeaking}
         activeSlidePhaseData={aiTutor.activeSlidePhaseData}
-        isOpen={aiTutor.showAITutorPanel}
-        onOpen={() => { aiTutor.setShowAITutorPanel(true); aiTutor.setActiveTab('runtime'); }}
+        isOpen={isTeacher ? aiTutor.showAITutorPanel : aiTutor.showStudentWidget}
+        onOpen={() => {
+          if (isTeacher) {
+            aiTutor.setShowAITutorPanel(true);
+            aiTutor.setActiveTab('runtime');
+          } else {
+            aiTutor.setShowStudentWidget(true);
+          }
+        }}
         onStopSpeech={aiTutor.stopSpeech}
         onSpeak={aiTutor.speakCurrentPhase}
+        isTeacher={isTeacher}
+        isAnsweringAllowed={aiTutor.isAnsweringAllowed}
       />
 
       {/* Quiz Interactivo */}
@@ -2964,7 +2990,13 @@ export const CanvasEditor = ({
           isTeacher={isTeacher}
         />
       )}
-      <QuizPodiumModal quiz={quizGame} isTeacher={isTeacher} />
+      <QuizPodiumModal
+        quiz={quizGame}
+        isTeacher={isTeacher}
+        onClose={() => {
+          if (isTeacher) quizGame.forceStopQuiz();
+        }}
+      />
     </div>
   );
 };

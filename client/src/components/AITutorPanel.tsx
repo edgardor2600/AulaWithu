@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import {
   X, Bot, Sparkles, Play, Mic, MicOff, ChevronRight,
   ChevronLeft, Volume2, VolumeX, CheckCircle2, XCircle, Camera,
-  Save, Trash2, Loader2, Zap, Layers, Eraser,
+  Save, Trash2, Loader2, Zap, Layers, Eraser, Users, Lock, Unlock,
 } from 'lucide-react';
 import type { useAITutor } from '../hooks/useAITutor';
 
@@ -491,11 +491,85 @@ export const AITutorPanel: React.FC<AITutorPanelProps> = ({ tutor, classId, topi
               </button>
             </div>
 
-            {/* Student input area */}
+            {/* Control de Participación Estudiantil (Solo Docente) */}
+            <div className="bg-slate-800/80 border border-indigo-500/30 rounded-xl p-3 space-y-2.5">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5">
+                  <Users className="w-4 h-4 text-indigo-400" />
+                  <span className="text-xs font-semibold text-slate-200">Participación en Clase</span>
+                </div>
+                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                  tutor.isAnsweringAllowed
+                    ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-300'
+                    : 'bg-amber-500/10 border-amber-500/30 text-amber-300'
+                }`}>
+                  {tutor.isAnsweringAllowed ? '🔓 Respuestas abiertas' : '🔒 Respuestas pausadas'}
+                </span>
+              </div>
+
+              <button
+                onClick={() => tutor.toggleAnsweringAllowed()}
+                className={`w-full py-2.5 px-3 rounded-xl text-xs font-semibold flex items-center justify-center gap-2 transition-all shadow-md ${
+                  tutor.isAnsweringAllowed
+                    ? 'bg-amber-600/25 hover:bg-amber-600/40 border border-amber-500/40 text-amber-200'
+                    : 'bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white shadow-emerald-600/20'
+                }`}
+              >
+                {tutor.isAnsweringAllowed ? (
+                  <>
+                    <Lock className="w-3.5 h-3.5" />
+                    Pausar Respuestas de Alumnos
+                  </>
+                ) : (
+                  <>
+                    <Unlock className="w-3.5 h-3.5" />
+                    Habilitar Respuestas para esta Fase
+                  </>
+                )}
+              </button>
+
+              {/* Submissions Monitor */}
+              <div className="pt-1">
+                <div className="flex items-center justify-between text-[11px] text-slate-400 mb-1.5">
+                  <span>Respuestas recibidas ({tutor.submissions?.length ?? 0})</span>
+                  {(tutor.submissions?.length ?? 0) > 0 && (
+                    <span className="text-indigo-400 font-medium">En vivo</span>
+                  )}
+                </div>
+                {!tutor.submissions || tutor.submissions.length === 0 ? (
+                  <p className="text-[11px] text-slate-500 italic text-center py-2 bg-slate-900/40 rounded-lg">
+                    {tutor.isAnsweringAllowed ? 'Esperando respuestas de los alumnos...' : 'Habilita las respuestas para que los alumnos puedan enviar su tarea.'}
+                  </p>
+                ) : (
+                  <div className="space-y-1.5 max-h-48 overflow-y-auto custom-scrollbar">
+                    {tutor.submissions.map((sub, idx) => (
+                      <div key={sub.clientId + idx} className="bg-slate-900/80 border border-white/10 rounded-lg p-2 text-xs">
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="font-semibold text-slate-200 truncate max-w-[160px]">{sub.studentName}</span>
+                          {sub.score !== undefined && (
+                            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                              sub.score >= 70 ? 'bg-emerald-500/20 text-emerald-300' : 'bg-red-500/20 text-red-300'
+                            }`}>
+                              {sub.score}/100
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-[11px] text-slate-300 bg-slate-950/50 p-1.5 rounded border border-white/5 whitespace-pre-wrap">{sub.answer}</p>
+                        {sub.feedback && (
+                          <p className="text-[10px] text-indigo-300/80 mt-1 italic leading-tight">💡 {sub.feedback}</p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Test input area (Docente) */}
             {(phase?.student_task || phase?.exercises?.length) && (
               <div className="space-y-2">
                 <label className="text-[11px] text-slate-400 uppercase tracking-wider font-medium block">
-                  Tu respuesta
+                  Probar Respuesta (Docente)
                 </label>
                 <textarea
                   value={tutor.studentInput}
