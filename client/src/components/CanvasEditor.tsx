@@ -24,11 +24,6 @@ import {
   FolderOpen,
   Keyboard,
   Volume2,
-  Activity,
-  Play,
-  Pause,
-  SkipBack,
-  SkipForward,
   BookOpen,
   MessageSquare,
   MonitorUp,
@@ -39,6 +34,8 @@ import {
   Bot,
 } from 'lucide-react';
 import { useReading } from '../hooks/useReading';
+import { ReadingPanel } from './ReadingPanel';
+import { ReadingStudentWidget } from './ReadingStudentWidget';
 import { useConversation } from '../hooks/useConversation';
 import { ConversationPanel } from './ConversationPanel';
 import { ConversationStudentWidget } from './ConversationStudentWidget';
@@ -289,7 +286,7 @@ export const CanvasEditor = ({
   const isDraggingMiniMapRef = useRef(false);
   const hasInitialFitRef = useRef(false);
 
-  const reading = useReading(fabricCanvasRef.current, saveHistory);
+  const reading = useReading(fabricCanvasRef.current, saveHistory, ydoc, isTeacher);
   const conversation = useConversation(fabricCanvasRef.current, saveHistory, ydoc, isTeacher);
   const globalTimer = useGlobalTimer(ydoc, isTeacher);
 
@@ -2481,307 +2478,18 @@ export const CanvasEditor = ({
         style={{ display: 'none' }}
       />
 
-      {/* Panel flotante de Reading / TTS (Figma style) */}
-      {reading.showReadingPanel && (
-        <div className="fixed top-20 right-6 z-40 w-80 bg-[#1e2128]/95 backdrop-blur-xl border border-white/10 rounded-2xl shadow-[0_20px_60px_rgba(0,0,0,0.6)] flex flex-col max-h-[75vh] transition-all duration-300">
-          {/* Cabecera */}
-          <div className="px-4 py-3 border-b border-white/8 flex items-center justify-between bg-white/5 rounded-t-2xl">
-            <div className="flex items-center gap-2">
-              <Volume2 className="w-5 h-5 text-indigo-400" />
-              <span className="font-semibold text-white text-sm">Lectura y TTS / IPA</span>
-            </div>
-            <button 
-              onClick={() => reading.setShowReadingPanel(false)}
-              className="text-slate-400 hover:text-white text-lg font-bold p-1 leading-none transition-colors"
-            >
-              ×
-            </button>
-          </div>
+      {/* Panel de Lectura / TTS / IPA — Profesor */}
+      {isTeacher && (
+        <ReadingPanel
+          reading={reading}
+          isOpen={reading.showReadingPanel}
+          onClose={() => reading.setShowReadingPanel(false)}
+        />
+      )}
 
-          {/* Contenido con scroll */}
-          <div className="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar text-xs text-slate-300">
-            
-            {/* Texto de entrada */}
-            <div>
-              <label className="block text-[11px] font-semibold text-slate-300 mb-1">Texto a fraccionar y leer:</label>
-              <textarea
-                className="w-full h-20 p-2 border border-white/10 rounded-lg focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 resize-none text-xs text-slate-100 bg-white/5 placeholder-slate-500"
-                value={reading.readingText}
-                onChange={(e) => reading.setReadingText(e.target.value)}
-                placeholder="Introduce el texto aquí..."
-              />
-            </div>
-
-            {/* Botón de Fraccionar + IPA */}
-            <button
-              onClick={reading.handleSplitAndIpa}
-              disabled={!reading.readingText.trim() || reading.readingStatus.includes('Generando')}
-              className="w-full py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg font-medium shadow-lg shadow-indigo-900/50 transition disabled:opacity-40 disabled:cursor-not-allowed text-xs flex items-center justify-center gap-1.5"
-            >
-              <Activity className="w-3.5 h-3.5" />
-              {reading.readingStatus.includes('Generando') ? 'Generando IPA...' : 'Fraccionar + IPA'}
-            </button>
-
-            {/* Configuración de Audio (Speech) */}
-            <div className="border-t border-white/8 pt-3">
-              <span className="font-bold text-slate-200 block mb-2">Configuración de voz</span>
-              
-              {/* Selector de Modo */}
-              <div className="grid grid-cols-2 gap-2 mb-3">
-                <button
-                  onClick={() => reading.setAudioMode('browser')}
-                  className={`py-1 rounded border text-center transition font-medium ${
-                    reading.audioMode === 'browser'
-                      ? 'bg-indigo-600 border-indigo-500 text-white'
-                      : 'border-white/10 hover:bg-white/10 text-slate-400'
-                  }`}
-                >
-                  Navegador
-                </button>
-                <button
-                  onClick={() => reading.setAudioMode('server')}
-                  className={`py-1 rounded border text-center transition font-medium ${
-                    reading.audioMode === 'server'
-                      ? 'bg-indigo-600 border-indigo-500 text-white'
-                      : 'border-white/10 hover:bg-white/10 text-slate-400'
-                  }`}
-                >
-                  Servidor (Edge)
-                </button>
-              </div>
-
-              {/* Lista de Voces */}
-              <div className="space-y-2.5">
-                {reading.audioMode === 'browser' ? (
-                  <div>
-                    <label className="block text-gray-600 mb-1">Voz del Navegador:</label>
-                    <select
-                      className="w-full p-1.5 border border-white/10 rounded-lg text-slate-200 text-xs bg-white/5 focus:ring-1 focus:ring-indigo-500"
-                      value={reading.voiceURI}
-                      onChange={(e) => reading.setVoiceURI(e.target.value)}
-                    >
-                      {reading.browserVoices.map((v, idx) => (
-                        <option key={`${v.voiceURI}-${idx}`} value={v.voiceURI}>
-                          {v.name} ({v.lang})
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                ) : (
-                  <div>
-                    <label className="block text-gray-600 mb-1">Voz del Servidor:</label>
-                    <select
-                      className="w-full p-1.5 border border-white/10 rounded-lg text-slate-200 text-xs bg-white/5 focus:ring-1 focus:ring-indigo-500"
-                      value={reading.edgeVoice}
-                      onChange={(e) => reading.setEdgeVoice(e.target.value)}
-                    >
-                      {reading.edgeVoices.map((v, idx) => (
-                        <option key={`${v.shortName || idx}`} value={v.shortName}>
-                          {v.name || v.friendlyName || v.shortName}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                )}
-
-                {/* Controles de velocidad (Rate / Pitch) */}
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <label className="block text-gray-600 mb-0.5">Velocidad: {reading.rate}x</label>
-                    <input
-                      type="range"
-                      min="0.5"
-                      max="2"
-                      step="0.1"
-                      value={reading.rate}
-                      onChange={(e) => reading.setRate(Number(e.target.value))}
-                      className="w-full"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-gray-600 mb-0.5">Tono: {reading.pitch}x</label>
-                    <input
-                      type="range"
-                      min="0.5"
-                      max="1.5"
-                      step="0.1"
-                      value={reading.pitch}
-                      onChange={(e) => reading.setPitch(Number(e.target.value))}
-                      className="w-full"
-                    />
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Configuración de Fonética (IPA) */}
-            <div className="border-t border-white/8 pt-3">
-              <span className="font-bold text-slate-200 block mb-2">Configuración Fonética (IPA)</span>
-              
-              <div className="space-y-2">
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <label className="block text-gray-600 mb-0.5">Idioma:</label>
-                    <select
-                      className="w-full p-1.5 border border-white/10 rounded-lg text-slate-200 text-xs bg-white/5 focus:ring-1 focus:ring-indigo-500"
-                      value={reading.ipaLang}
-                      onChange={(e) => reading.setIpaLang(e.target.value as any)}
-                    >
-                      <option value="auto">Auto</option>
-                      <option value="en">Inglés</option>
-                      <option value="es">Español</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-gray-600 mb-0.5">Acento:</label>
-                    <select
-                      className="w-full p-1.5 border border-white/10 rounded-lg text-slate-200 text-xs bg-white/5 focus:ring-1 focus:ring-indigo-500"
-                      value={reading.ipaAccent}
-                      onChange={(e) => reading.setIpaAccent(e.target.value as any)}
-                    >
-                      <option value="us">Americano</option>
-                      <option value="uk">Británico</option>
-                    </select>
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-gray-600 mb-0.5">Motor IPA:</label>
-                  <select
-                    className="w-full p-1.5 border border-white/10 rounded-lg text-slate-200 text-xs bg-white/5 focus:ring-1 focus:ring-indigo-500"
-                    value={reading.ipaEngine}
-                    onChange={(e) => reading.setIpaEngine(e.target.value as any)}
-                  >
-                    <option value="local">Gruut (Local)</option>
-                    <option value="ai">AI (Gemini)</option>
-                  </select>
-                </div>
-
-                {reading.ipaEngine === 'ai' && (
-                  <div className="space-y-2 bg-white/5 p-2 rounded-lg border border-white/10">
-                    <div>
-                      <label className="block text-gray-600 mb-0.5">Proveedor API:</label>
-                      <select
-                        className="w-full p-1.5 border border-white/10 rounded-lg text-slate-200 text-xs bg-white/5 focus:ring-1 focus:ring-indigo-500"
-                        value={reading.ipaProvider}
-                        onChange={(e) => reading.setIpaProvider(e.target.value)}
-                      >
-                        <option value="gemini">Gemini</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-gray-600 mb-0.5">API Key:</label>
-                      <input
-                        type="password"
-                        className="w-full p-1.5 border border-white/10 rounded-lg text-xs text-slate-200 bg-white/5 focus:ring-1 focus:ring-indigo-500"
-                        placeholder="Ingresa API Key..."
-                        value={reading.ipaApiKey}
-                        onChange={(e) => reading.setIpaApiKey(e.target.value)}
-                      />
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Status Bar */}
-            <div className="bg-black/30 border border-white/8 rounded-lg p-2 text-center text-[10px] text-slate-400 font-mono">
-              {reading.readingStatus}
-            </div>
-
-            {/* ✅ Segmentos generados con IPA */}
-            {reading.readingSegments.length > 0 && (
-              <div className="border-t border-white/8 pt-3">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="font-bold text-slate-200 text-[11px]">Frases generadas</span>
-                  <span className="text-[10px] text-slate-500">{reading.readingSegments.length} segmento(s)</span>
-                </div>
-                <div className="space-y-1.5 max-h-48 overflow-y-auto custom-scrollbar pr-0.5">
-                  {reading.readingSegments.map((seg, idx) => (
-                    <div
-                      key={seg.id}
-                      onClick={() => reading.playSegment(idx)}
-                      className={`cursor-pointer rounded-lg px-2.5 py-2 border transition-all select-none ${
-                        idx === reading.currentSegmentIndex
-                          ? 'bg-indigo-600/20 border-indigo-500/50 shadow-sm'
-                          : 'bg-white/5 border-white/10 hover:border-indigo-500/40 hover:bg-indigo-600/10'
-                      }`}
-                    >
-                      <p className={`text-[11px] font-semibold leading-snug ${
-                        idx === reading.currentSegmentIndex ? 'text-indigo-200' : 'text-slate-200'
-                      }`}>
-                        {seg.text}
-                      </p>
-                      {seg.ipa && (
-                        <p className={`text-[10px] italic mt-0.5 font-mono leading-snug ${
-                          idx === reading.currentSegmentIndex ? 'text-indigo-400' : 'text-violet-400'
-                        }`}>
-                          /{seg.ipa}/
-                        </p>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Panel de control de reproducción */}
-          {reading.readingSegments.length > 0 && (
-            <div className="p-3 border-t border-white/8 bg-black/20 rounded-b-2xl space-y-2">
-              <div className="flex items-center justify-between text-xs text-slate-400 mb-1">
-                <span>Segmento {reading.currentSegmentIndex + 1} de {reading.readingSegments.length}</span>
-              </div>
-              
-              {/* Botones de reproducción */}
-              <div className="flex items-center justify-center gap-2">
-                <button
-                  onClick={() => {
-                    const prevIdx = Math.max(0, reading.currentSegmentIndex - 1);
-                    reading.playSegment(prevIdx);
-                  }}
-                  disabled={reading.currentSegmentIndex <= 0}
-                  className="p-2 bg-white/8 border border-white/10 hover:bg-white/15 rounded-lg transition text-slate-300 disabled:opacity-40"
-                  title="Anterior"
-                >
-                  <SkipBack className="w-3.5 h-3.5" />
-                </button>
-
-                <button
-                  onClick={reading.togglePlayPause}
-                  className="p-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-full transition shadow-lg shadow-indigo-900/50"
-                  title={reading.isPlaying ? 'Pausar' : 'Reproducir'}
-                >
-                  {reading.isPlaying ? (
-                    <Pause className="w-4 h-4 fill-white" />
-                  ) : (
-                    <Play className="w-4 h-4 fill-white translate-x-0.5" />
-                  )}
-                </button>
-
-                <button
-                  onClick={reading.stopReading}
-                  className="p-2 bg-white/8 border border-white/10 hover:bg-red-900/20 rounded-lg transition text-red-400"
-                  title="Detener"
-                >
-                  <Volume2 className="w-3.5 h-3.5 text-red-600" />
-                </button>
-
-                <button
-                  onClick={() => {
-                    const nextIdx = Math.min(reading.readingSegments.length - 1, reading.currentSegmentIndex + 1);
-                    reading.playSegment(nextIdx);
-                  }}
-                  disabled={reading.currentSegmentIndex >= reading.readingSegments.length - 1}
-                  className="p-2 bg-white/8 border border-white/10 hover:bg-white/15 rounded-lg transition text-slate-300 disabled:opacity-40"
-                  title="Siguiente"
-                >
-                  <SkipForward className="w-3.5 h-3.5" />
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
+      {/* Widget de Lectura Sincronizada — Alumno (Espectador en tiempo real vía Yjs) */}
+      {!isTeacher && (
+        <ReadingStudentWidget reading={reading} />
       )}
 
       {/* Conversation Panel — Teacher only (full controls) */}
@@ -2955,17 +2663,9 @@ export const CanvasEditor = ({
       {/* Reto de Velocidad de Lectura — Panel completo para profesor */}
       {isTeacher && <ReadingGamePanel game={readingGame} />}
 
-      {/* Reading Game Spectator Panel — Alumno sigue la sesión en tiempo real vía Yjs */}
+      {/* Reading Game Spectator / Student Panel — Alumno participa en tiempo real vía Yjs */}
       {!isTeacher && (
-        <ReadingGameSpectatorPanel
-          phase={readingGame.remotePhase}
-          storyTitle={readingGame.remoteStoryTitle}
-          storyText={readingGame.remoteStoryText}
-          activeWordIndex={readingGame.remoteActiveWordIndex}
-          countdown={readingGame.remoteCountdown}
-          liveWords={readingGame.remoteLiveWords}
-          lastEvaluation={readingGame.remoteLastEvaluation}
-        />
+        <ReadingGameSpectatorPanel game={readingGame} />
       )}
 
       {/* AI Tutor Panel & Student Widget */}

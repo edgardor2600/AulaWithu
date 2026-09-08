@@ -135,18 +135,15 @@ export function useReadingGame(
   const yjsBroadcastTimerRef = useRef<any>(null);
 
   // Student spectator state (populated from Yjs when isTeacher === false)
-  const [remotePhase, setRemotePhase] = useState<'idle' | 'countdown' | 'reading' | 'evaluating' | 'results'>('idle');
+  const [remotePhase, setRemotePhase] = useState<'idle' | 'waiting_student' | 'countdown' | 'reading' | 'evaluating' | 'results'>('idle');
   const [remoteStoryText, setRemoteStoryText] = useState('');
   const [remoteStoryTitle, setRemoteStoryTitle] = useState('');
+  const [remoteLevel, setRemoteLevel] = useState('A2');
+  const [remoteWpm, setRemoteWpm] = useState(100);
   const [remoteActiveWordIndex, setRemoteActiveWordIndex] = useState(0);
   const [remoteCountdown, setRemoteCountdown] = useState<number | null>(null);
   const [remoteLiveWords, setRemoteLiveWords] = useState<{ text: string; result?: 'ok' | 'bad' }[]>([]);
-  const [remoteLastEvaluation, setRemoteLastEvaluation] = useState<{
-    overall_score: number;
-    pronunciation_score: number;
-    feedback: string;
-    transcript: string;
-  } | null>(null);
+  const [remoteLastEvaluation, setRemoteLastEvaluation] = useState<ReadingEvaluation | null>(null);
 
   // ─── Helpers ───────────────────────────────────────────────────────────────
 
@@ -158,19 +155,19 @@ export function useReadingGame(
 
   /**
    * broadcastReadingYjs — debounced helper to write game state to Yjs.
-   * Batches rapid word-advance ticks (max once per 200ms) to avoid saturating
+   * Batches rapid word-advance ticks (max once per 150ms) to avoid saturating
    * the WebSocket with one message per word.
    */
   const broadcastReadingYjs = useCallback((updates: Record<string, any>) => {
-    if (!ydoc || !isTeacher) return;
+    if (!ydoc) return;
     if (yjsBroadcastTimerRef.current) clearTimeout(yjsBroadcastTimerRef.current);
     yjsBroadcastTimerRef.current = setTimeout(() => {
       const yReading = ydoc.getMap<any>('activeReadingGame');
       ydoc.transact(() => {
         Object.entries(updates).forEach(([k, v]) => yReading.set(k, v));
       });
-    }, 200);
-  }, [ydoc, isTeacher]);
+    }, 150);
+  }, [ydoc]);
 
   const normalizeWord = (w: string) => {
     const clean = String(w || '').toLowerCase().replace(/[.,\/#!$%\^&\*;:{}=\-_`~()?"']/g, '').trim();
@@ -426,7 +423,184 @@ export function useReadingGame(
     }
   }, [level, topic]);
 
-  // ─── Start Game ─────────────────────────────────────────────────────────────
+  // ─── Start Game & Student Flow ──────────────────────────────────────────────
+
+  /**
+   * launchGameForStudents:
+   * El docente lanza el reto a la clase. Sincroniza en Yjs phase: 'waiting_student'.
+   * NO solicita micrófono en el navegador del docente.
+   */
+  const launchGameForStudents = useCallback(() => {
+    if (!storyText.trim()) {
+      toast.error('Ingresa o genera una historia primero.');
+      return;
+    }
+    const words = storyText.trim().split(/\s+/).filter(Boolean);
+    const initLive = words.map(w => ({ text: w, result: undefined as 'ok' | 'bad' | undefined }));
+    currentWordsRef.current = initLive;
+    runStartIndexRef.current = 0;
+    lastWordIdxRef.current   = words.length - 1;
+    activeWordIndexRef.current = 0;
+    setLiveWords(initLive);
+    setEvaluation(null);
+    setAudioBlob(null);
+    audioChunksRef.current = [];
+    setActiveTab('playing');
+
+    if (ydoc && isTeacher) {
+      const yReading = ydoc.getMap<any>('activeReadingGame');
+      ydoc.transact(() => {
+        yReading.set('phase', 'waiting_student');
+        yReading.set('storyTitle', storyTitle || `Historia Nivel ${level}: ${topic || 'Lectura'}`);
+        yReading.set('storyText', storyText);
+        yReading.set('level', level);
+        yReading.set('wpm', wpm);
+        yReading.set('activeWordIndex', 0);
+        yReading.set('countdown', null);
+        yReading.set('liveWords', initLive);
+        yReading.set('lastEvaluation', null);
+      });
+      toast.success('¡Reto enviado a los alumnos! Esperando confirmación de micrófono...');
+    }
+  }, [storyText, storyTitle, level, topic, wpm, ydoc, isTeacher]);
+
+  /**
+   * acceptAndStartReading:
+   * El estudiante pulsa "Activar Micrófono y Comenzar".
+   * Solicita el micrófono en el navegador del ESTUDIANTE, inicia la cuenta regresiva e inicia la lectura.
+   */
+  const acceptAndStartReading = useCallback(async () => {
+    const targetStory = remoteStoryText || storyText;
+    if (!targetStory.trim()) {
+      toast.error('No hay historia disponible para leer.');
+      return;
+    }
+    const words = targetStory.trim().split(/\s+/).filter(Boolean);
+    const initLive = words.map(w => ({ text: w, result: undefined as 'ok' | 'bad' | undefined }));
+    currentWordsRef.current = initLive;
+    runStartIndexRef.current = 0;
+    lastWordIdxRef.current = words.length - 1;
+    activeWordIndexRef.current = 0;
+    isSpeechActiveRef.current = false;
+    accumulatedTranscriptRef.current = '';
+    setLiveWords(initLive);
+    setEvaluation(null);
+    setAudioBlob(null);
+    audioChunksRef.current = [];
+
+    try {
+      // 1. Pedir micrófono en el navegador del estudiante
+      const stream = await ensureStream();
+      const mimeType = pickMimeType();
+      const recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
+      mediaRecorderRef.current = recorder;
+
+      recorder.ondataavailable = (ev) => {
+        if (ev.data && ev.data.size > 0) audioChunksRef.current.push(ev.data);
+      };
+      recorder.onstop = () => {
+        const type = recorder.mimeType || 'audio/webm';
+        const blob = new Blob(audioChunksRef.current, { type });
+        setAudioBlob(blob);
+      };
+
+      // 2. Reconocimiento de voz local para retroalimentación en tiempo real
+      try {
+        const rec = initSpeechRecognition();
+        if (rec) {
+          recognitionRef.current = rec;
+          rec.start();
+        }
+      } catch (_) {}
+
+      // 3. Notificar inicio de cuenta regresiva en Yjs
+      if (ydoc) {
+        const yReading = ydoc.getMap<any>('activeReadingGame');
+        ydoc.transact(() => {
+          yReading.set('phase', 'countdown');
+          yReading.set('countdown', 3);
+          yReading.set('activeWordIndex', 0);
+          yReading.set('liveWords', initLive);
+        });
+      }
+
+      // 4. Cuenta regresiva 3-2-1
+      let cd = 3;
+      setCountdown(cd);
+      countdownRef.current = setInterval(() => {
+        cd--;
+        if (cd > 0) {
+          setCountdown(cd);
+          if (ydoc) ydoc.getMap<any>('activeReadingGame').set('countdown', cd);
+        } else {
+          clearInterval(countdownRef.current);
+          countdownRef.current = null;
+          setCountdown(null);
+
+          // Iniciar grabación en el navegador del estudiante
+          recorder.start(200);
+          setIsPlaying(true);
+          isPlayingRef.current = true;
+          setActiveWordIndex(0);
+          setRecordingSeconds(0);
+          setIsSentencePaused(false);
+
+          if (ydoc) {
+            const yReading = ydoc.getMap<any>('activeReadingGame');
+            ydoc.transact(() => {
+              yReading.set('phase', 'reading');
+              yReading.set('countdown', null);
+              yReading.set('activeWordIndex', 0);
+            });
+          }
+
+          // Temporizador
+          timerIntervalRef.current = setInterval(() => setRecordingSeconds(prev => prev + 1), 1000);
+
+          // Teleprompter con WPM
+          const effectiveWpm = remoteWpm || wpm || 100;
+          const intervalMs = (60 / Math.max(40, effectiveWpm)) * 1000;
+          let currentIdx = 0;
+          activeWordIndexRef.current = 0;
+
+          wpmIntervalRef.current = setInterval(() => {
+            if (currentIdx >= words.length - 1) {
+              clearInterval(wpmIntervalRef.current);
+              wpmIntervalRef.current = null;
+              // Autocompletar y evaluar al llegar a la última palabra
+              setTimeout(() => {
+                finishStudentReading();
+              }, 1200);
+              return;
+            }
+
+            const next = currentIdx + 1;
+            currentIdx = next;
+            lastWordIdxRef.current = next;
+            activeWordIndexRef.current = next;
+            setActiveWordIndex(next);
+
+            currentWordsRef.current = currentWordsRef.current.map((w, idx) => {
+              if (isSpeechActiveRef.current && idx < next - 2 && w.result !== 'ok') {
+                return { ...w, result: 'bad' as const };
+              }
+              return w;
+            });
+            setLiveWords([...currentWordsRef.current]);
+
+            // Sincronizar el progreso de palabras del estudiante con el profesor
+            broadcastReadingYjs({
+              activeWordIndex: next,
+              liveWords: currentWordsRef.current.map(w => ({ text: w.text, result: w.result })),
+            });
+          }, intervalMs);
+        }
+      }, 1000);
+    } catch (err: any) {
+      console.error('[reading] Error activando micrófono del estudiante:', err);
+      toast.error('No se pudo acceder al micrófono. Por favor permite el acceso para participar.');
+    }
+  }, [remoteStoryText, storyText, ensureStream, pickMimeType, initSpeechRecognition, ydoc, remoteWpm, wpm, broadcastReadingYjs]);
 
   const startGame = useCallback(async () => {
     if (isPlaying || isEvaluating) return;
@@ -628,16 +802,187 @@ export function useReadingGame(
       try { mediaRecorderRef.current.stop(); } catch (_) {}
     }
     releaseStreams();
+  }, [releaseStreams]);
 
-    // Yjs: signal idle to students
+  /**
+   * finalizeGameForClass:
+   * El docente finaliza el reto para toda la clase.
+   * Limpia Yjs con phase: 'idle', cerrando el reto de forma sincronizada en todos los alumnos.
+   */
+  const finalizeGameForClass = useCallback(() => {
+    stopPlayback();
     if (ydoc && isTeacher) {
       const yReading = ydoc.getMap<any>('activeReadingGame');
       ydoc.transact(() => {
         yReading.set('phase', 'idle');
         yReading.set('countdown', null);
+        yReading.set('activeWordIndex', 0);
+        yReading.set('liveWords', []);
+        yReading.set('lastEvaluation', null);
       });
     }
-  }, [releaseStreams, ydoc, isTeacher]);
+    setIsPlaying(false);
+    isPlayingRef.current = false;
+    setIsEvaluating(false);
+    setActiveTab('config');
+    toast.success('Reto de lectura finalizado para la clase.');
+  }, [stopPlayback, ydoc, isTeacher]);
+
+  /**
+   * finishStudentReading:
+   * Llamado cuando el estudiante termina su lectura.
+   * Detiene la grabación del estudiante, sube el audio a /api/reading/evaluate,
+   * calcula los resultados reales sin valores inflados y publica el resultado en Yjs.
+   */
+  const finishStudentReading = useCallback(async () => {
+    if (isEvaluating) return;
+    setIsPlaying(false);
+    isPlayingRef.current = false;
+    setIsEvaluating(true);
+
+    clearInterval(timerIntervalRef.current);
+    clearInterval(wpmIntervalRef.current);
+    clearInterval(countdownRef.current);
+    timerIntervalRef.current = null;
+    wpmIntervalRef.current   = null;
+    countdownRef.current     = null;
+    setCountdown(null);
+
+    if (recognitionRef.current) {
+      try { recognitionRef.current.stop(); } catch (_) {}
+      recognitionRef.current = null;
+    }
+
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      try { mediaRecorderRef.current.stop(); } catch (_) {}
+    }
+    releaseStreams();
+
+    if (ydoc) {
+      ydoc.getMap<any>('activeReadingGame').set('phase', 'evaluating');
+    }
+
+    toast.loading('Evaluando lectura con IA...', { id: 'eval-toast' });
+    await new Promise(r => setTimeout(r, 500));
+
+    const blob = audioChunksRef.current.length > 0
+      ? new Blob(audioChunksRef.current, { type: 'audio/webm' })
+      : audioBlob;
+
+    const targetStory = remoteStoryText || storyText;
+    const targetLevel = remoteLevel || level;
+    const targetTitle = remoteStoryTitle || storyTitle;
+    const targetWpm   = remoteWpm || wpm;
+
+    try {
+      const fd = new FormData();
+      const filename = `reading.${blob?.type.includes('ogg') ? 'ogg' : 'webm'}`;
+      if (blob && blob.size > 0) {
+        fd.append('file', blob, filename);
+        fd.append('audio', blob, filename);
+      }
+      fd.append('topic', 'Reading Speed Challenge');
+      fd.append('level', targetLevel);
+      fd.append('question', `Please read the following text aloud: ${targetStory}`);
+      fd.append('expected_answer', targetStory);
+
+      const res = await api.post('/reading/evaluate', fd, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+
+      toast.dismiss('eval-toast');
+
+      if (res.data?.ok && res.data?.evaluation) {
+        const e = res.data.evaluation;
+        let transcript = (e.transcript || '').trim();
+        if (!transcript && accumulatedTranscriptRef.current.trim()) {
+          transcript = accumulatedTranscriptRef.current.trim();
+        }
+
+        const words = targetStory.trim().split(/\s+/).filter(Boolean);
+        const evalWords = alignTranscriptionLCS(words, transcript);
+        const okCount = evalWords.filter(w => w.status === 'ok').length;
+        const totalEvaluatedWords = words.length || 1;
+        const matchPercentage = Math.round((okCount / totalEvaluatedWords) * 100);
+
+        // Sin inflación artificial: notas fieles a la precisión real
+        const overallScore = okCount > 0 ? Math.min(100, Math.max(0, Math.round(Number(e.overall_score ?? matchPercentage)))) : 0;
+        const pronScore    = okCount > 0 ? Math.min(100, Math.max(0, Math.round(Number(e.pronunciation_score ?? matchPercentage)))) : 0;
+        const grammarScore = okCount > 0 ? Math.min(100, Math.max(0, Math.round(Number(e.grammar_score ?? matchPercentage)))) : 0;
+        const relevanceScore = okCount > 0 ? Math.min(100, Math.max(0, Math.round(Number(e.relevance_score ?? matchPercentage)))) : 0;
+
+        const feedbackText = okCount > 0
+          ? (e.feedback || `¡Buen trabajo! Leíste ${okCount} de ${words.length} palabras correctamente.`)
+          : 'No se detectó pronunciación durante la lectura. Intenta hablar en voz alta siguiendo la palabra señalada.';
+
+        const result: ReadingEvaluation = {
+          transcript,
+          overall_score: overallScore,
+          pronunciation_score: pronScore,
+          grammar_score: grammarScore,
+          relevance_score: relevanceScore,
+          feedback: feedbackText,
+          evaluatedWords: evalWords,
+        };
+
+        setEvaluation(result);
+
+        if (ydoc) {
+          const yReading = ydoc.getMap<any>('activeReadingGame');
+          ydoc.transact(() => {
+            yReading.set('phase', 'results');
+            yReading.set('liveWords', evalWords.map(ew => ({ text: ew.word, result: ew.status })));
+            yReading.set('lastEvaluation', {
+              overall_score: result.overall_score,
+              pronunciation_score: result.pronunciation_score,
+              grammar_score: result.grammar_score,
+              relevance_score: result.relevance_score,
+              feedback: result.feedback,
+              transcript: result.transcript,
+              evaluatedWords: evalWords,
+            });
+          });
+        }
+
+        // Actualizar palabras locales
+        setLiveWords(evalWords.map(ew => ({ text: ew.word, result: ew.status === 'ok' ? 'ok' : 'bad' })));
+
+        // Si falló palabras, precargar en el entrenador
+        const badItems: TrainerWordItem[] = evalWords
+          .map((ew, i) => ({ word: ew.word, index: i }))
+          .filter(item => item.word && evalWords[item.index]?.status === 'bad');
+        if (badItems.length > 0 && okCount > 0) {
+          setTrainerWords(badItems);
+          setTrainerCurrentIdx(0);
+          setTrainerWord(badItems[0].word);
+        }
+
+        // Guardar intento en PostgreSQL
+        if (sessionId) {
+          api.post('/reading/attempts', {
+            session_id: sessionId,
+            story_title: targetTitle,
+            story_text: targetStory,
+            wpm_setting: targetWpm,
+            overall_score: result.overall_score,
+            pronunciation_score: result.pronunciation_score,
+            feedback: result.feedback,
+            words_alignment: evalWords,
+          }).catch(err => console.warn('[reading] DB save failed:', err));
+        }
+
+        toast.success('¡Reto de lectura completado!');
+      } else {
+        throw new Error(res.data?.message || 'Error en la respuesta de evaluación');
+      }
+    } catch (err: any) {
+      toast.dismiss('eval-toast');
+      console.error('[reading] Evaluation error:', err);
+      toast.error('Error al evaluar lectura: ' + (err.message || 'Error del servidor'));
+    } finally {
+      setIsEvaluating(false);
+    }
+  }, [isEvaluating, releaseStreams, ydoc, audioBlob, remoteStoryText, storyText, remoteLevel, level, remoteStoryTitle, storyTitle, remoteWpm, wpm, alignTranscriptionLCS, sessionId]);
 
   const stopAndEvaluate = useCallback(async () => {
     if (isEvaluating) return;
@@ -647,7 +992,7 @@ export function useReadingGame(
     setIsEvaluating(true);
 
     // Yjs: signal evaluating phase to students
-    if (ydoc && isTeacher) {
+    if (ydoc) {
       const yReading = ydoc.getMap<any>('activeReadingGame');
       yReading.set('phase', 'evaluating');
     }
@@ -706,10 +1051,11 @@ export function useReadingGame(
         const totalEvaluatedWords = words.slice(0, lastWordIdx + 1).length;
         const matchPercentage = totalEvaluatedWords > 0 ? Math.round((okCount / totalEvaluatedWords) * 100) : 0;
 
-        const overallScore = okCount > 0 ? Math.max(matchPercentage, Math.round(Number(e.overall_score || 0))) : 0;
-        const pronScore    = okCount > 0 ? Math.max(matchPercentage, Math.round(Number(e.pronunciation_score || 0))) : 0;
-        const grammarScore = okCount > 0 ? Math.min(100, Math.max(matchPercentage, Math.round(Number(e.grammar_score || 0)))) : 0;
-        const relevanceScore = okCount > 0 ? Math.min(100, Math.max(matchPercentage, Math.round(Number(e.relevance_score || 0)))) : 0;
+        // Puntuaciones reales sin Math.max(matchPercentage, 85)
+        const overallScore = okCount > 0 ? Math.min(100, Math.max(0, Math.round(Number(e.overall_score ?? matchPercentage)))) : 0;
+        const pronScore    = okCount > 0 ? Math.min(100, Math.max(0, Math.round(Number(e.pronunciation_score ?? matchPercentage)))) : 0;
+        const grammarScore = okCount > 0 ? Math.min(100, Math.max(0, Math.round(Number(e.grammar_score ?? matchPercentage)))) : 0;
+        const relevanceScore = okCount > 0 ? Math.min(100, Math.max(0, Math.round(Number(e.relevance_score ?? matchPercentage)))) : 0;
 
         const feedbackText = okCount > 0
           ? (e.feedback || '¡Buen trabajo en tu lectura!')
@@ -727,8 +1073,8 @@ export function useReadingGame(
 
         setEvaluation(result);
 
-        // Yjs: publish results so students see the final scores and word alignment
-        if (ydoc && isTeacher) {
+        // Yjs: publicar resultados completos
+        if (ydoc) {
           const yReading = ydoc.getMap<any>('activeReadingGame');
           ydoc.transact(() => {
             yReading.set('phase', 'results');
@@ -736,8 +1082,11 @@ export function useReadingGame(
             yReading.set('lastEvaluation', {
               overall_score:      result.overall_score,
               pronunciation_score: result.pronunciation_score,
+              grammar_score:      result.grammar_score,
+              relevance_score:    result.relevance_score,
               feedback:           result.feedback,
               transcript:         result.transcript,
+              evaluatedWords:     evalWords,
             });
           });
         }
@@ -1152,11 +1501,12 @@ export function useReadingGame(
   }, [showReadingGamePanel, activeTab, loadHistory]);
 
   /**
-   * Student observer: subscribe to Yjs activeReadingGame map and update local
-   * remote* state so ReadingGameSpectatorPanel can render the live game.
+   * Realtime observer: subscribe to Yjs activeReadingGame map.
+   * Updates state for both student and teacher so teleprompter, words, and evaluations
+   * stay in sync regardless of who is speaking and who is monitoring.
    */
   useEffect(() => {
-    if (!ydoc || isTeacher) return;
+    if (!ydoc) return;
 
     const yReading = ydoc.getMap<any>('activeReadingGame');
 
@@ -1164,22 +1514,50 @@ export function useReadingGame(
       const phase    = yReading.get('phase')           as string | undefined;
       const sText    = yReading.get('storyText')       as string | undefined;
       const sTitle   = yReading.get('storyTitle')      as string | undefined;
+      const sLevel   = yReading.get('level')           as string | undefined;
+      const sWpm     = yReading.get('wpm')             as number | undefined;
       const wordIdx  = yReading.get('activeWordIndex') as number | undefined;
       const cd       = yReading.get('countdown')       as number | null;
       const words    = yReading.get('liveWords')       as { text: string; result?: 'ok' | 'bad' }[] | undefined;
       const evalData = yReading.get('lastEvaluation')  as any;
 
-      if (phase !== undefined)   setRemotePhase(phase as any);
+      if (phase !== undefined) {
+        setRemotePhase(phase as any);
+        if (isTeacher) {
+          if (phase === 'reading' || phase === 'countdown') {
+            setActiveTab('playing');
+          } else if (phase === 'results') {
+            setActiveTab('results');
+          } else if (phase === 'idle') {
+            setActiveTab('config');
+          }
+        }
+      }
       if (sText !== undefined)   setRemoteStoryText(sText);
       if (sTitle !== undefined)  setRemoteStoryTitle(sTitle);
-      if (wordIdx !== undefined) setRemoteActiveWordIndex(wordIdx);
+      if (sLevel !== undefined)  setRemoteLevel(sLevel);
+      if (sWpm !== undefined)    setRemoteWpm(sWpm);
+      if (wordIdx !== undefined) {
+        setRemoteActiveWordIndex(wordIdx);
+        if (isTeacher) setActiveWordIndex(wordIdx);
+      }
       setRemoteCountdown(cd ?? null);
-      if (words !== undefined)   setRemoteLiveWords(words);
-      setRemoteLastEvaluation(evalData ?? null);
+      if (cd !== undefined && isTeacher) setCountdown(cd ?? null);
+      if (words !== undefined) {
+        setRemoteLiveWords(words);
+        if (isTeacher) setLiveWords(words);
+      }
+      if (evalData !== undefined) {
+        setRemoteLastEvaluation(evalData ?? null);
+        if (isTeacher && evalData) {
+          setEvaluation(evalData);
+          setActiveTab('results');
+        }
+      }
     };
 
     yReading.observe(handleReadingChange);
-    handleReadingChange(); // sync current state on mount (student joins mid-game)
+    handleReadingChange(); // sync current state on mount
 
     return () => {
       yReading.unobserve(handleReadingChange);
@@ -1187,7 +1565,6 @@ export function useReadingGame(
   }, [ydoc, isTeacher]);
 
   // ─── Return API ─────────────────────────────────────────────────────────────
-
 
   return {
     // Panel visibility
@@ -1219,11 +1596,15 @@ export function useReadingGame(
     isSentencePaused,
     advanceChunk,
 
-    // Evaluation
+    // Evaluation & Collaborative flow
     isEvaluating,
     evaluation,
     startGame,
     stopAndEvaluate,
+    launchGameForStudents,
+    finalizeGameForClass,
+    acceptAndStartReading,
+    finishStudentReading,
 
     // TTS
     speakTargetWord,
@@ -1252,10 +1633,12 @@ export function useReadingGame(
     reuseHistoryItem,
     deleteHistoryItem,
 
-    // Student spectator state (synced from Yjs when !isTeacher)
+    // Student / Participant spectator state (synced from Yjs)
     remotePhase,
     remoteStoryText,
     remoteStoryTitle,
+    remoteLevel,
+    remoteWpm,
     remoteActiveWordIndex,
     remoteCountdown,
     remoteLiveWords,

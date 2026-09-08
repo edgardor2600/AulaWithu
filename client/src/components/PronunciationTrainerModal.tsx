@@ -25,45 +25,59 @@ export const PronunciationTrainerModal: React.FC<PronunciationTrainerModalProps>
   if (isLastWord) {
     // All done screen
     return (
-      <div className="fixed bottom-28 right-6 z-50 w-[340px] bg-[#0d1117]/98 backdrop-blur-2xl border border-emerald-500/40 rounded-2xl shadow-[0_20px_60px_rgba(16,185,129,0.2)] overflow-hidden">
-        <div className="p-5 text-center space-y-3">
-          <div className="w-14 h-14 bg-emerald-500/20 rounded-full flex items-center justify-center mx-auto border border-emerald-500/40">
-            <CheckCircle2 className="w-8 h-8 text-emerald-400" />
+      <div 
+        className="fixed inset-0 z-[10050] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 animate-in fade-in duration-200"
+        onClick={(e) => { if (e.target === e.currentTarget) game.closeTrainer(); }}
+      >
+        <div className="w-full max-w-[360px] bg-[#0d1117]/98 backdrop-blur-2xl border border-emerald-500/40 rounded-3xl shadow-[0_25px_80px_rgba(0,0,0,0.8)] overflow-hidden animate-in zoom-in-95 duration-200">
+          <div className="p-6 text-center space-y-4">
+            <div className="w-16 h-16 bg-emerald-500/20 rounded-full flex items-center justify-center mx-auto border border-emerald-500/40">
+              <CheckCircle2 className="w-9 h-9 text-emerald-400" />
+            </div>
+            <div className="space-y-1">
+              <h3 className="font-extrabold text-white text-xl">¡Buen trabajo! 🎉</h3>
+              <p className="text-sm text-slate-400">Has practicado todas las palabras con pronunciación incorrecta.</p>
+            </div>
+            <button
+              onClick={game.closeTrainer}
+              className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl transition-all shadow-lg shadow-emerald-600/30"
+            >
+              Cerrar Entrenador
+            </button>
           </div>
-          <h3 className="font-extrabold text-white text-lg">¡Buen trabajo! 🎉</h3>
-          <p className="text-sm text-slate-400">Has practicado todas las palabras con pronunciación incorrecta.</p>
-          <button
-            onClick={game.closeTrainer}
-            className="w-full py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl transition-all"
-          >
-            Cerrar Entrenador
-          </button>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="fixed bottom-28 right-6 z-50 w-[340px] bg-[#0d1117]/98 backdrop-blur-2xl border border-amber-500/30 rounded-2xl shadow-[0_20px_60px_rgba(245,158,11,0.15)] overflow-hidden">
+    <div 
+      className="fixed inset-0 z-[10050] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 animate-in fade-in duration-200"
+      onClick={(e) => { if (e.target === e.currentTarget) game.closeTrainer(); }}
+    >
+      <div className="w-full max-w-[380px] bg-[#0d1117]/98 backdrop-blur-2xl border border-amber-500/40 rounded-3xl shadow-[0_25px_80px_rgba(0,0,0,0.8)] overflow-hidden animate-in zoom-in-95 duration-200">
 
-      {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-white/10 bg-amber-500/10">
-        <div className="flex items-center gap-2">
-          <Mic className="w-4 h-4 text-amber-400" />
-          <div>
-            <h3 className="text-xs font-bold text-white">Entrenador de Pronunciación</h3>
-            <span className="text-[10px] text-amber-300/70">
-              Palabra {game.trainerCurrentIdx + 1} de {totalWords}
-            </span>
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 py-3.5 border-b border-white/10 bg-amber-500/10">
+          <div className="flex items-center gap-2">
+            <div className="p-1.5 rounded-lg bg-amber-500/20 text-amber-400">
+              <Mic className="w-4 h-4" />
+            </div>
+            <div>
+              <h3 className="text-xs font-bold text-white">Entrenador de Pronunciación</h3>
+              <span className="text-[10px] text-amber-300/80 font-medium">
+                Palabra {game.trainerCurrentIdx + 1} de {totalWords}
+              </span>
+            </div>
           </div>
+          <button
+            onClick={game.closeTrainer}
+            className="text-slate-400 hover:text-white p-1.5 rounded-lg hover:bg-white/10 transition-colors"
+            title="Cerrar entrenador"
+          >
+            <X className="w-4 h-4" />
+          </button>
         </div>
-        <button
-          onClick={game.closeTrainer}
-          className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-white/10 transition-colors"
-        >
-          <X className="w-4 h-4" />
-        </button>
-      </div>
 
       {/* Progress Bar */}
       <div className="h-1 bg-white/5">
@@ -200,5 +214,6 @@ export const PronunciationTrainerModal: React.FC<PronunciationTrainerModalProps>
         </button>
       </div>
     </div>
+  </div>
   );
 };

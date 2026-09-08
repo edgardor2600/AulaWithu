@@ -256,14 +256,24 @@ export const ReadingGamePanel: React.FC<ReadingGamePanelProps> = ({ game }) => {
                 />
               </div>
 
-              <button
-                onClick={game.startGame}
-                disabled={!game.storyText.trim() || game.isPlaying}
-                className="w-full py-3 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 disabled:opacity-40 text-white font-bold rounded-xl shadow-lg shadow-emerald-900/30 transition-all flex items-center justify-center gap-2 text-sm"
-              >
-                <Play className="w-4 h-4 fill-white" />
-                <span>Iniciar Reto de Lectura</span>
-              </button>
+              <div className="space-y-2 pt-1">
+                <button
+                  onClick={game.launchGameForStudents}
+                  disabled={!game.storyText.trim() || game.isPlaying}
+                  className="w-full py-3.5 bg-gradient-to-r from-indigo-600 via-indigo-500 to-purple-600 hover:from-indigo-500 hover:to-purple-500 disabled:opacity-40 text-white font-extrabold rounded-xl shadow-lg shadow-indigo-900/30 transition-all flex items-center justify-center gap-2 text-sm"
+                >
+                  <Play className="w-4 h-4 fill-white" />
+                  <span>Lanzar Reto a Estudiantes</span>
+                </button>
+                <button
+                  onClick={game.startGame}
+                  disabled={!game.storyText.trim() || game.isPlaying}
+                  className="w-full py-2 bg-white/5 hover:bg-white/10 text-slate-400 hover:text-slate-200 text-xs font-semibold rounded-xl border border-white/10 transition-all flex items-center justify-center gap-2"
+                >
+                  <Mic className="w-3.5 h-3.5" />
+                  <span>Probar yo mismo (Modo Docente)</span>
+                </button>
+              </div>
             </div>
           )}
 
@@ -271,8 +281,27 @@ export const ReadingGamePanel: React.FC<ReadingGamePanelProps> = ({ game }) => {
           {game.activeTab === 'playing' && (
             <div className="space-y-4">
 
+              {/* Waiting for student banner */}
+              {game.remotePhase === 'waiting_student' && (
+                <div className="bg-indigo-950/40 border border-indigo-500/30 rounded-2xl p-6 text-center space-y-3 animate-in fade-in">
+                  <div className="w-12 h-12 bg-indigo-500/20 rounded-full flex items-center justify-center mx-auto border border-indigo-500/40">
+                    <Mic className="w-6 h-6 text-indigo-400 animate-pulse" />
+                  </div>
+                  <h4 className="text-sm font-bold text-white">Reto lanzado a la clase</h4>
+                  <p className="text-xs text-slate-400 max-w-xs mx-auto">
+                    Esperando a que el estudiante active su micrófono y comience la lectura...
+                  </p>
+                  <button
+                    onClick={game.finalizeGameForClass}
+                    className="mt-2 px-3 py-1.5 bg-white/5 hover:bg-white/10 border border-white/10 text-xs text-slate-300 rounded-lg transition-all"
+                  >
+                    Cancelar reto
+                  </button>
+                </div>
+              )}
+
               {/* Countdown overlay */}
-              {game.countdown !== null && (
+              {game.countdown !== null && game.remotePhase !== 'waiting_student' && (
                 <div className="flex items-center justify-center py-8">
                   <div className="text-7xl font-black text-amber-400 tabular-nums animate-bounce">
                     {game.countdown}
@@ -281,7 +310,7 @@ export const ReadingGamePanel: React.FC<ReadingGamePanelProps> = ({ game }) => {
               )}
 
               {/* Teleprompter - word highlight */}
-              {game.countdown === null && (
+              {game.countdown === null && game.remotePhase !== 'waiting_student' && (
                 <>
                   <div className="bg-[#101217] border border-white/10 rounded-2xl p-4 min-h-[200px] flex flex-wrap gap-x-2 gap-y-1.5 items-start leading-relaxed text-sm shadow-inner">
                     {game.liveWords.map((w, idx) => {
@@ -457,14 +486,26 @@ export const ReadingGamePanel: React.FC<ReadingGamePanelProps> = ({ game }) => {
                 </p>
               </div>
 
-              {/* Restart Button */}
-              <button
-                onClick={() => { game.setActiveTab('config'); }}
-                className="w-full py-2 bg-white/5 hover:bg-white/10 border border-white/10 text-slate-300 font-semibold rounded-xl transition-all flex items-center justify-center gap-2"
-              >
-                <RotateCcw className="w-3.5 h-3.5" />
-                Nueva Lectura
-              </button>
+              {/* Action Buttons */}
+              <div className="space-y-2 pt-2 border-t border-white/10">
+                <button
+                  onClick={game.finalizeGameForClass}
+                  className="w-full py-3 bg-red-600 hover:bg-red-500 text-white font-extrabold text-xs rounded-xl shadow-lg shadow-red-900/30 transition-all flex items-center justify-center gap-2"
+                >
+                  <Square className="w-3.5 h-3.5 fill-white" />
+                  <span>Finalizar Ejercicio para Toda la Clase</span>
+                </button>
+                <button
+                  onClick={() => {
+                    game.finalizeGameForClass();
+                    game.setActiveTab('config');
+                  }}
+                  className="w-full py-2 bg-white/5 hover:bg-white/10 border border-white/10 text-slate-300 font-semibold rounded-xl text-xs transition-all flex items-center justify-center gap-2"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  Nueva Lectura
+                </button>
+              </div>
             </div>
           )}
 

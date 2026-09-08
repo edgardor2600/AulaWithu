@@ -212,7 +212,8 @@ router.post(
 
 /**
  * POST /api/reading/evaluate
- * Proxy para evaluar la pronunciación y fluidez del audio grabado contra la historia
+ * Evaluar la pronunciación, fluidez y precisión del audio grabado contra la historia esperada.
+ * Utiliza Groq Whisper para STT, algoritmo de coincidencia de palabras y MiniMax para evaluación pedagógica.
  */
 router.post(
   '/evaluate',
@@ -241,9 +242,8 @@ router.post(
           groqFd.append('model', 'whisper-large-v3-turbo');
           groqFd.append('language', 'en');
           groqFd.append('temperature', '0.0');
-          if (expected_answer) {
-            groqFd.append('prompt', `The student is reading out loud in English: '${expected_answer}'. Transcribe word for word in English.`);
-          }
+          // Use neutral prompt to prevent Whisper from hallucinating the expected text during silence
+          groqFd.append('prompt', 'Transcribe clear spoken English strictly as pronounced. Do not hallucinate words if silent.');
           const groqRes = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
             method: 'POST',
             headers: { Authorization: `Bearer ${groqKey}` },
@@ -264,30 +264,111 @@ router.post(
 
       try { fs.unlinkSync(req.file.path); } catch { /* ignore */ }
 
-      if (directTranscript) {
+      // Helper para normalizar palabras
+      const normalize = (w: string) => w.toLowerCase().replace(/[.,\/#!$%\^&\*;:{}=\-_`~()?"']/g, '').trim();
+
+      const expectedText = String(expected_answer || question || '').trim();
+      const expWords = expectedText.split(/\s+/).map(normalize).filter(Boolean);
+      const transWords = directTranscript.split(/\s+/).map(normalize).filter(Boolean);
+
+      // Calcular coincidencia real palabra a palabra
+      let matchedCount = 0;
+      if (expWords.length > 0 && transWords.length > 0) {
+        const transPool = new Map<string, number>();
+        for (const tw of transWords) {
+          transPool.set(tw, (transPool.get(tw) || 0) + 1);
+        }
+        for (const ew of expWords) {
+          const avail = transPool.get(ew) || 0;
+          if (avail > 0) {
+            matchedCount++;
+            transPool.set(ew, avail - 1);
+          }
+        }
+      }
+
+      const totalExpected = expWords.length || 1;
+      const matchPercentage = Math.min(100, Math.round((matchedCount / totalExpected) * 100));
+
+      logger.info(`[reading/evaluate] Words matched: ${matchedCount}/${totalExpected} (${matchPercentage}%)`);
+
+      // CASO 1: Silencio absoluto o ninguna palabra coincidente
+      if (!directTranscript || matchedCount === 0) {
         return res.status(200).json({
           ok: true,
           evaluation: {
             transcript: directTranscript,
-            overall_score: 85,
-            pronunciation_score: 85,
-            grammar_score: 90,
-            relevance_score: 90,
-            feedback: 'Evaluación de lectura completada con éxito vía Groq Whisper.'
+            overall_score: 0,
+            pronunciation_score: 0,
+            grammar_score: 0,
+            relevance_score: 0,
+            feedback: 'No se detectó voz o lectura del estudiante. Por favor asegúrate de activar tu micrófono y leer en voz alta.'
           }
         });
       }
 
-      // Si todo falló, retornar respuesta controlada
+      // CASO 2: Evaluación con IA (MiniMax) fundamentada en los aciertos reales
+      let evaluationResult = {
+        overall_score: matchPercentage,
+        pronunciation_score: matchPercentage,
+        grammar_score: Math.min(100, Math.round(matchPercentage * 1.05)),
+        relevance_score: matchPercentage,
+        feedback: matchPercentage >= 70
+          ? `¡Excelente lectura! Pronunciaste correctamente ${matchedCount} de ${totalExpected} palabras (${matchPercentage}%).`
+          : `Leíste ${matchedCount} de ${totalExpected} palabras correctamente (${matchPercentage}%). Practica las palabras que faltaron para mejorar.`
+      };
+
+      try {
+        const evalPrompt = `Eres un tutor pedagógico de inglés evaluando la lectura en voz alta de un estudiante nivel ${level || 'A2'}.
+Texto que debía leer:
+"${expectedText}"
+
+Transcripción obtenida del estudiante:
+"${directTranscript}"
+
+Estadísticas objetivas:
+- Palabras esperadas: ${totalExpected}
+- Palabras pronunciadas correctamente detectadas: ${matchedCount} de ${totalExpected} (${matchPercentage}% de coincidencia)
+
+INSTRUCCIONES ESTRICTAS:
+1. El overall_score DEBE basarse directamente en el porcentaje de coincidencia real (${matchPercentage}%). No infles la nota si el porcentaje es bajo.
+2. pronunciation_score debe ser coherente con el porcentaje real (entre ${Math.max(0, matchPercentage - 10)} y ${Math.min(100, matchPercentage + 10)}).
+3. grammar_score y relevance_score deben reflejar la completitud de la lectura respecto al texto original.
+4. feedback: Un consejo pedagógico breve en español (máximo 40 palabras), constructivo y claro.
+
+Responde ÚNICAMENTE un JSON válido con esta estructura:
+{
+  "overall_score": ${matchPercentage},
+  "pronunciation_score": ${matchPercentage},
+  "grammar_score": ${matchPercentage},
+  "relevance_score": ${matchPercentage},
+  "feedback": "..."
+}`;
+
+        const aiRes = await MiniMaxService.generateCompletion(evalPrompt, { temperature: 0.1, maxTokens: 400 });
+        const cleanJson = (aiRes.text || '').replace(/```(json)?/gi, '').replace(/```/g, '').trim();
+        const parsed = JSON.parse(cleanJson);
+
+        if (typeof parsed.overall_score === 'number') {
+          // Asegurar que la IA no infle artificialmente un puntaje de silencio o baja coincidencia
+          const safeOverall = Math.min(parsed.overall_score, matchPercentage + 15);
+          evaluationResult = {
+            overall_score: Math.max(matchPercentage, Math.min(100, safeOverall)),
+            pronunciation_score: Math.min(100, Math.max(0, Number(parsed.pronunciation_score) || matchPercentage)),
+            grammar_score: Math.min(100, Math.max(0, Number(parsed.grammar_score) || matchPercentage)),
+            relevance_score: Math.min(100, Math.max(0, Number(parsed.relevance_score) || matchPercentage)),
+            feedback: parsed.feedback || evaluationResult.feedback,
+          };
+        }
+      } catch (aiErr: any) {
+        logger.warn(`[reading/evaluate] MiniMax AI evaluation fallback: ${aiErr.message}`);
+      }
+
       return res.status(200).json({
         ok: true,
         evaluation: {
-          transcript: '',
-          overall_score: 0,
-          pronunciation_score: 0,
-          grammar_score: 0,
-          relevance_score: 0,
-          feedback: 'No se pudo procesar la transcripción del audio. Verifica que el micrófono haya capturado voz.'
+          transcript: directTranscript,
+          ...evaluationResult
         }
       });
     } catch (error: any) {

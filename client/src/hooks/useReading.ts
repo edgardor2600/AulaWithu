@@ -1,15 +1,23 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import * as fabric from 'fabric';
 import api from '../services/api';
 import toast from 'react-hot-toast';
 
+export interface ReadingSegment {
+  id: string;
+  text: string;
+  ipa?: string;
+}
+
 export const useReading = (
   canvas: fabric.Canvas | null,
-  saveHistory: () => void
+  saveHistory: () => void,
+  ydoc?: any,
+  isTeacher: boolean = true
 ) => {
   const [showReadingPanel, setShowReadingPanel] = useState(false);
   const [readingText, setReadingText] = useState('');
-  const [readingSegments, setReadingSegments] = useState<{ id: string; text: string; ipa?: string }[]>([]);
+  const [readingSegments, setReadingSegments] = useState<ReadingSegment[]>([]);
   const [currentSegmentIndex, setCurrentSegmentIndex] = useState(-1);
   const [audioMode, setAudioMode] = useState<'browser' | 'server'>('browser');
   const [voiceURI, setVoiceURI] = useState('');
@@ -32,6 +40,28 @@ export const useReading = (
   const [audioElement, setAudioElement] = useState<HTMLAudioElement | null>(null);
   const [isScrubbing, setIsScrubbing] = useState(false);
   const [splitSize, setSplitSize] = useState(130);
+
+  // Referencias para manejo seguro y sin fugas de recursos de audio
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const audioBlobUrlRef = useRef<string | null>(null);
+  const lastTTSKeyRef = useRef<string>('');
+
+  // Limpieza estricta de ciclo de vida al desmontar el hook
+  useEffect(() => {
+    return () => {
+      if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+        window.speechSynthesis.cancel();
+      }
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current.removeAttribute('src');
+      }
+      if (audioBlobUrlRef.current) {
+        URL.revokeObjectURL(audioBlobUrlRef.current);
+        audioBlobUrlRef.current = null;
+      }
+    };
+  }, []);
 
   // Cargar voces locales del navegador
   useEffect(() => {
@@ -137,7 +167,7 @@ export const useReading = (
     return allChunks.filter(c => c.trim().length > 0);
   };
 
-  // Escribir fragmentos al canvas de FabricJS en grupo
+  // Escribir fragmentos al canvas de FabricJS en grupo con IDs determinísticos
   const writeReadingFragmentsToBoard = useCallback((
     chunks: string[], 
     ipaLinesByChunk: string[][]
@@ -182,10 +212,13 @@ export const useReading = (
         selectable: true,
         evented: true,
         styles: {
-          1: line1Styles // Aplicar estilos a la segunda línea
+          1: line1Styles
         }
       });
       (unifiedText as any).isLocalOwned = true;
+      (unifiedText as any).id = `reading-frag-${index}`;
+      (unifiedText as any).readingSegmentIndex = index;
+      (unifiedText as any).isReadingFragment = true;
 
       canvas.add(unifiedText);
       startY += 75; // Espaciado elegante entre frases unificadas
@@ -195,27 +228,113 @@ export const useReading = (
     saveHistory();
   }, [canvas, saveHistory]);
 
+  // Resaltado visual en el canvas del fragmento activo
+  const highlightSegmentOnCanvas = useCallback((index: number) => {
+    if (!canvas) return;
+    const objects = canvas.getObjects();
+    let hasChanged = false;
+
+    objects.forEach((obj: any) => {
+      const isTarget = (obj.isReadingFragment && obj.readingSegmentIndex === index) ||
+                       (obj.id === `reading-frag-${index}`);
+      if (isTarget) {
+        if (!obj._isReadingHighlighted) {
+          obj.set({
+            backgroundColor: 'rgba(99, 102, 241, 0.22)',
+            stroke: '#6366f1',
+            strokeWidth: 1.5,
+          });
+          obj._isReadingHighlighted = true;
+          hasChanged = true;
+        }
+      } else if (obj._isReadingHighlighted) {
+        obj.set({
+          backgroundColor: '',
+          stroke: undefined,
+          strokeWidth: 0,
+        });
+        obj._isReadingHighlighted = false;
+        hasChanged = true;
+      }
+    });
+
+    if (hasChanged) {
+      canvas.requestRenderAll();
+    }
+  }, [canvas]);
+
+  // Sincronizar resaltado visual cuando cambia el índice
+  useEffect(() => {
+    highlightSegmentOnCanvas(currentSegmentIndex);
+  }, [currentSegmentIndex, highlightSegmentOnCanvas]);
+
+  // Detener reproducción y limpiar buffers
   const stopReading = useCallback(() => {
-    if ('speechSynthesis' in window) {
+    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
       window.speechSynthesis.cancel();
     }
-    if (audioElement) {
-      audioElement.pause();
-      audioElement.src = '';
-      setAudioElement(null);
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.removeAttribute('src');
     }
+    if (audioBlobUrlRef.current) {
+      URL.revokeObjectURL(audioBlobUrlRef.current);
+      audioBlobUrlRef.current = null;
+    }
+    setAudioElement(null);
     setIsSpeaking(false);
     setIsPlaying(false);
     setReadingStatus('Detenido');
     setCurrentTime(0);
-  }, [audioElement]);
 
-  const speakText = useCallback(async (text: string, onEndCallback?: () => void) => {
+    // Sincronizar detención en Yjs si es profesor
+    if (isTeacher && ydoc) {
+      try {
+        const yReading = ydoc.getMap('activeReadingTTS');
+        yReading.set('isPlaying', false);
+        yReading.set('status', 'Detenido');
+        yReading.set('audioTtsParams', null);
+        yReading.set('updatedAt', Date.now());
+      } catch (err) {
+        console.warn('[useReading] Error updating Yjs on stop:', err);
+      }
+    }
+  }, [isTeacher, ydoc]);
+
+  // Reproducir un texto dado
+  const speakText = useCallback(async (
+    text: string, 
+    onEndCallback?: () => void,
+    segmentIdx?: number
+  ) => {
     const trimmed = (text || '').trim();
     if (!trimmed) return;
 
     stopReading();
     setReadingStatus('Generando audio...');
+
+    const activeIdx = segmentIdx !== undefined ? segmentIdx : currentSegmentIndex;
+
+    // Sincronizar reproducción a los estudiantes vía Yjs
+    if (isTeacher && ydoc) {
+      try {
+        const yReading = ydoc.getMap('activeReadingTTS');
+        yReading.set('isPlaying', true);
+        yReading.set('currentSegmentIndex', activeIdx);
+        yReading.set('currentText', trimmed);
+        yReading.set('status', 'Reproduciendo...');
+        yReading.set('audioTtsParams', {
+          text: trimmed,
+          mode: audioMode,
+          voice: audioMode === 'server' ? edgeVoice : voiceURI,
+          rate,
+          pitch,
+        });
+        yReading.set('updatedAt', Date.now());
+      } catch (err) {
+        console.warn('[useReading] Error broadcasting to Yjs:', err);
+      }
+    }
 
     if (audioMode === 'server') {
       try {
@@ -230,10 +349,21 @@ export const useReading = (
         };
 
         const res = await api.post('/reading/tts', payload, { responseType: 'blob' });
+        if (audioBlobUrlRef.current) {
+          URL.revokeObjectURL(audioBlobUrlRef.current);
+        }
         const blob = new Blob([res.data], { type: 'audio/mpeg' });
         const url = URL.createObjectURL(blob);
-        const audio = new Audio(url);
+        audioBlobUrlRef.current = url;
         
+        let audio = audioRef.current;
+        if (!audio) {
+          audio = new Audio();
+          audioRef.current = audio;
+        }
+        audio.src = url;
+        setAudioElement(audio);
+
         audio.onplay = () => {
           setIsSpeaking(true);
           setIsPlaying(true);
@@ -242,53 +372,70 @@ export const useReading = (
         audio.onpause = () => {
           setIsPlaying(false);
           setReadingStatus('Pausado');
+          if (isTeacher && ydoc) {
+            const yReading = ydoc.getMap('activeReadingTTS');
+            yReading.set('isPlaying', false);
+            yReading.set('status', 'Pausado');
+            yReading.set('updatedAt', Date.now());
+          }
         };
         audio.onended = () => {
           setIsSpeaking(false);
           setIsPlaying(false);
           setReadingStatus('Listo');
           setCurrentTime(0);
-          setAudioElement(null);
-          URL.revokeObjectURL(url);
+          if (isTeacher && ydoc) {
+            const yReading = ydoc.getMap('activeReadingTTS');
+            yReading.set('isPlaying', false);
+            yReading.set('status', 'Listo');
+            yReading.set('updatedAt', Date.now());
+          }
           if (onEndCallback) onEndCallback();
         };
-        audio.onerror = () => {
+        audio.onerror = (e) => {
+          console.error('Audio playback error:', e);
           setIsSpeaking(false);
           setIsPlaying(false);
           setReadingStatus('Error al reproducir');
-          setCurrentTime(0);
-          setAudioElement(null);
-          URL.revokeObjectURL(url);
-        };
-        audio.onloadedmetadata = () => {
-          setDuration(audio.duration || 0);
+          if (isTeacher && ydoc) {
+            const yReading = ydoc.getMap('activeReadingTTS');
+            yReading.set('isPlaying', false);
+            yReading.set('status', 'Error');
+            yReading.set('updatedAt', Date.now());
+          }
         };
         audio.ontimeupdate = () => {
-          if (audio.duration && !isScrubbing) {
+          if (!isScrubbing && audio) {
             setCurrentTime(audio.currentTime);
           }
         };
+        audio.onloadedmetadata = () => {
+          if (audio) {
+            setDuration(audio.duration || 0);
+          }
+        };
 
-        setAudioElement(audio);
         try {
           await audio.play();
         } catch (playError: any) {
           if (playError.name !== 'AbortError') {
             throw playError;
           }
-          console.log('Audio playback safely aborted.');
         }
       } catch (err) {
         console.warn('Error playing audio from server:', err);
         setReadingStatus('Error en servidor TTS');
-        toast.error('No se pudo conectar con el servidor TTS local.');
+        toast.error('No se pudo conectar con el servidor TTS.');
+        setIsSpeaking(false);
+        setIsPlaying(false);
       }
     } else {
-      if (!('speechSynthesis' in window)) {
+      if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
         toast.error('Tu navegador no soporta síntesis de voz.');
         return;
       }
 
+      window.speechSynthesis.cancel();
       const utterance = new SpeechSynthesisUtterance(trimmed);
       if (voiceURI) {
         const selected = browserVoices.find(v => v.voiceURI === voiceURI);
@@ -306,6 +453,12 @@ export const useReading = (
         setIsSpeaking(false);
         setIsPlaying(false);
         setReadingStatus('Listo');
+        if (isTeacher && ydoc) {
+          const yReading = ydoc.getMap('activeReadingTTS');
+          yReading.set('isPlaying', false);
+          yReading.set('status', 'Listo');
+          yReading.set('updatedAt', Date.now());
+        }
         if (onEndCallback) onEndCallback();
       };
       utterance.onerror = (e) => {
@@ -313,26 +466,33 @@ export const useReading = (
         setIsPlaying(false);
         console.error('SpeechSynthesis error:', e);
         setReadingStatus('Error al reproducir');
+        if (isTeacher && ydoc) {
+          const yReading = ydoc.getMap('activeReadingTTS');
+          yReading.set('isPlaying', false);
+          yReading.set('status', 'Error');
+          yReading.set('updatedAt', Date.now());
+        }
       };
 
       window.speechSynthesis.speak(utterance);
     }
-  }, [audioMode, edgeVoice, rate, pitch, voiceURI, browserVoices, stopReading, isScrubbing]);
+  }, [audioMode, edgeVoice, rate, pitch, voiceURI, browserVoices, stopReading, isScrubbing, isTeacher, ydoc, currentSegmentIndex]);
 
   const playSegment = useCallback((index: number) => {
     const segment = readingSegments[index];
     if (!segment) return;
     setCurrentSegmentIndex(index);
-    speakText(segment.text);
+    speakText(segment.text, undefined, index);
   }, [readingSegments, speakText]);
 
   const togglePlayPause = useCallback(() => {
     if (audioMode === 'server') {
-      if (audioElement) {
-        if (audioElement.paused) {
-          audioElement.play().catch(console.error);
+      const audio = audioRef.current;
+      if (audio && audio.src) {
+        if (audio.paused) {
+          audio.play().catch(console.error);
         } else {
-          audioElement.pause();
+          audio.pause();
         }
       } else {
         if (currentSegmentIndex >= 0) {
@@ -364,22 +524,25 @@ export const useReading = (
         }
       }
     }
-  }, [audioMode, audioElement, currentSegmentIndex, readingSegments, readingText, playSegment, speakText]);
+  }, [audioMode, currentSegmentIndex, readingSegments, readingText, playSegment, speakText]);
 
   const rewindAudio = useCallback(() => {
-    if (audioElement) {
-      audioElement.currentTime = Math.max(0, audioElement.currentTime - 5);
-      setCurrentTime(audioElement.currentTime);
+    const audio = audioRef.current;
+    if (audio) {
+      audio.currentTime = Math.max(0, audio.currentTime - 5);
+      setCurrentTime(audio.currentTime);
     }
-  }, [audioElement]);
+  }, []);
 
   const forwardAudio = useCallback(() => {
-    if (audioElement) {
-      audioElement.currentTime = Math.min(duration, audioElement.currentTime + 5);
-      setCurrentTime(audioElement.currentTime);
+    const audio = audioRef.current;
+    if (audio) {
+      audio.currentTime = Math.min(duration, audio.currentTime + 5);
+      setCurrentTime(audio.currentTime);
     }
-  }, [audioElement, duration]);
+  }, [duration]);
 
+  // Fraccionar texto y obtener transcripción fonética IPA
   const handleSplitAndIpa = async () => {
     if (!readingText.trim()) {
       toast.error('Escribe o pega un texto en el área de texto primero.');
@@ -400,7 +563,7 @@ export const useReading = (
         setReadingStatus(
           ipaEngine === 'ai'
             ? 'Generando IPA con IA...'
-            : 'Generando IPA local...'
+            : 'Generando IPA local O(1)...'
         );
 
         const lineRequests: { id: string; text: string }[] = [];
@@ -459,12 +622,129 @@ export const useReading = (
 
       writeReadingFragmentsToBoard(chunks, ipaLinesByChunk);
       setReadingStatus(`Texto dividido en ${chunks.length} fragmento(s) y escrito en la pizarra.`);
+
+      // Sincronizar segmentos generados con estudiantes vía Yjs
+      if (isTeacher && ydoc) {
+        try {
+          const yReading = ydoc.getMap('activeReadingTTS');
+          yReading.set('readingText', readingText);
+          yReading.set('readingSegments', newSegments);
+          yReading.set('currentSegmentIndex', 0);
+          yReading.set('isPlaying', false);
+          yReading.set('status', `Texto dividido en ${chunks.length} fragmento(s)`);
+          yReading.set('updatedAt', Date.now());
+        } catch (err) {
+          console.warn('[useReading] Error syncing segments to Yjs:', err);
+        }
+      }
     } catch (error: any) {
       console.error('Reading split / IPA error:', error);
       setReadingStatus('Error al generar IPA');
       toast.error(`Error generando IPA: ${error.message || error}`);
     }
   };
+
+  // ─── Yjs: Observador de Estudiante ──────────────────────────────────────────
+  // Si el usuario es estudiante, recibe los segmentos y la reproducción de audio del profesor
+  useEffect(() => {
+    if (!ydoc || isTeacher) return;
+
+    const yReading = ydoc.getMap('activeReadingTTS');
+
+    const handleReadingChange = () => {
+      const remoteIsPlaying = yReading.get('isPlaying') as boolean | undefined;
+      const remoteSegmentIdx = yReading.get('currentSegmentIndex') as number | undefined;
+      const remoteSegments = yReading.get('readingSegments') as ReadingSegment[] | undefined;
+      const remoteText = yReading.get('readingText') as string | undefined;
+      const remoteStatus = yReading.get('status') as string | undefined;
+      const remoteAudioParams = yReading.get('audioTtsParams') as {
+        text: string;
+        mode: 'browser' | 'server';
+        voice?: string;
+        rate?: number;
+        pitch?: number;
+      } | null;
+
+      if (remoteSegments !== undefined) setReadingSegments(remoteSegments);
+      if (remoteSegmentIdx !== undefined) setCurrentSegmentIndex(remoteSegmentIdx);
+      if (remoteText !== undefined) setReadingText(remoteText);
+      if (remoteStatus !== undefined) setReadingStatus(remoteStatus);
+      if (remoteIsPlaying !== undefined) setIsPlaying(remoteIsPlaying);
+
+      // Clave de deduplicación para evitar reproducir repetidamente el mismo segmento
+      const key = (remoteAudioParams && remoteIsPlaying)
+        ? `${remoteSegmentIdx}::${remoteAudioParams.text}::${remoteAudioParams.mode}`
+        : '';
+
+      if (remoteIsPlaying && remoteAudioParams && key && key !== lastTTSKeyRef.current) {
+        lastTTSKeyRef.current = key;
+
+        if (remoteAudioParams.mode === 'server') {
+          const rateVal = remoteAudioParams.rate ?? 1;
+          const pitchVal = remoteAudioParams.pitch ?? 1;
+          const ratePercent = rateVal >= 1 ? `+${Math.round((rateVal - 1) * 100)}%` : `-${Math.round((1 - rateVal) * 100)}%`;
+          const pitchHz = pitchVal >= 1 ? `+${Math.round((pitchVal - 1) * 10)}Hz` : `-${Math.round((1 - pitchVal) * 10)}Hz`;
+
+          api.post('/reading/tts', {
+            text: remoteAudioParams.text,
+            voice: remoteAudioParams.voice || 'en-US-JennyNeural',
+            rate: ratePercent,
+            pitch: pitchHz,
+          }, { responseType: 'blob' })
+          .then((res) => {
+            if (audioBlobUrlRef.current) {
+              URL.revokeObjectURL(audioBlobUrlRef.current);
+            }
+            const blob = new Blob([res.data], { type: 'audio/mpeg' });
+            const url = URL.createObjectURL(blob);
+            audioBlobUrlRef.current = url;
+
+            let audio = audioRef.current;
+            if (!audio) {
+              audio = new Audio();
+              audioRef.current = audio;
+            }
+            audio.src = url;
+            audio.play().catch((err) => {
+              if (err.name !== 'AbortError') {
+                console.warn('[reading-student] Autoplay prevented or failed:', err);
+              }
+            });
+          })
+          .catch((err) => {
+            console.error('[reading-student] TTS fetch error:', err);
+          });
+        } else if (remoteAudioParams.mode === 'browser') {
+          if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+            window.speechSynthesis.cancel();
+            const utter = new SpeechSynthesisUtterance(remoteAudioParams.text);
+            if (remoteAudioParams.rate) utter.rate = remoteAudioParams.rate;
+            if (remoteAudioParams.pitch) utter.pitch = remoteAudioParams.pitch;
+            if (remoteAudioParams.voice && browserVoices.length > 0) {
+              const v = browserVoices.find(bv => bv.voiceURI === remoteAudioParams.voice);
+              if (v) utter.voice = v;
+            }
+            window.speechSynthesis.speak(utter);
+          }
+        }
+      } else if (remoteIsPlaying === false) {
+        if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+          window.speechSynthesis.cancel();
+        }
+        if (audioRef.current) {
+          audioRef.current.pause();
+        }
+        lastTTSKeyRef.current = '';
+      }
+    };
+
+    yReading.observe(handleReadingChange);
+    handleReadingChange();
+
+    return () => {
+      yReading.unobserve(handleReadingChange);
+    };
+  }, [ydoc, isTeacher, browserVoices]);
 
   return {
     showReadingPanel,
@@ -518,6 +798,9 @@ export const useReading = (
     togglePlayPause,
     rewindAudio,
     forwardAudio,
-    handleSplitAndIpa
+    handleSplitAndIpa,
+    highlightSegmentOnCanvas,
   };
 };
+
+export type UseReadingReturn = ReturnType<typeof useReading>;
