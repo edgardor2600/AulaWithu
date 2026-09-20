@@ -36,7 +36,9 @@ export const useConversation = (
   canvas: fabric.Canvas | null,
   saveHistory: () => void,
   ydoc?: Y.Doc | null,
-  isTeacher?: boolean
+  isTeacher?: boolean,
+  /** Called after canvas mutations so EditorPage auto-saves to PostgreSQL */
+  notifyChange?: () => void
 ) => {
   const [showConversationPanel, setShowConversationPanel] = useState(false);
   const [dialogueText, setDialogueText] = useState('');
@@ -864,6 +866,8 @@ Por favor, genera el material educativo completo siguiendo este formato estricto
     canvas.add(textElement);
     canvas.renderAll();
     saveHistory();
+    // Propagate change so EditorPage debounced-saves to PostgreSQL
+    notifyChange?.();
     toast.success('Contenido insertado en la pizarra');
   };
 
@@ -915,6 +919,8 @@ Por favor, genera el material educativo completo siguiendo este formato estricto
 
     canvas.renderAll();
     saveHistory();
+    // Propagate change so EditorPage debounced-saves to PostgreSQL
+    notifyChange?.();
     toast.success('Diálogo insertado en la pizarra');
   };
 
@@ -1047,7 +1053,11 @@ Por favor, genera el material educativo completo siguiendo este formato estricto
       canvas.setActiveObject(img);
       canvas.renderAll();
 
-      setTimeout(() => saveHistory(), 100);
+      setTimeout(() => {
+        saveHistory();
+        // Propagate change so EditorPage debounced-saves to PostgreSQL
+        notifyChange?.();
+      }, 100);
       toast.success('Imagen insertada en la pizarra');
     } catch (error) {
       console.error('Error adding image to canvas:', error);

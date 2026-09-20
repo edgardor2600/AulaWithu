@@ -287,7 +287,7 @@ export const CanvasEditor = ({
   const hasInitialFitRef = useRef(false);
 
   const reading = useReading(fabricCanvasRef.current, saveHistory, ydoc, isTeacher);
-  const conversation = useConversation(fabricCanvasRef.current, saveHistory, ydoc, isTeacher);
+  const conversation = useConversation(fabricCanvasRef.current, saveHistory, ydoc, isTeacher, notifyChange);
   const globalTimer = useGlobalTimer(ydoc, isTeacher);
 
   const effectivePresenterSessionId = sessionId || (slideId ? `slide_${slideId}` : 'standalone_session');

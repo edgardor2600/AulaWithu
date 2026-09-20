@@ -235,6 +235,7 @@ export const SessionViewPage = () => {
           {/* Canvas */}
           <div className="flex-1 overflow-hidden bg-gradient-to-br from-blue-50 to-indigo-50 p-2 md:p-6">
             <CanvasEditor
+              key={`canvas-${session.slide_id}`}
               slideId={session.slide_id.toString()}
               initialData={slide.canvas_data || undefined}
               onSave={handleSave}

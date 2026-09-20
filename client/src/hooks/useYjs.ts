@@ -94,9 +94,23 @@ export function useYjs(
     });
 
     provider.on('sync', (isSynced: boolean) => {
-      if (isSynced) {
-        console.log('✅ Yjs initial sync complete');
-        // Load existing objects from Yjs to canvas
+      if (!isSynced) return;
+      console.log('✅ Yjs initial sync complete');
+
+      if (isTeacher) {
+        // Teacher: if the shared map is empty but the local canvas already has
+        // objects drawn (e.g. content added before the live session started),
+        // push everything to Yjs so late-joining students receive the board state.
+        const mapIsEmpty = yCanvas.size === 0;
+        if (mapIsEmpty) {
+          uploadExistingCanvasToYjs();
+        } else {
+          // Map already has entries from a previous connection or refresh —
+          // load missing remote objects into the local canvas too.
+          loadFromYjs();
+        }
+      } else {
+        // Student: always load current board state from Yjs
         loadFromYjs();
       }
     });
@@ -323,30 +337,36 @@ export function useYjs(
     }
 
     /**
-     * Fabric ← Yjs: Load all objects from Yjs to canvas
+     * Fabric ← Yjs: Load all objects from Yjs to canvas.
+     *
+     * Objects are enlivened asynchronously. We collect all Promises and await
+     * them together so that renderAll() happens only after every object is
+     * on the canvas — preventing a blank frame.
      */
     async function loadFromYjs() {
       if (!canvas || !yCanvas || isRemoteChangeRef.current) return;
 
-      // Esperar a que clientId esté disponible
       if (!ydocRef.current?.clientID) {
-        console.log('⏳ Waiting for clientID before loading objects...');
+        console.log('[Yjs] ⏳ Waiting for clientID before loading objects…');
         return;
       }
 
-      console.log('📥 Loading objects from Yjs...');
-      console.log('🔒 Current permissions:', { isReadOnly, enforceOwnership, isTeacher });
+      console.log('[Yjs] 📥 Loading objects from Yjs…', { isReadOnly, enforceOwnership, isTeacher });
       isRemoteChangeRef.current = true;
 
+      const addPromises: Promise<void>[] = [];
       yCanvas.forEach((objectData: any, objectId: string) => {
         if (!syncedObjectsRef.current.has(objectId)) {
-          addObjectToCanvas(objectData, objectId);
+          addPromises.push(addObjectToCanvas(objectData, objectId));
         }
       });
 
-      // Aplicar permisos inmediatamente después de cargar
+      // Await every enlivenObjects call before applying locks and rendering
+      await Promise.all(addPromises);
+
+      // Apply read-only lock to all canvas objects for students
       if (isReadOnly && !isTeacher) {
-        console.log('🔐 Applying read-only lock to all objects for student...');
+        console.log('[Yjs] 🔐 Applying read-only lock for student…');
         canvas.forEachObject((obj: any) => {
           obj.selectable = false;
           obj.evented = false;
@@ -358,7 +378,6 @@ export function useYjs(
           obj.lockScalingX = true;
           obj.lockScalingY = true;
           obj.editable = false;
-          
           if (obj instanceof fabric.IText) {
             obj.editable = false;
             obj.selectable = false;
@@ -470,16 +489,19 @@ export function useYjs(
     }
 
     /**
-     * Fabric → Yjs: Sync local changes to Yjs
+     * Fabric → Yjs: Sync local changes to Yjs.
+     *
+     * NOTE: In Fabric.js v6, toJSON() ignores extra-props arguments.
+     * toObject([...]) must be used to include custom metadata fields.
      */
     function syncFabricToYjs(obj: fabric.Object) {
       if (!yCanvas || isRemoteChangeRef.current) return;
       if ((obj as any).excludeFromSync) return;
 
-      const objectId = (obj as any).id || generateObjectId();
+      const objectId: string = (obj as any).id || generateObjectId();
       (obj as any).id = objectId;
-      
-      // Add ownership metadata
+
+      // Stamp ownership on first sync
       if (!(obj as any).createdBy && ydocRef.current) {
         (obj as any).createdBy = ydocRef.current.clientID;
       }
@@ -487,39 +509,77 @@ export function useYjs(
         (obj as any).creatorUserId = currentUserId;
       }
 
-      const objectData = (obj as any).toJSON(['id', 'createdBy', 'creatorUserId', 'isLocalOwned']);
+      // toObject() accepts extra props in Fabric v6 (unlike toJSON which ignores them)
+      const objectData = (obj as any).toObject(['id', 'createdBy', 'creatorUserId', 'isLocalOwned']);
       yCanvas.set(objectId, objectData);
       syncedObjectsRef.current.add(objectId);
     }
 
     /**
-     * Yjs → Fabric: Sync remote changes to canvas
+     * Push ALL currently-drawn canvas objects to the shared Yjs map.
+     * Called when the teacher first connects to an empty room so that
+     * students joining later receive the pre-existing board state.
+     */
+    function uploadExistingCanvasToYjs() {
+      if (!yCanvas || !canvas || !isTeacher) return;
+
+      const existingObjects = canvas.getObjects();
+      if (existingObjects.length === 0) return;
+
+      console.log(`[Yjs] Uploading ${existingObjects.length} pre-existing canvas objects to Yjs…`);
+
+      ydoc.transact(() => {
+        existingObjects.forEach((obj) => {
+          if ((obj as any).excludeFromSync) return;
+
+          const objectId: string = (obj as any).id || generateObjectId();
+          (obj as any).id = objectId;
+
+          if (!(obj as any).createdBy) (obj as any).createdBy = ydoc.clientID;
+          if (!(obj as any).creatorUserId && currentUserId) (obj as any).creatorUserId = currentUserId;
+
+          const objectData = (obj as any).toObject(['id', 'createdBy', 'creatorUserId', 'isLocalOwned']);
+          yCanvas.set(objectId, objectData);
+          syncedObjectsRef.current.add(objectId);
+        });
+      });
+    }
+
+    /**
+     * Yjs → Fabric: Sync remote changes to canvas.
+     *
+     * addObjectToCanvas is async (fabric.util.enlivenObjects returns a Promise).
+     * We collect all pending additions and await them before doing the final
+     * renderAll(), preventing a race where renderAll fires before objects exist.
      */
     function syncYjsToFabric(event: Y.YMapEvent<any>) {
       if (!canvas || isRemoteChangeRef.current) return;
 
-      // Ignorar eventos originados por este mismo cliente
+      // Ignore events that originated from this client itself
       if (event.transaction.origin === ydocRef.current?.clientID || event.transaction.local) {
         return;
       }
 
       isRemoteChangeRef.current = true;
 
+      const addPromises: Promise<void>[] = [];
+
       event.changes.keys.forEach((change, key) => {
         if (change.action === 'add' || change.action === 'update') {
           const existingObj = canvas.getObjects().find((o: any) => o.id === key);
-          
+
           if (existingObj) {
+            // In-place update: only copy mutable transform properties, not type
             const newData = yCanvas.get(key);
             if (newData) {
-              const { type, version, ...updateData } = newData as any;
+              const { type: _type, version: _version, ...updateData } = newData as any;
               existingObj.set(updateData);
               existingObj.setCoords();
             }
           } else {
             const objectData = yCanvas.get(key);
             if (objectData) {
-              addObjectToCanvas(objectData, key);
+              addPromises.push(addObjectToCanvas(objectData, key));
             }
           }
         } else if (change.action === 'delete') {
@@ -531,8 +591,15 @@ export function useYjs(
         }
       });
 
-      canvas.renderAll();
-      isRemoteChangeRef.current = false;
+      // Await all async additions before rendering so nothing is missed
+      Promise.all(addPromises).then(() => {
+        canvas.renderAll();
+        isRemoteChangeRef.current = false;
+      }).catch((err) => {
+        console.error('[Yjs] syncYjsToFabric error:', err);
+        canvas.renderAll();
+        isRemoteChangeRef.current = false;
+      });
     }
 
     // Fabric Event Handlers

@@ -362,6 +362,17 @@ export const EditorPage = () => {
     if (!currentSlide || !classId) return;
 
     try {
+      // ✅ Force-flush any pending debounced save BEFORE starting session
+      // so students always load the teacher's latest canvas from the DB.
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+        saveTimeoutRef.current = undefined;
+      }
+      const pendingData = slidesDataRef.current.get(currentSlide.id);
+      if (pendingData && pendingData !== lastSavedDataRef.current) {
+        await saveToBackend(currentSlide.id, pendingData);
+      }
+
       // First, check if there's already an active session for this slide
       const activeSessions = await sessionService.getActive();
       const existingSession = activeSessions.find(
