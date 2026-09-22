@@ -50,51 +50,10 @@ export interface EvaluationData {
 // ─── Repository ───────────────────────────────────────────────────────────────
 
 export class TutorRepository {
-  private static tableInitialized = false;
-
-  private static async ensureTablesExist() {
-    if (this.tableInitialized) return;
-    try {
-      await runQuery(`
-        CREATE TABLE IF NOT EXISTS ai_tutor_materials (
-          id          SERIAL PRIMARY KEY,
-          content_id  VARCHAR(255) NOT NULL UNIQUE,
-          title       VARCHAR(255) NOT NULL,
-          topic       VARCHAR(255) NOT NULL,
-          subject     VARCHAR(100) NOT NULL DEFAULT 'English',
-          level       VARCHAR(50)  NOT NULL DEFAULT 'B1',
-          mode        VARCHAR(50)  NOT NULL DEFAULT 'guided',
-          context     TEXT         NOT NULL DEFAULT '',
-          source_kind VARCHAR(50)  NOT NULL DEFAULT 'generated',
-          script_json JSONB        NOT NULL,
-          created_by  VARCHAR(255),
-          created_at  TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
-          updated_at  TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP
-        )
-      `);
-      await runQuery(`
-        CREATE TABLE IF NOT EXISTS student_ai_evaluations (
-          id          SERIAL PRIMARY KEY,
-          session_id  VARCHAR(255) NOT NULL,
-          student_id  VARCHAR(255),
-          material_id INT REFERENCES ai_tutor_materials(id) ON DELETE SET NULL,
-          phase_index INT  NOT NULL DEFAULT 0,
-          score       INT  NOT NULL DEFAULT 0,
-          feedback    TEXT,
-          created_at  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-        )
-      `);
-      this.tableInitialized = true;
-    } catch (err: any) {
-      logger.warn(`[TutorRepository] Could not auto-create tables: ${err.message}`);
-    }
-  }
-
   /**
    * Save or update a tutor material (upsert by content_id)
    */
   static async saveMaterial(data: TutorMaterialData): Promise<TutorMaterial | null> {
-    await this.ensureTablesExist();
     try {
       const contentId = data.content_id ||
         `ai_tutor_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
@@ -148,7 +107,6 @@ export class TutorRepository {
     limit = 50,
     offset = 0
   ): Promise<{ materials: TutorMaterialSummary[]; total: number }> {
-    await this.ensureTablesExist();
     try {
       const params: any[] = [];
       const conditions: string[] = [];
@@ -187,7 +145,6 @@ export class TutorRepository {
    * Get full material by content_id (includes script_json)
    */
   static async getMaterialById(contentId: string): Promise<TutorMaterial | null> {
-    await this.ensureTablesExist();
     try {
       const row = await getOne(
         `SELECT * FROM ai_tutor_materials WHERE content_id = $1`,
@@ -204,7 +161,6 @@ export class TutorRepository {
    * Delete material by content_id
    */
   static async deleteMaterial(contentId: string): Promise<boolean> {
-    await this.ensureTablesExist();
     try {
       const result = await runQuery(
         `DELETE FROM ai_tutor_materials WHERE content_id = $1`,
@@ -221,7 +177,6 @@ export class TutorRepository {
    * Save a student evaluation for a phase
    */
   static async saveEvaluation(data: EvaluationData): Promise<void> {
-    await this.ensureTablesExist();
     try {
       await runQuery(
         `INSERT INTO student_ai_evaluations

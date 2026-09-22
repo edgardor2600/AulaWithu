@@ -16,38 +16,10 @@ export interface ConversationStoryRecord {
 }
 
 export class ConversationRepository {
-  private static tableInitialized = false;
-
-  private static async ensureTableExists() {
-    if (this.tableInitialized) return;
-    try {
-      await runQuery(`
-        CREATE TABLE IF NOT EXISTS conversation_stories (
-            id VARCHAR(255) PRIMARY KEY,
-            title VARCHAR(255) NOT NULL,
-            topics VARCHAR(255) NOT NULL DEFAULT 'General',
-            level VARCHAR(50) NOT NULL DEFAULT 'A1',
-            dialogue_text TEXT NOT NULL,
-            supplementary_text TEXT,
-            speakers JSONB NOT NULL DEFAULT '[]'::jsonb,
-            clips JSONB DEFAULT '[]'::jsonb,
-            image_url VARCHAR(500),
-            timestamp BIGINT,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        );
-      `);
-      this.tableInitialized = true;
-    } catch (err) {
-      console.warn('[ConversationRepository] Failed to auto-create conversation_stories table:', err);
-    }
-  }
-
   /**
    * Get all conversation stories
    */
   static async getAllStories(): Promise<ConversationStoryRecord[]> {
-    await this.ensureTableExists();
     try {
       const rows = await getAll(
         `SELECT id, title, topics, level, dialogue_text as "dialogueText",
@@ -67,7 +39,6 @@ export class ConversationRepository {
    * Get single story by ID
    */
   static async getStoryById(id: string): Promise<ConversationStoryRecord | null> {
-    await this.ensureTableExists();
     try {
       const row = await getOne(
         `SELECT id, title, topics, level, dialogue_text as "dialogueText",
@@ -88,7 +59,6 @@ export class ConversationRepository {
    * Upsert (insert or update) a story
    */
   static async upsertStory(data: Partial<ConversationStoryRecord>): Promise<ConversationStoryRecord | null> {
-    await this.ensureTableExists();
     try {
       const id = data.id || Math.random().toString(36).substring(2, 11);
       const title = data.title || 'Diálogo sin título';
@@ -134,7 +104,6 @@ export class ConversationRepository {
    * Delete a story by ID
    */
   static async deleteStory(id: string): Promise<boolean> {
-    await this.ensureTableExists();
     try {
       const result = await runQuery(`DELETE FROM conversation_stories WHERE id = $1`, [id]);
       return (result.rowCount ?? 0) > 0;

@@ -16,38 +16,10 @@ export interface StudentReadingAttempt {
 }
 
 export class ReadingRepository {
-  private static tableInitialized = false;
-
-  private static async ensureTableExists() {
-    if (this.tableInitialized) return;
-    try {
-      await runQuery(`
-        CREATE TABLE IF NOT EXISTS student_reading_attempts (
-            id SERIAL PRIMARY KEY,
-            session_id VARCHAR(255) NOT NULL,
-            student_id VARCHAR(255),
-            story_title VARCHAR(255),
-            story_text TEXT NOT NULL,
-            wpm_setting INT NOT NULL DEFAULT 120,
-            overall_score INT NOT NULL DEFAULT 0,
-            pronunciation_score INT NOT NULL DEFAULT 0,
-            feedback TEXT,
-            audio_url VARCHAR(255),
-            words_alignment JSONB NOT NULL DEFAULT '[]'::jsonb,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        );
-      `);
-      this.tableInitialized = true;
-    } catch (err) {
-      console.warn('[ReadingRepository] Failed to auto-create student_reading_attempts table:', err);
-    }
-  }
-
   /**
    * Save a new student reading attempt
    */
   static async saveAttempt(data: StudentReadingAttempt): Promise<StudentReadingAttempt | null> {
-    await this.ensureTableExists();
     try {
       const result = await runQuery(
         `INSERT INTO student_reading_attempts (
@@ -79,7 +51,6 @@ export class ReadingRepository {
    * Get all reading attempts for a session
    */
   static async getAttemptsBySession(sessionId: string): Promise<StudentReadingAttempt[]> {
-    await this.ensureTableExists();
     try {
       const result = await runQuery(
         `SELECT r.*, COALESCE(u.name, 'Estudiante') as student_name 
@@ -100,7 +71,6 @@ export class ReadingRepository {
    * Get all reading attempts for a student
    */
   static async getAttemptsByStudent(studentId: string): Promise<StudentReadingAttempt[]> {
-    await this.ensureTableExists();
     try {
       const result = await runQuery(
         `SELECT * FROM student_reading_attempts 
@@ -119,7 +89,6 @@ export class ReadingRepository {
    * Delete a reading attempt by ID
    */
   static async deleteAttempt(id: number | string): Promise<boolean> {
-    await this.ensureTableExists();
     try {
       const result = await runQuery(`DELETE FROM student_reading_attempts WHERE id = $1`, [id]);
       return (result.rowCount ?? 0) > 0;
