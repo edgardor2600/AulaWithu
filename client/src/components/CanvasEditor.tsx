@@ -225,13 +225,13 @@ export const CanvasEditor = ({
 
   // Yjs real-time collaboration
   const { isConnected, participants, participantsList, clientId, updateSessionPermissions, ydoc } = useYjs(
-    sessionId, // Room name (null if not in live session)
+    sessionId,        // Room name (null if not in live session)
     fabricCanvasRef.current,
-    !!sessionId, // Only enable if sessionId exists
-    isReadOnly, // Pass read-only state
+    !!sessionId && isReady, // ✅ FIX: Solo conectar DESPUÉS de que initialData cargó
+    isReadOnly,       // Pass read-only state
     enforceOwnership, // Pass ownership enforcement
-    isTeacher,  // ✅ NUEVO: Pasar rol de profesor
-    onPermissionsChange  // ✅ NUEVO: Pasar callback de cambio de permisos
+    isTeacher,        // Pasar rol de profesor
+    onPermissionsChange // Callback de cambio de permisos
   );
 
   // ✅ ELIMINADO: applyLock - Toda la lógica de permisos está en useYjs
@@ -1303,6 +1303,13 @@ export const CanvasEditor = ({
             try {
               const enlivenedObjects = await fabric.util.enlivenObjects(data.objects);
               enlivenedObjects.forEach((obj: any) => {
+                // ✅ FIX-3: Asignar ID estable ANTES de canvas.add() para que
+                // la dedup de Yjs funcione por id desde el primer momento.
+                // Preservar el id original si ya venía serializado en el JSON.
+                if (!obj.id) {
+                  obj.id = `obj_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+                }
+
                 // ✅ ENFORCE READ-ONLY: Lock objects if in read-only mode
                 if (isReadOnlyRef.current) {
                   const isTextType = obj instanceof fabric.IText || obj.type === 'text' || obj.type === 'i-text';

@@ -48,6 +48,9 @@ export function useYjs(
   
   // Track object IDs to prevent duplicates
   const syncedObjectsRef = useRef<Set<string>>(new Set());
+
+  // ✅ FIX-2: Guard para que loadFromYjs solo corra UNA vez por conexión
+  const hasLoadedFromYjsRef = useRef(false);
   
   // ✅ NUEVO: Ref para callback de cambio de permisos (evita stale closures)
   const onPermissionsChangeRef = useRef(onPermissionsChange);
@@ -185,10 +188,10 @@ export function useYjs(
       setParticipants(deduplicatedParticipants.length);
       setParticipantsList(deduplicatedParticipants);
       
-      // Reintentar cargar objetos si clientID ahora está disponible
-      if (ydocRef.current?.clientID && yCanvasRef.current) {
-        loadFromYjs();
-      }
+      // ✅ FIX-1: Se eliminó la llamada a loadFromYjs() aquí.
+      // Era la causa principal de duplicación: se re-cargaban objetos
+      // en cada cambio de participante (entrada/salida de la sala).
+      // La carga inicial ya ocurre correctamente en provider.on('sync').
     });
 
     // Set local awareness state with user info including userId and role
@@ -350,6 +353,15 @@ export function useYjs(
         console.log('[Yjs] ⏳ Waiting for clientID before loading objects…');
         return;
       }
+
+      // ✅ FIX-2: Evitar doble-carga por llamadas concurrentes.
+      // loadFromYjs solo debe correr una vez por conexión; las actualizaciones
+      // posteriores llegan vía yCanvas.observe (syncYjsToFabric).
+      if (hasLoadedFromYjsRef.current) {
+        console.log('[Yjs] ⏩ loadFromYjs ya ejecutado para esta conexión, omitiendo.');
+        return;
+      }
+      hasLoadedFromYjsRef.current = true;
 
       console.log('[Yjs] 📥 Loading objects from Yjs…', { isReadOnly, enforceOwnership, isTeacher });
       isRemoteChangeRef.current = true;
@@ -535,6 +547,14 @@ export function useYjs(
           const objectId: string = (obj as any).id || generateObjectId();
           (obj as any).id = objectId;
 
+          // ✅ FIX-4: No re-subir objetos que ya están sincronizados.
+          // Evita que handleObjectAdded y uploadExistingCanvasToYjs
+          // escriban el mismo objeto dos veces a Yjs.
+          if (syncedObjectsRef.current.has(objectId)) {
+            console.log('[Yjs] ⏩ Objeto ya sincronizado, omitiendo:', objectId);
+            return;
+          }
+
           if (!(obj as any).createdBy) (obj as any).createdBy = ydoc.clientID;
           if (!(obj as any).creatorUserId && currentUserId) (obj as any).creatorUserId = currentUserId;
 
@@ -707,6 +727,8 @@ export function useYjs(
       providerRef.current = null;
       yCanvasRef.current = null;
       syncedObjectsRef.current.clear();
+      // ✅ FIX-2: Resetear guard para que una reconexion empiece limpia
+      hasLoadedFromYjsRef.current = false;
     };
   }, [roomName, canvas, enabled, isReadOnly, enforceOwnership, isTeacher]);
 
