@@ -53,27 +53,16 @@ export const QuizLiveMonitor: React.FC<QuizLiveMonitorProps> = ({ quiz }) => {
         </div>
 
         {/* Metric 2: Live Timer */}
-        <div className="p-3 rounded-xl bg-slate-900/80 border border-white/10 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-amber-500/20 border border-amber-500/30 flex items-center justify-center shrink-0">
-              <Clock className="w-5 h-5 text-amber-400" />
-            </div>
-            <div>
-              <div className="text-[10px] uppercase tracking-wider text-slate-400 font-bold">Tiempo</div>
-              <div className={`text-base font-mono font-bold ${quiz.timeLeft <= 5 ? 'text-rose-400 animate-pulse' : 'text-amber-300'}`}>
-                {quiz.timeLeft}s
-              </div>
+        <div className="p-3 rounded-xl bg-slate-900/80 border border-white/10 flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-amber-500/20 border border-amber-500/30 flex items-center justify-center shrink-0">
+            <Clock className="w-5 h-5 text-amber-400" />
+          </div>
+          <div>
+            <div className="text-[10px] uppercase tracking-wider text-slate-400 font-bold">Tiempo</div>
+            <div className={`text-base font-mono font-bold tabular-nums min-w-[2.5rem] ${quiz.timeLeft <= 5 ? 'text-rose-400 animate-pulse' : 'text-amber-300'}`}>
+              {quiz.timeLeft}s
             </div>
           </div>
-          {/* Quick +15s Button */}
-          <button
-            type="button"
-            onClick={() => quiz.extendTime(15)}
-            className="px-2 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-300 text-xs font-bold flex items-center gap-1 transition-all"
-            title="Añadir 15 segundos al temporizador"
-          >
-            <Plus className="w-3.5 h-3.5" /> 15s
-          </button>
         </div>
 
         {/* Metric 3: Participation */}
@@ -81,12 +70,12 @@ export const QuizLiveMonitor: React.FC<QuizLiveMonitorProps> = ({ quiz }) => {
           <div className="w-10 h-10 rounded-xl bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center shrink-0">
             <Users className="w-5 h-5 text-emerald-400" />
           </div>
-          <div className="flex-1">
-            <div className="flex justify-between items-center text-[10px] uppercase tracking-wider text-slate-400 font-bold">
+          <div className="flex-1 min-w-0">
+            <div className="flex justify-between items-center text-[10px] uppercase tracking-wider text-slate-400 font-bold mb-0.5">
               <span>Respuestas</span>
-              <span className="text-emerald-400">{participationPct}%</span>
+              <span className="px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-bold text-[10px]">{participationPct}%</span>
             </div>
-            <div className="text-sm font-bold text-white">
+            <div className="text-sm font-bold text-white truncate">
               {answeredCount} <span className="text-xs text-slate-400">/ {totalStudents} alumnos</span>
             </div>
           </div>
@@ -113,6 +102,17 @@ export const QuizLiveMonitor: React.FC<QuizLiveMonitorProps> = ({ quiz }) => {
           {isQuestionPhase && (
             <button
               type="button"
+              onClick={() => quiz.extendTime(15)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-600/80 hover:bg-amber-600 text-white text-xs font-bold shadow-md shadow-amber-600/20 transition-all"
+              title="Añadir 15 segundos al temporizador"
+            >
+              <Plus className="w-3.5 h-3.5" /> 15s Tiempo
+            </button>
+          )}
+
+          {isQuestionPhase && (
+            <button
+              type="button"
               onClick={quiz.revealCurrentAnswer}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold shadow-md shadow-indigo-600/20 transition-all"
             >
@@ -125,16 +125,16 @@ export const QuizLiveMonitor: React.FC<QuizLiveMonitorProps> = ({ quiz }) => {
             onClick={quiz.skipToNextQuestion}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-violet-600 hover:bg-violet-500 text-white text-xs font-bold shadow-md shadow-violet-600/20 transition-all"
           >
-            <SkipForward className="w-3.5 h-3.5" /> Siguiente Pregunta
+            <SkipForward className="w-3.5 h-3.5" /> {isRevealPhase ? 'Avanzar ya ⏭️' : 'Siguiente Pregunta'}
           </button>
         </div>
 
         <button
           type="button"
-          onClick={quiz.stopQuiz}
+          onClick={quiz.isSessionFinalized ? quiz.openLocalPodium : quiz.stopQuiz}
           className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-gradient-to-r from-amber-600 to-yellow-600 hover:from-amber-500 hover:to-yellow-500 text-white text-xs font-bold shadow-md shadow-amber-600/25 transition-all"
         >
-          <Trophy className="w-3.5 h-3.5" /> Ver Podio Final
+          <Trophy className="w-3.5 h-3.5" /> {quiz.isSessionFinalized ? 'Ver Resultados' : 'Ver Podio Final'}
         </button>
       </div>
 
@@ -157,7 +157,7 @@ export const QuizLiveMonitor: React.FC<QuizLiveMonitorProps> = ({ quiz }) => {
       <div className="space-y-2 flex-1 overflow-hidden flex flex-col">
         <div className="flex justify-between items-center text-xs font-bold text-slate-400 px-1">
           <span>Participantes en Vivo ({totalStudents})</span>
-          <span>Estado de Respuesta</span>
+          <span>{answeredCount} de {totalStudents} respondieron</span>
         </div>
 
         {totalStudents === 0 ? (

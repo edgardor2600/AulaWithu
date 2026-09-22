@@ -82,7 +82,7 @@ export const QuizPlayerWidget: React.FC<QuizPlayerWidgetProps> = ({
   // Register student identity in useQuizGame
   useEffect(() => {
     quiz.registerStudentClient(clientId, userName);
-  }, [clientId, userName, quiz.registerStudentClient]);
+  }, [clientId, userName, quiz.registerStudentClient, quiz.currentQuestionIndex]);
 
   // Sound FX: answer reveal — safe: no-ops when question is null
   useEffect(() => {

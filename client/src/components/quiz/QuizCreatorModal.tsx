@@ -51,7 +51,8 @@ export const QuizCreatorModal: React.FC<QuizCreatorModalProps> = ({ quiz, isTeac
     );
   };
 
-  const activePreviewQuiz = selectedLibraryQuiz || quiz.generatedQuiz;
+  // Freshly generated quiz takes priority; fallback to a library quiz loaded for preview
+  const activePreviewQuiz = quiz.generatedQuiz || selectedLibraryQuiz;
   const q = activePreviewQuiz?.questions?.[previewQuestionIdx];
 
   const filteredLibrary = quiz.savedQuizzes.filter(item => {
@@ -199,7 +200,12 @@ export const QuizCreatorModal: React.FC<QuizCreatorModalProps> = ({ quiz, isTeac
               <button
                 type="button"
                 disabled={quiz.isGenerating || !quiz.topic.trim()}
-                onClick={quiz.generateQuiz}
+                onClick={() => {
+                  // Clear any library preview so the new generation is unambiguously shown
+                  setSelectedLibraryQuiz(null);
+                  setPreviewQuestionIdx(0);
+                  quiz.generateQuiz();
+                }}
                 className="w-full py-3 rounded-xl bg-gradient-to-r from-violet-600 via-purple-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 disabled:opacity-40 text-white font-bold text-sm shadow-lg shadow-violet-600/25 flex items-center justify-center gap-2 transition-all cursor-pointer"
               >
                 {quiz.isGenerating ? (
@@ -216,6 +222,20 @@ export const QuizCreatorModal: React.FC<QuizCreatorModalProps> = ({ quiz, isTeac
               {/* Quiz Preview Card */}
               {activePreviewQuiz && (
                 <div className="space-y-3 pt-3 border-t border-white/10">
+                  {/* Origin badge: shown only when displaying a library quiz (no fresh generation yet) */}
+                  {!quiz.generatedQuiz && selectedLibraryQuiz && (
+                    <div className="flex items-center justify-between px-3 py-2 rounded-lg bg-violet-900/30 border border-violet-500/20 text-[11px]">
+                      <span className="text-violet-300 font-semibold">📚 Cargado desde Biblioteca</span>
+                      <button
+                        type="button"
+                        onClick={() => { setSelectedLibraryQuiz(null); setPreviewQuestionIdx(0); }}
+                        className="text-slate-400 hover:text-rose-400 transition-colors font-bold"
+                      >
+                        Descartar ✕
+                      </button>
+                    </div>
+                  )}
+
                   <div className="flex items-center justify-between">
                     <div>
                       <h3 className="text-sm font-bold text-white">
