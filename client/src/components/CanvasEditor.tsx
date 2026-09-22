@@ -1,38 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import * as fabric from 'fabric';
-import { 
-  Pencil, 
-  Square, 
-  Circle as CircleIcon, 
-  Triangle as TriangleIcon,
-  Type, 
-  Eraser, 
-  MousePointer,
-  Minus,
-  Trash2,
-  Save,
-  FileDown,
-  Undo2,
-  Redo2,
-  Users,
-  ZoomIn,
-  ZoomOut,
-  Maximize2,
-  Hand,
-  ArrowRight,
-  ImageIcon,
-  FolderOpen,
-  Keyboard,
-  Volume2,
-  BookOpen,
-  MessageSquare,
-  MonitorUp,
-  Scissors,
-  Palette,
-  Timer,
-  Zap,
-  Bot,
-} from 'lucide-react';
+import { Volume2 } from 'lucide-react';
+import { CanvasToolbar } from './canvas/CanvasToolbar';
 import { useReading } from '../hooks/useReading';
 import { ReadingPanel } from './ReadingPanel';
 import { ReadingStudentWidget } from './ReadingStudentWidget';
@@ -780,6 +749,20 @@ export const CanvasEditor = ({
     syncCursorForTool(tool);
   }, [addText, syncCursorForTool, triggerImageUpload, reading, globalTimer, presenter, readingGame, conversation, aiTutor, quizGame]);
 
+
+  // ── Callback: aplica zoom manual desde el toolbar (Fabric vive aquí) ────────
+  const handleManualZoomApply = useCallback((percent: number) => {
+    const newZoom = percent / 100;
+    const canvas = fabricCanvasRef.current;
+    if (canvas) {
+      setZoomLevel(newZoom);
+      const center = canvas.getCenter();
+      canvas.zoomToPoint({ x: center.left, y: center.top } as any, newZoom);
+      updateMiniMap();
+    }
+    setManualZoom(percent.toString());
+  }, [updateMiniMap]);
+  // ─────────────────────────────────────────────────────────────────────────────
 
   const exportJSON = useCallback(() => {
     const canvas = fabricCanvasRef.current;
@@ -2025,42 +2008,6 @@ export const CanvasEditor = ({
     toast.success('Vector SVG exportado');
   }, [slideId]);
 
-  const tools = [
-    { id: 'select' as Tool, icon: MousePointer, label: 'Select', desc: 'Select and move (V)' },
-    { id: 'hand' as Tool, icon: Hand, label: 'Hand', desc: 'Pan canvas (H or Space)' },
-    { id: 'pencil' as Tool, icon: Pencil, label: 'Pencil', desc: 'Draw freehand (P)' },
-    { id: 'cut' as Tool, icon: Scissors, label: 'Recortar', desc: 'Recortar área del canvas (X)' },
-    { id: 'rectangle' as Tool, icon: Square, label: 'Rectangle', desc: 'Add rectangle (R)' },
-    { id: 'circle' as Tool, icon: CircleIcon, label: 'Circle', desc: 'Add circle (C)' },
-    { id: 'line' as Tool, icon: Minus, label: 'Line', desc: 'Add line (L)' },
-    { id: 'triangle' as Tool, icon: TriangleIcon, label: 'Triangle', desc: 'Add triangle' },
-    { id: 'arrow' as Tool, icon: ArrowRight, label: 'Arrow', desc: 'Add arrow (A)' },
-    { id: 'text' as Tool, icon: Type, label: 'Text', desc: 'Add text (T)' },
-    { id: 'image' as Tool, icon: ImageIcon, label: 'Image', desc: 'Upload image (I)' },
-    { id: 'eraser' as Tool, icon: Eraser, label: 'Eraser', desc: 'Erase (E)' },
-    { id: 'reading' as Tool, icon: BookOpen, label: 'Reading/TTS', desc: 'Text to Speech and Phonetics' },
-    { id: 'conversation' as Tool, icon: MessageSquare, label: 'Diálogos/Conversación', desc: 'Práctica de diálogos con voces de personajes' },
-    ...(isTeacher ? [{ id: 'timer' as Tool, icon: Timer, label: 'Cronómetro', desc: 'Cronómetro / Temporizador' }] : []),
-    ...(isTeacher ? [{ id: 'presenter' as Tool, icon: MonitorUp, label: 'Presentador', desc: 'Presentar archivos PPTX, DOCX, XLSX' }] : []),
-    { id: 'reading-game' as Tool, icon: Zap, label: 'Reto de Lectura', desc: '⚡ Reto de Velocidad de Lectura con IA (G)' },
-    ...(isTeacher ? [{ id: 'ai-tutor' as Tool, icon: Bot, label: 'AI Tutor', desc: '🤖 Asistente y Tutor de Lecciones con IA' }] : []),
-    // Note: Quiz Interactivo is handled by QuizAppBarButton (Q-04) — not in tools[]
-  ];
-
-
-  const colors = [
-    { value: '#000000', name: 'Black' },
-    { value: '#ffffff', name: 'White' },
-    { value: '#ff0000', name: 'Red' },
-    { value: '#00ff00', name: 'Green' },
-    { value: '#0000ff', name: 'Blue' },
-    { value: '#ffff00', name: 'Yellow' },
-    { value: '#ff00ff', name: 'Magenta' },
-    { value: '#00ffff', name: 'Cyan' },
-    { value: '#ff8800', name: 'Orange' },
-    { value: '#8800ff', name: 'Purple' },
-  ];
-
   const shortcuts = [
     { desc: 'Seleccionar', key: 'V' },
     { desc: 'Lapiz', key: 'P' },
@@ -2085,286 +2032,45 @@ export const CanvasEditor = ({
 
   return (
     <div className="h-full flex flex-col">
-      {/* Toolbar Compacto - Solo mostrar si NO es read-only */}
+      {/* Toolbar Compacto — delegado a CanvasToolbar */}
       {!isReadOnly && (
-        <div className="bg-white border-b border-gray-200 shadow-sm shrink-0 overflow-hidden">
-          <div className="px-3 py-2 overflow-x-auto custom-scrollbar">
-            {/* Primera fila: Tools + Actions principales */}
-            <div className="flex items-center justify-between gap-4 mb-2 min-w-max">
-              {/* Tools */}
-              <div className="flex items-center gap-1">
-                {tools.map((tool) => {
-                  const Icon = tool.icon;
-                  const isActive = currentTool === tool.id;
-                  return (
-                    <button
-                      key={tool.id}
-                      onClick={() => handleToolClick(tool.id)}
-                      className={`p-2 rounded transition-all ${
-                        isActive
-                          ? 'bg-blue-600 text-white shadow-sm'
-                          : 'hover:bg-gray-100 text-gray-700'
-                      }`}
-                      title={tool.desc}
-                    >
-                      <Icon className="w-4 h-4" />
-                    </button>
-                  );
-                })}
-                {/* QuizAppBarButton — decoupled, always visible for teacher, visible for students when active */}
-                <QuizAppBarButton quiz={quizGame} isTeacher={isTeacher} />
-              </div>
-
-              {/* Divider */}
-              <div className="h-8 w-px bg-gray-300" />
-
-              {/* Undo/Redo */}
-              <div className="flex items-center gap-1">
-                <button
-                  onClick={undo}
-                  disabled={!canUndo}
-                  className="p-2 rounded transition-all hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed"
-                  title="Undo (Ctrl+Z)"
-                >
-                  <Undo2 className="w-4 h-4" />
-                </button>
-                <button
-                  onClick={redo}
-                  disabled={!canRedo}
-                  className="p-2 rounded transition-all hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed"
-                  title="Redo (Ctrl+Y)"
-                >
-                  <Redo2 className="w-4 h-4" />
-                </button>
-              </div>
-
-              {/* Divider */}
-              <div className="h-8 w-px bg-gray-300" />
-
-              {/* Zoom Controls */}
-              <div className="flex items-center gap-1 bg-gray-50 px-2 py-1 rounded">
-                <button 
-              onClick={zoomOut}
-              className="p-1 hover:bg-gray-100 rounded text-gray-600"
-              title="Zoom Out"
-            >
-              <ZoomOut className="w-4 h-4" />
-            </button>
-            
-            {/* ✅ NUEVO: Input editable de Zoom Mejorado */}
-            <div className="relative group flex items-center bg-white rounded border border-gray-200 hover:border-blue-400">
-              <input
-                type="text"
-                className="w-10 text-center text-xs font-bold text-gray-700 border-none bg-transparent focus:ring-0 focus:outline-none p-1"
-                value={manualZoom}
-                onChange={(e) => {
-                  // Permitir solo números
-                  const val = e.target.value.replace(/[^0-9]/g, '');
-                  setManualZoom(val);
-                }}
-                onBlur={() => {
-                   // Aplicar al perder foco
-                   if (manualZoom) {
-                      let num = parseInt(manualZoom, 10);
-                      // Limites seguros
-                      if (num < 10) num = 10;
-                      if (num > 500) num = 500;
-                      
-                      const newZoom = num / 100;
-                      const canvas = fabricCanvasRef.current;
-                      if (canvas) {
-                        setZoomLevel(newZoom);
-                        const center = canvas.getCenter();
-                        canvas.zoomToPoint({ x: center.left, y: center.top } as any, newZoom);
-                        updateMiniMap();
-                      }
-                      setManualZoom(num.toString());
-                   } else {
-                      setManualZoom(Math.round(zoomLevel * 100).toString());
-                   }
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    e.currentTarget.blur(); // Dispara onBlur que aplica el cambio
-                  }
-                }}
-              />
-              <span className="text-xs text-gray-400 pr-1 pointer-events-none">%</span>
-            </div>
-
-            <button 
-              onClick={zoomIn}
-                  className="p-1 hover:bg-gray-100 rounded text-gray-600"
-                  title="Zoom In"
-                >
-                  <ZoomIn className="w-4 h-4" />
-                </button>
-                <button
-                  onClick={resetZoom}
-                  className="p-1.5 rounded hover:bg-white transition-all"
-                  title="Reset"
-                >
-                  <Maximize2 className="w-3.5 h-3.5" />
-                </button>
-              </div>
-
-              {/* Divider */}
-              <div className="h-8 w-px bg-gray-300" />
-
-              {/* Actions */}
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={handleSave}
-                  disabled={isSaving}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white rounded hover:bg-blue-700 transition disabled:opacity-50 text-sm font-medium"
-                  title="Save (Ctrl+S)"
-                >
-                  <Save className="w-3.5 h-3.5" />
-                  {isSaving ? 'Saving...' : 'Save'}
-                </button>
-                <button
-                  onClick={exportPNG}
-                  className="flex items-center gap-1.5 px-3 py-1.5 text-gray-700 hover:bg-gray-100 rounded transition text-sm font-medium"
-                  title="Exportar PNG"
-                >
-                  <FileDown className="w-3.5 h-3.5" />
-                  PNG
-                </button>
-                <button
-                  onClick={exportSVG}
-                  className="flex items-center gap-1.5 px-3 py-1.5 text-gray-700 hover:bg-gray-100 rounded transition text-sm font-medium"
-                  title="Exportar SVG"
-                >
-                  <FileDown className="w-3.5 h-3.5" />
-                  SVG
-                </button>
-                <button
-                  onClick={exportJSON}
-                  className="flex items-center gap-1.5 px-3 py-1.5 text-gray-700 hover:bg-gray-100 rounded transition text-sm font-medium"
-                  title="Exportar JSON"
-                >
-                  <FileDown className="w-3.5 h-3.5" />
-                  JSON
-                </button>
-                <button
-                  onClick={importJSON}
-                  className="flex items-center gap-1.5 px-3 py-1.5 text-gray-700 hover:bg-gray-100 rounded transition text-sm font-medium"
-                  title="Cargar JSON"
-                >
-                  <FolderOpen className="w-3.5 h-3.5" />
-                  Cargar
-                </button>
-                {/* Board Theme Selector */}
-                <div className="relative">
-                  <button
-                    onClick={() => setShowThemeMenu(prev => !prev)}
-                    className="flex items-center gap-1.5 px-3 py-1.5 text-gray-700 hover:bg-gray-100 rounded transition text-sm font-medium border border-gray-200"
-                    title="Tema del Pizarrón"
-                  >
-                    <Palette className="w-3.5 h-3.5" />
-                    <span>{BOARD_THEMES[boardTheme].emoji}</span>
-                    <span className="hidden md:inline">{BOARD_THEMES[boardTheme].label}</span>
-                  </button>
-                  {showThemeMenu && (
-                    <div className="absolute top-full right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-xl z-50 overflow-hidden min-w-[150px]">
-                      {(Object.keys(BOARD_THEMES) as BoardTheme[]).map((key) => (
-                        <button
-                          key={key}
-                          onClick={() => applyBoardTheme(key)}
-                          className={`w-full flex items-center gap-2 px-4 py-2.5 text-sm hover:bg-indigo-50 transition text-left ${boardTheme === key ? 'font-semibold text-indigo-700 bg-indigo-50' : 'text-gray-700'}`}
-                        >
-                          <span className="text-base">{BOARD_THEMES[key].emoji}</span>
-                          {BOARD_THEMES[key].label}
-                          {boardTheme === key && <span className="ml-auto text-indigo-500 text-xs">✓</span>}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-                <button
-                  onClick={handleShareScreen}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 text-white hover:bg-indigo-700 rounded transition text-sm font-medium shadow-sm"
-                  title="Compartir Pantalla (Meet/Video)"
-                >
-                  <MonitorUp className="w-3.5 h-3.5" />
-                  Compartir
-                </button>
-                <button
-                  onClick={() => setShowShortcuts(true)}
-                  className="p-2 text-gray-700 hover:bg-gray-100 rounded transition"
-                  title="Atajos (?)"
-                >
-                  <Keyboard className="w-4 h-4" />
-                </button>
-                <button
-                  onClick={clearCanvas}
-                  className="p-2 text-red-600 hover:bg-red-50 rounded transition"
-                  title="Clear"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
-              </div>
-
-              {/* Live Session Indicator */}
-              {sessionId && (
-                <>
-                  <div className="h-8 w-px bg-gray-300" />
-                  <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium ${
-                    isConnected 
-                      ? 'bg-green-50 text-green-700' 
-                      : 'bg-yellow-50 text-yellow-700'
-                  }`}>
-                    <div className={`w-1.5 h-1.5 rounded-full ${
-                      isConnected ? 'bg-green-500 animate-pulse' : 'bg-yellow-500'
-                    }`} />
-                    <Users className="w-3.5 h-3.5" />
-                    {isConnected ? `Live (${participants})` : 'Connecting...'}
-                  </div>
-                </>
-              )}
-            </div>
-
-            {/* Segunda fila: Colors + Brush Width */}
-            <div className="flex items-center gap-4 min-w-max pb-1">
-              {/* Colors */}
-              <div className="flex items-center gap-1.5">
-                <span className="text-xs font-medium text-gray-600">Color:</span>
-                {colors.map((c) => (
-                  <button
-                    key={c.value}
-                    onClick={() => setColor(c.value)}
-                    className={`w-6 h-6 rounded border-2 transition-all ${
-                      color === c.value 
-                        ? 'border-blue-500 scale-110' 
-                        : 'border-gray-300 hover:border-gray-400'
-                    }`}
-                    style={{ backgroundColor: c.value }}
-                    title={c.name}
-                  />
-                ))}
-              </div>
-
-              {/* Divider */}
-              <div className="h-6 w-px bg-gray-300" />
-
-              {/* Brush Width */}
-              <div className="flex items-center gap-2 bg-gray-50 px-3 py-1 rounded">
-                <label className="text-xs font-medium text-gray-600">Width:</label>
-                <input
-                  type="range"
-                  min="1"
-                  max="20"
-                  value={brushWidth}
-                  onChange={(e) => setBrushWidth(Number(e.target.value))}
-                  className="w-24"
-                />
-                <span className="text-xs font-semibold text-gray-700 w-7 text-center">
-                  {brushWidth}px
-                </span>
-              </div>
-            </div>
-          </div>
-        </div>
+        <CanvasToolbar
+          currentTool={currentTool}
+          onToolClick={handleToolClick}
+          isTeacher={isTeacher}
+          color={color}
+          onColorChange={setColor}
+          brushWidth={brushWidth}
+          onBrushWidthChange={setBrushWidth}
+          canUndo={canUndo}
+          canRedo={canRedo}
+          onUndo={undo}
+          onRedo={redo}
+          zoomLevel={zoomLevel}
+          manualZoom={manualZoom}
+          onManualZoomChange={setManualZoom}
+          onManualZoomApply={handleManualZoomApply}
+          onZoomIn={zoomIn}
+          onZoomOut={zoomOut}
+          onResetZoom={resetZoom}
+          onSave={handleSave}
+          isSaving={isSaving}
+          onExportPNG={exportPNG}
+          onExportSVG={exportSVG}
+          onExportJSON={exportJSON}
+          onImportJSON={importJSON}
+          onClearCanvas={clearCanvas}
+          onShareScreen={handleShareScreen}
+          onShowShortcuts={() => setShowShortcuts(true)}
+          boardTheme={boardTheme}
+          showThemeMenu={showThemeMenu}
+          onToggleThemeMenu={() => setShowThemeMenu(prev => !prev)}
+          onApplyTheme={applyBoardTheme}
+          sessionId={sessionId}
+          isConnected={isConnected}
+          participants={participants}
+          quiz={quizGame}
+        />
       )}
 
       {/* Canvas - Scrollable Container */}
