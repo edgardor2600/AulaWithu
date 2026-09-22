@@ -45,54 +45,10 @@ export interface StudentResult extends StudentResultData {
 // ─── Repository ───────────────────────────────────────────────────────────────
 
 export class QuizRepository {
-  private static tableInitialized = false;
-
-  private static async ensureTablesExist() {
-    if (this.tableInitialized) return;
-    try {
-      await runQuery(`
-        CREATE TABLE IF NOT EXISTS quizzes (
-          id             SERIAL PRIMARY KEY,
-          title          VARCHAR(255) NOT NULL,
-          subject        VARCHAR(100) NOT NULL DEFAULT 'English',
-          level          VARCHAR(50)  NOT NULL DEFAULT 'A2',
-          topic          VARCHAR(255) NOT NULL,
-          questions_json JSONB        NOT NULL DEFAULT '[]'::jsonb,
-          created_by     VARCHAR(255),
-          created_at     TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP
-        )
-      `);
-      await runQuery(`
-        CREATE TABLE IF NOT EXISTS quiz_student_results (
-          id               SERIAL PRIMARY KEY,
-          quiz_id          INT REFERENCES quizzes(id) ON DELETE CASCADE,
-          session_id       VARCHAR(255) NOT NULL,
-          student_id       VARCHAR(255),
-          student_name     VARCHAR(255),
-          score            INT NOT NULL DEFAULT 0,
-          total_questions  INT NOT NULL DEFAULT 0,
-          answers_json     JSONB NOT NULL DEFAULT '[]'::jsonb,
-          created_at       TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-        )
-      `);
-      // Performance indexes for faster session retrieval and sorting
-      await runQuery(`
-        CREATE INDEX IF NOT EXISTS idx_quiz_results_session ON quiz_student_results(session_id, quiz_id);
-      `);
-      await runQuery(`
-        CREATE INDEX IF NOT EXISTS idx_quizzes_created ON quizzes(created_at DESC);
-      `);
-      this.tableInitialized = true;
-    } catch (err: any) {
-      logger.warn(`[QuizRepository] Could not auto-create tables: ${err.message}`);
-    }
-  }
-
   /**
    * Save a new quiz to the library
    */
   static async saveQuiz(data: QuizData): Promise<Quiz | null> {
-    await this.ensureTablesExist();
     try {
       const result = await runQuery(
         `INSERT INTO quizzes (title, subject, level, topic, questions_json, created_by)
@@ -118,7 +74,6 @@ export class QuizRepository {
    * List all quizzes (lightweight — includes questions_json for preview)
    */
   static async getAllQuizzes(): Promise<QuizSummary[]> {
-    await this.ensureTablesExist();
     try {
       const rows = await getAll(
         `SELECT id, title, subject, level, topic, created_by, created_at
@@ -137,7 +92,6 @@ export class QuizRepository {
    * Get full quiz by id (includes questions_json)
    */
   static async getQuizById(id: number): Promise<Quiz | null> {
-    await this.ensureTablesExist();
     try {
       const row = await getOne(
         `SELECT * FROM quizzes WHERE id = $1`,
@@ -154,7 +108,6 @@ export class QuizRepository {
    * Delete quiz by id
    */
   static async deleteQuiz(id: number): Promise<boolean> {
-    await this.ensureTablesExist();
     try {
       const result = await runQuery(
         `DELETE FROM quizzes WHERE id = $1`,
@@ -168,11 +121,17 @@ export class QuizRepository {
   }
 
   /**
-   * Save a student result for a quiz session
+   * Save a student result for a quiz session (deduplicating previous entries)
    */
   static async saveStudentResult(data: StudentResultData): Promise<void> {
-    await this.ensureTablesExist();
     try {
+      if (data.student_id) {
+        await runQuery(
+          `DELETE FROM quiz_student_results
+           WHERE quiz_id = $1 AND session_id = $2 AND student_id = $3`,
+          [data.quiz_id, data.session_id, data.student_id]
+        );
+      }
       await runQuery(
         `INSERT INTO quiz_student_results
           (quiz_id, session_id, student_id, student_name, score, total_questions, answers_json)
@@ -197,8 +156,18 @@ export class QuizRepository {
    */
   static async saveBatchResults(results: StudentResultData[]): Promise<void> {
     if (!results || results.length === 0) return;
-    await this.ensureTablesExist();
     try {
+      // Remove any prior entries for these students in this session to prevent duplicate rows
+      for (const r of results) {
+        if (r.student_id) {
+          await runQuery(
+            `DELETE FROM quiz_student_results
+             WHERE quiz_id = $1 AND session_id = $2 AND student_id = $3`,
+            [r.quiz_id, r.session_id, r.student_id]
+          );
+        }
+      }
+
       const values: any[] = [];
       const placeholders: string[] = [];
 
@@ -234,7 +203,6 @@ export class QuizRepository {
    * Get all results for a quiz in a specific session
    */
   static async getResultsBySession(quizId: number, sessionId: string): Promise<StudentResult[]> {
-    await this.ensureTablesExist();
     try {
       const rows = await getAll(
         `SELECT * FROM quiz_student_results

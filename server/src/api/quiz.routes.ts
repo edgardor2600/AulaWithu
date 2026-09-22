@@ -290,15 +290,20 @@ router.post(
     if (!session_id || quiz_id == null) {
       return res.status(400).json({ ok: false, message: 'session_id and quiz_id are required' });
     }
+    const resolvedStudentId = student_id || req.user?.id || 'anonymous';
+    const resolvedStudentName = student_name || req.user?.name || 'Estudiante';
+    const sanitizedScore = Math.max(0, Math.min(Number(score) || 0, 100000));
+    const sanitizedTotal = Math.max(0, Number(total_questions) || 0);
+
     try {
       await QuizRepository.saveStudentResult({
         quiz_id: Number(quiz_id),
         session_id,
-        student_id,
-        student_name,
-        score: score ?? 0,
-        total_questions: total_questions ?? 0,
-        answers_json: answers_json || [],
+        student_id: resolvedStudentId,
+        student_name: resolvedStudentName,
+        score: sanitizedScore,
+        total_questions: sanitizedTotal,
+        answers_json: Array.isArray(answers_json) ? answers_json : [],
       });
       res.status(201).json({ ok: true });
     } catch (err: any) {
@@ -325,11 +330,11 @@ router.post(
       const studentResults = results.map((r: any) => ({
         quiz_id: Number(quiz_id),
         session_id: sessionId,
-        student_id: r.student_id || r.clientId,
-        student_name: r.student_name || r.name,
-        score: r.score ?? 0,
-        total_questions: r.total_questions ?? 0,
-        answers_json: r.answers_json || [],
+        student_id: r.student_id || r.clientId || 'anonymous',
+        student_name: r.student_name || r.name || 'Estudiante',
+        score: Math.max(0, Math.min(Number(r.score) || 0, 100000)),
+        total_questions: Math.max(0, Number(r.total_questions) || 0),
+        answers_json: Array.isArray(r.answers_json) ? r.answers_json : [],
       }));
 
       await QuizRepository.saveBatchResults(studentResults);
