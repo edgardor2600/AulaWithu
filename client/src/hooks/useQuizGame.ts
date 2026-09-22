@@ -68,6 +68,8 @@ export interface AnswerRecord {
   isCorrect: boolean;
   score: number;
   submittedAt?: number;
+  correct?: string | number;
+  explanation?: string;
 }
 
 export interface RevealedAnswer {
@@ -80,10 +82,30 @@ const QUESTION_TIME_LIMIT = 30;
 
 // ─── Q-02: Anti-Cheat Helper ──────────────────────────────────────────────────
 
+/**
+ * Normalise a quiz object that came from the PostgreSQL API.
+ *
+ * The DB column is named `questions_json` (snake_case, matches the schema),
+ * but every frontend consumer expects the field to be called `questions`.
+ * This function converts one to the other safely so that no other code
+ * needs to be aware of the DB field name.
+ */
+function normalizeQuizFromApi(raw: any): Quiz {
+  if (!raw) return raw;
+  const questions: QuizQuestion[] =
+    Array.isArray(raw.questions) && raw.questions.length > 0
+      ? raw.questions
+      : Array.isArray(raw.questions_json)
+      ? raw.questions_json as QuizQuestion[]
+      : [];
+  return { ...raw, questions };
+}
+
 function sanitizeQuizForBroadcast(quiz: Quiz): Quiz {
+  const questions = Array.isArray(quiz.questions) ? quiz.questions : [];
   return {
     ...quiz,
-    questions: quiz.questions.map(({ correct: _c, explanation: _e, ...rest }) => rest as QuizQuestion),
+    questions: questions.map(({ correct: _c, explanation: _e, ...rest }) => rest as QuizQuestion),
   };
 }
 
@@ -153,6 +175,14 @@ export function useQuizGame(
 
   const [studentProgress, setStudentProgress] = useState<StudentProgress[]>([]);
   const [sessionResults, setSessionResults] = useState<any[]>([]);
+  const [isSavingResult, setIsSavingResult] = useState(false);
+  const [hasSavedResult, setHasSavedResult] = useState(false);
+  const hasSubmittedResultRef = useRef<boolean>(false);
+  const [isSessionFinalized, setIsSessionFinalized] = useState(false);
+  const [isLocalPodiumOpen, setIsLocalPodiumOpen] = useState(false);
+  const [quizSolutions, setQuizSolutions] = useState<Record<string, { correct: any; explanation?: string }>>({});
+  const hasFinalizedSessionRef = useRef<boolean>(false);
+  const submittedSessionsRef = useRef<Set<string>>(new Set());
 
   const audioCtxRef = useRef<AudioContext | null>(null);
   const audioSourceRef = useRef<AudioBufferSourceNode | null>(null);
@@ -176,11 +206,33 @@ export function useQuizGame(
 
   const prevQuestionIndexRef = useRef<number>(-1);
   const autoAdvanceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const allAnsweredTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const registerStudentClient = useCallback((clientId: string, userName?: string) => {
     myClientIdRef.current = clientId;
     if (userName) myUserNameRef.current = userName;
-  }, []);
+
+    const yAnswers = yAnswersRef.current;
+    const yQuiz = yQuizRef.current;
+    if (yAnswers && yQuiz && clientId && !isTeacher) {
+      const qIndex = (yQuiz.get('questionIndex') as number | undefined) ?? 0;
+      const quizObj = yQuiz.get('quiz') as Quiz | undefined;
+      const currentQuestionId = quizObj?.questions?.[qIndex]?.id;
+      if (currentQuestionId && !yAnswers.has(`${clientId}_${currentQuestionId}`)) {
+        ydoc?.transact(() => {
+          yAnswers.set(`${clientId}_${currentQuestionId}`, {
+            answer: '',
+            isCorrect: false,
+            score: 0,
+            name: userName || clientId,
+            clientId,
+            questionId: currentQuestionId,
+            hasAnswered: false,
+          });
+        });
+      }
+    }
+  }, [ydoc, isTeacher]);
 
   // ─── Yjs Sync ────────────────────────────────────────────────────────────────
 
@@ -199,12 +251,18 @@ export function useQuizGame(
       const tLimit = (yQuiz.get('questionTimeLimit') as number | undefined) ?? QUESTION_TIME_LIMIT;
       const qStarted = (yQuiz.get('questionStartedAt') as number | undefined) ?? 0;
       const revealed = (yQuiz.get('revealedAnswer') as RevealedAnswer | undefined) ?? null;
+      const isFinalized = Boolean(yQuiz.get('isFinalized'));
+      const solutions = (yQuiz.get('solutions') as Record<string, { correct: any; explanation?: string }> | undefined) ?? {};
 
       setQuizPhase(phase);
       setActiveQuiz(quiz ?? null);
       setQuestionTimeLimit(tLimit);
       setQuestionStartedAt(qStarted);
       setRevealedAnswer(revealed);
+      setIsSessionFinalized(isFinalized);
+      if (Object.keys(solutions).length > 0) {
+        setQuizSolutions(solutions);
+      }
 
       if (qIndex !== prevQuestionIndexRef.current) {
         prevQuestionIndexRef.current = qIndex;
@@ -213,6 +271,25 @@ export function useQuizGame(
         setPendingAnswer(null);
         setLastAnswerFeedback(null);
         setTimeLeft(tLimit);
+
+        // Ensure student client is immediately registered as "thinking" for this question
+        if (!isTeacher && myClientIdRef.current) {
+          const quizObj = yQuiz.get('quiz') as Quiz | undefined;
+          const currentQuestionId = quizObj?.questions?.[qIndex]?.id;
+          if (currentQuestionId && !yAnswers.has(`${myClientIdRef.current}_${currentQuestionId}`)) {
+            ydoc?.transact(() => {
+              yAnswers.set(`${myClientIdRef.current}_${currentQuestionId}`, {
+                answer: '',
+                isCorrect: false,
+                score: 0,
+                name: myUserNameRef.current || myClientIdRef.current,
+                clientId: myClientIdRef.current,
+                questionId: currentQuestionId,
+                hasAnswered: false,
+              });
+            });
+          }
+        }
       }
     };
 
@@ -230,7 +307,7 @@ export function useQuizGame(
         const score = (val?.score as number) || 0;
         const qId = val?.questionId;
         const isCurrentQ = currentQuestionId !== undefined && qId === currentQuestionId;
-        const hasAnsweredCurrent = isCurrentQ ? Boolean(val?.hasAnswered || val?.answer !== undefined) : false;
+        const hasAnsweredCurrent = isCurrentQ ? Boolean(val?.hasAnswered && val?.answer && String(val?.answer).trim() !== '') : false;
         const isCorrect = isCurrentQ ? val?.isCorrect : undefined;
         const currentScore = isCurrentQ ? score : undefined;
 
@@ -279,6 +356,17 @@ export function useQuizGame(
 
     if (!myRecord) {
       // Student ran out of time or did not answer
+      setMyAnswers(prev => ({
+        ...prev,
+        [questionId]: {
+          questionId,
+          answer: '(Sin respuesta)',
+          isCorrect: false,
+          score: 0,
+          correct,
+          explanation: explanation || 'Se agotó el tiempo para responder esta pregunta.',
+        },
+      }));
       setLastAnswerFeedback({
         isCorrect: false,
         explanation: explanation || 'Se agotó el tiempo para responder esta pregunta.',
@@ -316,7 +404,13 @@ export function useQuizGame(
 
     setMyAnswers(prev => ({
       ...prev,
-      [questionId]: { ...prev[questionId], isCorrect, score },
+      [questionId]: {
+        ...prev[questionId],
+        isCorrect,
+        score,
+        correct,
+        explanation,
+      },
     }));
     setLastAnswerFeedback({ isCorrect, explanation, score });
 
@@ -383,42 +477,6 @@ export function useQuizGame(
     };
   }, [isQuizActive, quizPhase, questionStartedAt, questionTimeLimit]);
 
-  // ─── Teacher: Auto-Advance & Auto-Reveal ──────────────────────────────────────
-
-  useEffect(() => {
-    if (!isTeacher || !isQuizActive) return;
-
-    // 1. When question timer reaches 0, teacher client automatically reveals answer
-    // Timestamp Guard: physically verify that at least questionTimeLimit seconds have elapsed
-    if (quizPhase === 'question' && questionStartedAt > 0) {
-      const elapsedMs = Date.now() - questionStartedAt;
-      const hasActuallyExpired = elapsedMs >= questionTimeLimit * 1000;
-
-      if (timeLeft === 0 && hasActuallyExpired) {
-        revealCurrentAnswer();
-      }
-    }
-
-    // 2. When in reveal phase, wait 4.5s for all students to view feedback, then auto-advance
-    if (quizPhase === 'reveal') {
-      if (autoAdvanceTimerRef.current) clearTimeout(autoAdvanceTimerRef.current);
-      autoAdvanceTimerRef.current = setTimeout(() => {
-        skipToNextQuestion();
-      }, 4500);
-    } else {
-      if (autoAdvanceTimerRef.current) {
-        clearTimeout(autoAdvanceTimerRef.current);
-        autoAdvanceTimerRef.current = null;
-      }
-    }
-
-    return () => {
-      if (autoAdvanceTimerRef.current) {
-        clearTimeout(autoAdvanceTimerRef.current);
-        autoAdvanceTimerRef.current = null;
-      }
-    };
-  }, [isTeacher, isQuizActive, quizPhase, timeLeft, questionStartedAt, questionTimeLimit]);
 
   // ─── TTS ──────────────────────────────────────────────────────────────────────
 
@@ -551,16 +609,43 @@ export function useQuizGame(
 
   // ─── Teacher: Phase FSM Transitions ──────────────────────────────────────────
 
-  const launchQuiz = useCallback((quiz: Quiz) => {
+  const launchQuiz = useCallback(async (quiz: Quiz) => {
     const yQuiz = yQuizRef.current;
     if (!yQuiz) { toast.error('No hay conexión Yjs activa'); return; }
 
-    localFullQuizRef.current = quiz;
+    // Normalize: handle quizzes that came from the DB (questions_json) vs AI-generated (questions)
+    let targetQuiz = normalizeQuizFromApi(quiz);
+
+    // Guard: refuse to launch a quiz without questions to prevent blank student screens
+    if (!targetQuiz.questions || targetQuiz.questions.length === 0) {
+      toast.error('Este quiz no tiene preguntas cargadas. Ábrelo desde la Biblioteca primero.');
+      return;
+    }
+
+    // If quiz doesn't have an ID (e.g. freshly generated by AI), persist it to PostgreSQL first
+    if (!targetQuiz.id) {
+      try {
+        const res = await api.post('/quiz/materials', {
+          title: targetQuiz.activity_name || targetQuiz.title || `Quiz: ${topic || 'Sin título'}`,
+          subject: targetQuiz.subject || subject || 'English',
+          level: targetQuiz.level || level || 'A2',
+          topic: targetQuiz.topic || topic || 'General',
+          questions_json: targetQuiz.questions,
+        });
+        if (res.data?.ok && res.data.quiz?.id) {
+          targetQuiz = { ...targetQuiz, id: res.data.quiz.id };
+        }
+      } catch (err) {
+        console.warn('[useQuizGame] Auto-save before launch warning:', err);
+      }
+    }
+
+    localFullQuizRef.current = targetQuiz;
     try {
-      sessionStorage.setItem(`fullQuiz_${sessionId}`, JSON.stringify(quiz));
+      sessionStorage.setItem(`fullQuiz_${sessionId}`, JSON.stringify(targetQuiz));
     } catch (_) {}
 
-    const safeQuiz = sanitizeQuizForBroadcast(quiz);
+    const safeQuiz = sanitizeQuizForBroadcast(targetQuiz);
 
     ydoc?.transact(() => {
       yQuiz.set('quiz', safeQuiz);
@@ -568,7 +653,9 @@ export function useQuizGame(
       yQuiz.set('questionTimeLimit', QUESTION_TIME_LIMIT);
       yQuiz.set('questionStartedAt', Date.now());
       yQuiz.set('phase', 'question' as QuizPhase);
+      yQuiz.set('isFinalized', false);
       yQuiz.delete('revealedAnswer');
+      yQuiz.delete('solutions');
     });
 
     const yAnswers = yAnswersRef.current;
@@ -580,10 +667,15 @@ export function useQuizGame(
     setMyScore(0);
     setStreak(0);
     setMyAnswers({});
+    setIsSessionFinalized(false);
+    setIsLocalPodiumOpen(false);
+    setQuizSolutions({});
+    hasFinalizedSessionRef.current = false;
+    hasSubmittedResultRef.current = false;
     prevQuestionIndexRef.current = -1;
     setTimeLeft(QUESTION_TIME_LIMIT);
     toast.success('Quiz lanzado en vivo 🚀');
-  }, [ydoc, sessionId]);
+  }, [ydoc, sessionId, topic, subject, level]);
 
   const revealCurrentAnswer = useCallback(() => {
     const yQuiz = yQuizRef.current;
@@ -616,20 +708,46 @@ export function useQuizGame(
       clearTimeout(autoAdvanceTimerRef.current);
       autoAdvanceTimerRef.current = null;
     }
+    // If the quiz session is already finalized, open podium locally only (do NOT broadcast to students or re-persist)
+    if (isSessionFinalized) {
+      setIsLocalPodiumOpen(true);
+      return;
+    }
     const yQuiz = yQuizRef.current;
     if (!yQuiz) return;
-    ydoc?.transact(() => { yQuiz.set('phase', 'podium' as QuizPhase); });
+
+    // Collect solutions from full local quiz to broadcast to all students for review
+    const fullQuiz = localFullQuizRef.current ?? activeQuiz;
+    const solutions: Record<string, { correct: any; explanation?: string }> = {};
+    if (fullQuiz?.questions) {
+      fullQuiz.questions.forEach(q => {
+        solutions[q.id] = { correct: q.correct, explanation: q.explanation };
+      });
+    }
+
+    ydoc?.transact(() => {
+      if (Object.keys(solutions).length > 0) {
+        yQuiz.set('solutions', solutions);
+      }
+      yQuiz.set('phase', 'podium' as QuizPhase);
+    });
     toast('Quiz finalizado — ¡Viendo podio!');
-  }, [ydoc]);
+  }, [ydoc, isSessionFinalized, activeQuiz]);
 
   const forceStopQuiz = useCallback(() => {
     if (autoAdvanceTimerRef.current) {
       clearTimeout(autoAdvanceTimerRef.current);
       autoAdvanceTimerRef.current = null;
     }
+    setIsLocalPodiumOpen(false);
     const yQuiz = yQuizRef.current;
     if (!yQuiz) return;
-    ydoc?.transact(() => { yQuiz.set('phase', 'idle' as QuizPhase); });
+    ydoc?.transact(() => {
+      yQuiz.set('phase', 'idle' as QuizPhase);
+      yQuiz.set('isFinalized', true);
+    });
+    setIsSessionFinalized(true);
+    hasFinalizedSessionRef.current = true;
     toast('Quiz cerrado');
   }, [ydoc]);
 
@@ -638,14 +756,25 @@ export function useQuizGame(
       clearTimeout(autoAdvanceTimerRef.current);
       autoAdvanceTimerRef.current = null;
     }
+    if (allAnsweredTimerRef.current) {
+      clearTimeout(allAnsweredTimerRef.current);
+      allAnsweredTimerRef.current = null;
+    }
     const yQuiz = yQuizRef.current;
     if (!yQuiz) return;
     const fullQuiz = localFullQuizRef.current ?? activeQuiz;
     if (!fullQuiz) return;
 
+    // 1. If currently in 'question' phase, evaluate and reveal solution first!
+    if (quizPhase === 'question') {
+      revealCurrentAnswer();
+      return;
+    }
+
+    // 2. Advance to next question or podium
     const next = currentQuestionIndex + 1;
     if (next >= fullQuiz.questions.length) {
-      ydoc?.transact(() => { yQuiz.set('phase', 'podium' as QuizPhase); });
+      stopQuiz();
       return;
     }
 
@@ -658,7 +787,71 @@ export function useQuizGame(
       yQuiz.set('phase', 'question' as QuizPhase);
       yQuiz.delete('revealedAnswer');
     });
-  }, [ydoc, activeQuiz, currentQuestionIndex]);
+  }, [ydoc, activeQuiz, currentQuestionIndex, quizPhase, revealCurrentAnswer, stopQuiz]);
+
+  // ─── Teacher: Auto-Advance & Auto-Reveal ──────────────────────────────────────
+
+  useEffect(() => {
+    if (!isTeacher || !isQuizActive) return;
+
+    // 1. When question timer reaches 0, teacher client automatically reveals answer
+    // Timestamp Guard: physically verify that at least questionTimeLimit seconds have elapsed
+    if (quizPhase === 'question' && questionStartedAt > 0) {
+      const elapsedMs = Date.now() - questionStartedAt;
+      const hasActuallyExpired = elapsedMs >= questionTimeLimit * 1000;
+
+      if (timeLeft === 0 && hasActuallyExpired) {
+        revealCurrentAnswer();
+      }
+    }
+
+    // 1b. Auto-reveal when 100% of connected students have answered!
+    if (quizPhase === 'question' && studentProgress.length > 0) {
+      const allAnswered = studentProgress.every(s => s.hasAnswered);
+      if (allAnswered) {
+        if (!allAnsweredTimerRef.current) {
+          allAnsweredTimerRef.current = setTimeout(() => {
+            revealCurrentAnswer();
+            allAnsweredTimerRef.current = null;
+          }, 1000);
+        }
+      } else {
+        if (allAnsweredTimerRef.current) {
+          clearTimeout(allAnsweredTimerRef.current);
+          allAnsweredTimerRef.current = null;
+        }
+      }
+    } else {
+      if (allAnsweredTimerRef.current) {
+        clearTimeout(allAnsweredTimerRef.current);
+        allAnsweredTimerRef.current = null;
+      }
+    }
+
+    // 2. When in reveal phase, wait 4.5s for all students to view feedback, then auto-advance
+    if (quizPhase === 'reveal') {
+      if (autoAdvanceTimerRef.current) clearTimeout(autoAdvanceTimerRef.current);
+      autoAdvanceTimerRef.current = setTimeout(() => {
+        skipToNextQuestion();
+      }, 4500);
+    } else {
+      if (autoAdvanceTimerRef.current) {
+        clearTimeout(autoAdvanceTimerRef.current);
+        autoAdvanceTimerRef.current = null;
+      }
+    }
+
+    return () => {
+      if (autoAdvanceTimerRef.current) {
+        clearTimeout(autoAdvanceTimerRef.current);
+        autoAdvanceTimerRef.current = null;
+      }
+      if (allAnsweredTimerRef.current) {
+        clearTimeout(allAnsweredTimerRef.current);
+        allAnsweredTimerRef.current = null;
+      }
+    };
+  }, [isTeacher, isQuizActive, quizPhase, timeLeft, questionStartedAt, questionTimeLimit, studentProgress, revealCurrentAnswer, skipToNextQuestion]);
 
   const showLeaderboard = useCallback(() => {
     const yQuiz = yQuizRef.current;
@@ -725,7 +918,10 @@ export function useQuizGame(
   const loadQuizById = useCallback(async (id: number): Promise<Quiz | null> => {
     try {
       const res = await api.get(`/quiz/materials/${id}`);
-      if (res.data?.ok && res.data?.quiz) return res.data.quiz as Quiz;
+      if (res.data?.ok && res.data?.quiz) {
+        // Normalize DB field name (questions_json) → frontend field name (questions)
+        return normalizeQuizFromApi(res.data.quiz);
+      }
       return null;
     } catch { return null; }
   }, []);
@@ -741,20 +937,114 @@ export function useQuizGame(
   // ─── Submit Results ───────────────────────────────────────────────────────────
 
   const submitResults = useCallback(async (quizId: number, clientId: string, userName: string) => {
+    const submitKey = `${sessionId}_${quizId}`;
+    if (submittedSessionsRef.current.has(submitKey)) {
+      console.info('[useQuizGame] Student result already submitted for session', submitKey);
+      return;
+    }
+
     try {
       const answers = Object.values(myAnswers);
       const totalScore = answers.reduce((sum, a) => sum + a.score, 0);
-      const avgScore = answers.length > 0 ? Math.round(totalScore / answers.length) : 0;
       await api.post('/quiz/submit-result', {
-        quiz_id: quizId, session_id: sessionId,
-        student_id: clientId, student_name: userName,
-        score: avgScore, total_questions: answers.length, answers_json: answers,
+        quiz_id: quizId,
+        session_id: sessionId,
+        student_id: clientId,
+        student_name: userName,
+        score: totalScore,
+        total_questions: activeQuiz?.questions?.length || answers.length,
+        answers_json: answers,
       });
+      submittedSessionsRef.current.add(submitKey);
       setShowResults(true);
+      setHasSavedResult(true);
     } catch (err: any) {
       console.error('[useQuizGame] submitResults error:', err);
+      throw err;
     }
-  }, [myAnswers, sessionId]);
+  }, [myAnswers, sessionId, activeQuiz]);
+
+  // ─── Auto-submit student results upon entering podium ───────────────────────
+
+  useEffect(() => {
+    if (quizPhase !== 'podium') {
+      return;
+    }
+
+    if (isTeacher) return;
+    if (hasSubmittedResultRef.current) return;
+    const quizId = activeQuiz?.id;
+    if (!quizId) return;
+
+    const answers = Object.values(myAnswers);
+    if (answers.length === 0) return;
+
+    hasSubmittedResultRef.current = true;
+    setIsSavingResult(true);
+
+    const clientId = myClientIdRef.current || 'anonymous';
+    const userName = myUserNameRef.current || 'Estudiante';
+
+    submitResults(quizId, clientId, userName)
+      .then(() => {
+        setIsSavingResult(false);
+        setHasSavedResult(true);
+        toast.success('Tus respuestas han sido guardadas en tu expediente ✅');
+      })
+      .catch((err) => {
+        setIsSavingResult(false);
+        console.error('[useQuizGame] Student auto-submit failed:', err);
+      });
+  }, [isTeacher, quizPhase, activeQuiz?.id, myAnswers, submitResults]);
+
+  // ─── Teacher: Persist all session results in batch ───────────────────────────
+
+  const persistAllSessionResults = useCallback(async (): Promise<boolean> => {
+    if (hasFinalizedSessionRef.current) {
+      console.info('[useQuizGame] Session already persisted, skipping duplicate persist');
+      return true;
+    }
+
+    const quizId = activeQuiz?.id;
+    if (!quizId) {
+      toast.error('El quiz no tiene un ID registrado');
+      return false;
+    }
+
+    if (studentProgress.length === 0) {
+      toast('No hay respuestas de alumnos para guardar');
+      hasFinalizedSessionRef.current = true;
+      return true;
+    }
+
+    try {
+      const results = studentProgress.map(s => ({
+        student_id: s.clientId,
+        student_name: s.name,
+        score: s.score,
+        total_questions: activeQuiz?.questions?.length ?? 0,
+        answers_json: [],
+      }));
+
+      const res = await api.post(`/quiz/sessions/${sessionId}/finalize`, {
+        quiz_id: quizId,
+        results,
+      });
+
+      if (res.data?.ok) {
+        hasFinalizedSessionRef.current = true;
+        setIsSessionFinalized(true);
+        yQuizRef.current?.set('isFinalized', true);
+        toast.success(`Resultados de ${res.data.count} alumnos guardados en PostgreSQL ✅`);
+        return true;
+      }
+      return false;
+    } catch (err: any) {
+      console.error('[useQuizGame] persistAllSessionResults error:', err);
+      toast.error('Error al guardar los resultados en la base de datos');
+      return false;
+    }
+  }, [activeQuiz, studentProgress, sessionId]);
 
   const getResults = useCallback(async (quizId: number) => {
     try {
@@ -803,12 +1093,19 @@ export function useQuizGame(
     spokenText, setSpokenText,
     submitAnswer, submitResults,
     registerStudentClient,
+    isSavingResult, hasSavedResult,
     // Teacher
     studentProgress, sessionResults,
     launchQuiz, stopQuiz, forceStopQuiz,
     skipToNextQuestion, revealCurrentAnswer,
     showLeaderboard, showPodium, getResults,
-    extendTime,
+    extendTime, persistAllSessionResults,
+    // Session state & Local viewing
+    isSessionFinalized, setIsSessionFinalized,
+    isLocalPodiumOpen, setIsLocalPodiumOpen,
+    openLocalPodium: () => setIsLocalPodiumOpen(true),
+    closeLocalPodium: () => setIsLocalPodiumOpen(false),
+    quizSolutions,
     // TTS
     isSpeaking, speakQuestion, stopSpeaking,
     // Speech
