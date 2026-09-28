@@ -9,7 +9,6 @@ import { useReadingGame } from '../hooks/useReadingGame';
 import { useGlobalTimer } from '../hooks/useGlobalTimer';
 import toast from 'react-hot-toast';
 import { useYjs } from '../hooks/useYjs';
-import { uploadImage } from '../services/uploadService';
 import { useCanvasHistory } from '../hooks/useCanvasHistory';
 import { useCanvasClipboard } from '../hooks/useCanvasClipboard';
 import { useScreenShare } from '../hooks/useScreenShare';
@@ -18,45 +17,15 @@ import { BOARD_THEMES, type Tool, type BoardTheme } from '../types/canvas';
 import { usePresenter } from '../hooks/usePresenter';
 import { useAITutor } from '../hooks/useAITutor';
 import { useQuizGame } from '../hooks/useQuizGame';
-import { QuizAppBarButton } from './quiz/QuizAppBarButton';
+import { useSubtitlesDragResize } from '../hooks/useSubtitlesDragResize';
+import { useCanvasFileIO } from '../hooks/useCanvasFileIO';
+import type { CanvasEditorProps } from '../types/canvasEditor';
+import { isEditableTarget, CANVAS_SHORTCUTS } from '../types/canvasEditor';
 
 
 
 
-const isEditableTarget = (target: EventTarget | null) => {
-  if (!(target instanceof HTMLElement)) return false;
-  const tagName = target.tagName;
-  return (
-    target.isContentEditable ||
-    tagName === 'INPUT' ||
-    tagName === 'TEXTAREA' ||
-    tagName === 'SELECT'
-  );
-};
-
-interface CanvasEditorProps {
-  slideId: string;
-  initialData?: string;
-  onSave: (canvasData: string) => Promise<void>;
-  onChange?: (canvasData: string) => void;
-  isReadOnly?: boolean;
-  sessionId?: string | null;
-  onParticipantsChange?: (
-    count: number,
-    list?: Array<{ clientId: number; name: string; color: string }>,
-    clientId?: number
-  ) => void;
-  enforceOwnership?: boolean;
-  isTeacher?: boolean;
-  onPermissionsReady?: (updateFn: (allow: boolean) => void) => void;
-  onPermissionsChange?: (allowDraw: boolean) => void;
-  classId?: string | null;
-  topicId?: string | null;
-  currentSlideIndex?: number;
-  onSlideChange?: (index: number) => void;
-  totalSlides?: number;
-  onReloadSlides?: () => Promise<void>;
-}
+// CanvasEditorProps, isEditableTarget and CANVAS_SHORTCUTS are imported from '../types/canvasEditor'
 
 export const CanvasEditor = ({ 
   slideId, 
@@ -99,13 +68,9 @@ export const CanvasEditor = ({
   const MIN_ZOOM = 0.1;
   const MAX_ZOOM = 5;
   const [isSpacePressed, setIsSpacePressed] = useState(false);
-  const miniMapCanvasRef = useRef<HTMLCanvasElement | null>(null);
-  const imageInputRef = useRef<HTMLInputElement | null>(null);
-  const jsonInputRef = useRef<HTMLInputElement | null>(null);
-  const presentationInputRef = useRef<HTMLInputElement | null>(null);
-
   const containerRef = useRef<HTMLDivElement>(null);
   const [showShortcuts, setShowShortcuts] = useState(false);
+
 
   // ── Extracted hooks ──────────────────────────────────────────────────────────
   const history = useCanvasHistory(fabricCanvasRef, onChange);
@@ -122,92 +87,42 @@ export const CanvasEditor = ({
   const { boardTheme, showThemeMenu, setShowThemeMenu, applyBoardTheme } = boardThemeHook;
   // ────────────────────────────────────────────────────────────────────────────
 
-  // Estados para subtítulos arrastrables y redimensionables
+  // ── miniMapCanvasRef (kept here as it's referenced by updateMiniMap callback) ─
+  const miniMapCanvasRef = useRef<HTMLCanvasElement | null>(null);
 
-  const [subtitlesPos, setSubtitlesPos] = useState({ x: window.innerWidth / 2 - 200, y: window.innerHeight - 150 });
-  const [subtitlesSize, setSubtitlesSize] = useState({ width: 400, height: 75 });
+  // ── File I/O — delegado a useCanvasFileIO ────────────────────────────────────
+  const fileIO = useCanvasFileIO({
+    fabricCanvasRef,
+    slideId,
+    serializeCanvas,
+    restoreCanvasState,
+    saveHistory,
+    notifyChange,
+    isLoadingRef,
+  });
+  const {
+    imageInputRef,
+    jsonInputRef,
+    presentationInputRef,
+    triggerImageUpload,
+    importJSON,
+    handleImageFileSelect,
+    handleJSONFileLoad,
+    exportJSON,
+    exportPNG,
+    exportSVG,
+    clearCanvas,
+  } = fileIO;
+  // ────────────────────────────────────────────────────────────────────────────
 
-  // Lógica de arrastre de los subtítulos (Drag)
-  const handleSubtitlesMouseDown = (e: React.MouseEvent<HTMLDivElement> | React.TouchEvent<HTMLDivElement>) => {
-    // Evitar arrastrar si se hace clic en el tirador de tamaño
-    if ((e.target as HTMLElement).closest('#conversation-subtitles-resize')) return;
-    
-    const isTouch = e.type === 'touchstart';
-    const clientX = isTouch ? (e as React.TouchEvent).touches[0].clientX : (e as React.MouseEvent).clientX;
-    const clientY = isTouch ? (e as React.TouchEvent).touches[0].clientY : (e as React.MouseEvent).clientY;
 
-    const startX = clientX;
-    const startY = clientY;
-    const initialX = subtitlesPos.x;
-    const initialY = subtitlesPos.y;
-
-    const handleMouseMove = (moveEvent: MouseEvent | TouchEvent) => {
-      const isMoveTouch = moveEvent.type === 'touchmove';
-      const moveClientX = isMoveTouch ? (moveEvent as TouchEvent).touches[0].clientX : (moveEvent as MouseEvent).clientX;
-      const moveClientY = isMoveTouch ? (moveEvent as TouchEvent).touches[0].clientY : (moveEvent as MouseEvent).clientY;
-
-      const dx = moveClientX - startX;
-      const dy = moveClientY - startY;
-
-      setSubtitlesPos({
-        x: initialX + dx,
-        y: initialY + dy
-      });
-    };
-
-    const handleMouseUp = () => {
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('touchmove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseUp);
-      document.removeEventListener('touchend', handleMouseUp);
-    };
-
-    document.addEventListener('mousemove', handleMouseMove);
-    document.addEventListener('touchmove', handleMouseMove, { passive: false });
-    document.addEventListener('mouseup', handleMouseUp);
-    document.addEventListener('touchend', handleMouseUp);
-  };
-
-  // Lógica de cambio de tamaño de los subtítulos (Resize)
-  const handleSubtitlesResizeMouseDown = (e: React.MouseEvent<HTMLDivElement> | React.TouchEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    e.stopPropagation();
-
-    const isTouch = e.type === 'touchstart';
-    const clientX = isTouch ? (e as React.TouchEvent).touches[0].clientX : (e as React.MouseEvent).clientX;
-    const clientY = isTouch ? (e as React.TouchEvent).touches[0].clientY : (e as React.MouseEvent).clientY;
-
-    const startX = clientX;
-    const startY = clientY;
-    const initialWidth = subtitlesSize.width;
-    const initialHeight = subtitlesSize.height;
-
-    const handleMouseMove = (moveEvent: MouseEvent | TouchEvent) => {
-      const isMoveTouch = moveEvent.type === 'touchmove';
-      const moveClientX = isMoveTouch ? (moveEvent as TouchEvent).touches[0].clientX : (moveEvent as MouseEvent).clientX;
-      const moveClientY = isMoveTouch ? (moveEvent as TouchEvent).touches[0].clientY : (moveEvent as MouseEvent).clientY;
-
-      const dx = moveClientX - startX;
-      const dy = moveClientY - startY;
-
-      setSubtitlesSize({
-        width: Math.max(250, initialWidth + dx),
-        height: Math.max(60, initialHeight + dy)
-      });
-    };
-
-    const handleMouseUp = () => {
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('touchmove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseUp);
-      document.removeEventListener('touchend', handleMouseUp);
-    };
-
-    document.addEventListener('mousemove', handleMouseMove);
-    document.addEventListener('touchmove', handleMouseMove, { passive: false });
-    document.addEventListener('mouseup', handleMouseUp);
-    document.addEventListener('touchend', handleMouseUp);
-  };
+  // ── Subtítulos drag/resize — delegado a useSubtitlesDragResize ──────────────
+  const {
+    pos: subtitlesPos,
+    size: subtitlesSize,
+    handleDragStart: handleSubtitlesMouseDown,
+    handleResizeStart: handleSubtitlesResizeMouseDown,
+  } = useSubtitlesDragResize();
 
   // Yjs real-time collaboration
   const { isConnected, participants, participantsList, clientId, updateSessionPermissions, ydoc } = useYjs(
@@ -574,10 +489,6 @@ export const CanvasEditor = ({
     }
   }, []);
 
-  // ✅ NUEVO: Trigger file input for image upload
-  const triggerImageUpload = useCallback(() => {
-    imageInputRef.current?.click();
-  }, []);
 
   const syncCursorForTool = useCallback((tool: Tool) => {
     const canvas = fabricCanvasRef.current;
@@ -749,57 +660,6 @@ export const CanvasEditor = ({
     setManualZoom(percent.toString());
   }, [updateMiniMap]);
   // ─────────────────────────────────────────────────────────────────────────────
-
-  const exportJSON = useCallback(() => {
-    const canvas = fabricCanvasRef.current;
-    if (!canvas) return;
-
-    const json = serializeCanvas(canvas);
-    const blob = new Blob([json], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-
-    const link = document.createElement('a');
-    link.download = `slide-${slideId}-backup.json`;
-    link.href = url;
-    link.click();
-
-    URL.revokeObjectURL(url);
-    toast.success('Backup JSON descargado');
-  }, [serializeCanvas, slideId]);
-
-  const importJSON = useCallback(() => {
-    jsonInputRef.current?.click();
-  }, []);
-
-  const handleJSONFileLoad = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    const canvas = fabricCanvasRef.current;
-    if (!canvas) {
-      e.target.value = '';
-      return;
-    }
-
-    try {
-      const fileContents = await file.text();
-      JSON.parse(fileContents);
-
-      isLoadingRef.current = true;
-      await restoreCanvasState(canvas, fileContents);
-      isLoadingRef.current = false;
-
-      saveHistory();
-      notifyChange();
-      toast.success('Pizarra cargada desde backup');
-    } catch (error) {
-      isLoadingRef.current = false;
-      console.error('Error importing JSON:', error);
-      toast.error('Archivo JSON invalido o incompatible');
-    } finally {
-      e.target.value = '';
-    }
-  }, [notifyChange, restoreCanvasState, saveHistory]);
 
   // (updateMiniMap movida arriba)
 
@@ -1881,147 +1741,8 @@ export const CanvasEditor = ({
     };
   }, [currentTool, color, brushWidth, isReadOnly, isReady]);
 
-  // ✅ NUEVO: Handle image file selection
-  const handleImageFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    // Reset input so same file can be selected again
-    e.target.value = '';
-
-    const canvas = fabricCanvasRef.current;
-    if (!canvas) return;
-
-    try {
-      // Show loading toast
-      const loadingToast = toast.loading('Uploading image...');
-
-      // Upload image (will be compressed automatically)
-      const upload = await uploadImage(file);
-
-      // Dismiss loading toast
-      toast.dismiss(loadingToast);
-
-      // Add image to canvas
-      await addImageToCanvas(upload.url);
-
-      toast.success('Image added to canvas!');
-    } catch (error: any) {
-      console.error('Error uploading image:', error);
-      toast.error(error.message || 'Failed to upload image');
-    }
-  };
-
-  // ✅ NUEVO: Add image to canvas from URL
-  const addImageToCanvas = async (imageUrl: string) => {
-    const canvas = fabricCanvasRef.current;
-    if (!canvas) return;
-
-    try {
-      // Load image from URL
-      const img = await fabric.FabricImage.fromURL(imageUrl, {
-        crossOrigin: 'anonymous',
-      });
-
-      // Calculate scale to fit image nicely on canvas
-      const maxWidth = canvas.width! * 0.5; // 50% of canvas width
-      const maxHeight = canvas.height! * 0.5; // 50% of canvas height
-      
-      const scaleX = maxWidth / (img.width || 1);
-      const scaleY = maxHeight / (img.height || 1);
-      const scale = Math.min(scaleX, scaleY, 1); // Don't upscale
-
-      // Position image in center
-      img.set({
-        left: canvas.width! / 2,
-        top: canvas.height! / 2,
-        scaleX: scale,
-        scaleY: scale,
-        originX: 'center',
-        originY: 'center',
-      });
-
-      // Add to canvas
-      canvas.add(img);
-      canvas.setActiveObject(img);
-      canvas.renderAll();
-
-      // Save to history
-      setTimeout(() => saveHistory(), 100);
-    } catch (error) {
-      console.error('Error adding image to canvas:', error);
-      throw new Error('Failed to load image');
-    }
-  };
-
-  const clearCanvas = () => {
-    const canvas = fabricCanvasRef.current;
-    if (!canvas) return;
-
-    if (confirm('Are you sure you want to clear the canvas?')) {
-      canvas.clear();
-      canvas.backgroundColor = '#ffffff';
-      canvas.renderAll();
-      saveHistory();
-      toast.success('Canvas cleared');
-    }
-  };
-
-  const exportPNG = useCallback(() => {
-    const canvas = fabricCanvasRef.current;
-    if (!canvas) return;
-
-    const dataURL = canvas.toDataURL({
-      format: 'png',
-      quality: 1,
-      multiplier: 2,
-    });
-
-    const link = document.createElement('a');
-    link.download = `slide-${slideId}.png`;
-    link.href = dataURL;
-    link.click();
-    toast.success('Imagen PNG exportada');
-  }, [slideId]);
-
-  const exportSVG = useCallback(() => {
-    const canvas = fabricCanvasRef.current;
-    if (!canvas) return;
-
-    const svg = canvas.toSVG();
-    const blob = new Blob([svg], { type: 'image/svg+xml' });
-    const url = URL.createObjectURL(blob);
-
-    const link = document.createElement('a');
-    link.download = `slide-${slideId}.svg`;
-    link.href = url;
-    link.click();
-
-    URL.revokeObjectURL(url);
-    toast.success('Vector SVG exportado');
-  }, [slideId]);
-
-  const shortcuts = [
-    { desc: 'Seleccionar', key: 'V' },
-    { desc: 'Lapiz', key: 'P' },
-    { desc: 'Rectangulo', key: 'R' },
-    { desc: 'Circulo', key: 'C' },
-    { desc: 'Linea', key: 'L' },
-    { desc: 'Flecha', key: 'A' },
-    { desc: 'Texto', key: 'T' },
-    { desc: 'Imagen', key: 'I' },
-    { desc: 'Borrador', key: 'E' },
-    { desc: 'Mano / Pan', key: 'H o Espacio' },
-    { desc: 'Deshacer', key: 'Ctrl + Z' },
-    { desc: 'Rehacer', key: 'Ctrl + Y' },
-    { desc: 'Copiar', key: 'Ctrl + C' },
-    { desc: 'Pegar', key: 'Ctrl + V' },
-    { desc: 'Eliminar', key: 'Delete' },
-    { desc: 'Guardar', key: 'Ctrl + S' },
-    { desc: 'Zoom', key: 'Ctrl + Rueda' },
-    { desc: 'Ver atajos', key: '?' },
-    { desc: 'Cerrar panel', key: 'Esc' },
-  ];
+  // handleImageFileSelect, exportJSON, exportPNG, exportSVG, clearCanvas — provided by useCanvasFileIO
+  // shortcuts array — imported as CANVAS_SHORTCUTS from '../types/canvasEditor'
 
   return (
     <div className="h-full flex flex-col">
@@ -2174,7 +1895,7 @@ export const CanvasEditor = ({
         onSubtitlesResizeStart={handleSubtitlesResizeMouseDown}
         showShortcuts={showShortcuts}
         onCloseShortcuts={() => setShowShortcuts(false)}
-        shortcuts={shortcuts}
+        shortcuts={CANVAS_SHORTCUTS}
         audioBannerType={audioBannerType}
         onCloseAudioBanner={() => setAudioBannerType(null)}
       />
