@@ -19,8 +19,10 @@ import { useAITutor } from '../hooks/useAITutor';
 import { useQuizGame } from '../hooks/useQuizGame';
 import { useSubtitlesDragResize } from '../hooks/useSubtitlesDragResize';
 import { useCanvasFileIO } from '../hooks/useCanvasFileIO';
+import { useCanvasKeyboardShortcuts } from '../hooks/useCanvasKeyboardShortcuts';
+import { useCanvasZoomPan } from '../hooks/useCanvasZoomPan';
 import type { CanvasEditorProps } from '../types/canvasEditor';
-import { isEditableTarget, CANVAS_SHORTCUTS } from '../types/canvasEditor';
+import { CANVAS_SHORTCUTS } from '../types/canvasEditor';
 
 
 
@@ -62,11 +64,9 @@ export const CanvasEditor = ({
   const [isSaving, setIsSaving] = useState(false);
   const [isReady, setIsReady] = useState(false);
 
-  // Zoom and Pan state
+  // Zoom / Pan state (zoomLevel synced from hook via onZoomChange)
   const [zoomLevel, setZoomLevel] = useState(1);
   const [manualZoom, setManualZoom] = useState('100');
-  const MIN_ZOOM = 0.1;
-  const MAX_ZOOM = 5;
   const [isSpacePressed, setIsSpacePressed] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const [showShortcuts, setShowShortcuts] = useState(false);
@@ -154,7 +154,7 @@ export const CanvasEditor = ({
   // MiniMap Refs for Interaction
   const miniMapStateRef = useRef({ scale: 1, minX: 0, minY: 0 });
   const isDraggingMiniMapRef = useRef(false);
-  const hasInitialFitRef = useRef(false);
+  // hasInitialFitRef comes from useCanvasZoomPan below
 
   const reading = useReading(fabricCanvasRef.current, saveHistory, ydoc, isTeacher);
   const conversation = useConversation(fabricCanvasRef.current, saveHistory, ydoc, isTeacher, notifyChange);
@@ -388,92 +388,6 @@ export const CanvasEditor = ({
     miniCtx.fillRect(vx + vw - 2, vy + vh - 2, dotSize, dotSize); 
   }, []);
 
-  // ✅ Fit to Viewport con Redimensionamiento Físico y Centrado Correcto
-  const fitToViewport = useCallback(() => {
-    const canvas = fabricCanvasRef.current;
-    const container = containerRef.current;
-    if (!canvas || !container) return;
-
-    const containerWidth = container.clientWidth;
-    const containerHeight = container.clientHeight;
-    if (containerWidth === 0 || containerHeight === 0) return;
-
-    // El lienzo físico siempre ocupa el 100% del contenedor
-    canvas.setWidth(containerWidth);
-    canvas.setHeight(containerHeight);
-
-    // Calcular escala para caber en AMBAS dimensiones (manteniendo 16:9 base 1200x675)
-    const scaleX = containerWidth / 1200;
-    const scaleY = containerHeight / 675;
-    const scale = Math.min(scaleX, scaleY);
-
-    // Centrar la pizarra en el contenedor
-    const translateX = (containerWidth - 1200 * scale) / 2;
-    const translateY = (containerHeight - 675 * scale) / 2;
-
-    // Aplicar zoom y centrado en el ViewportTransform
-    canvas.setViewportTransform([scale, 0, 0, scale, translateX, translateY]);
-
-    setZoomLevel(scale);
-    canvas.renderAll();
-    updateMiniMap();
-  }, [updateMiniMap]);
-
-  // ✅ Sensor de tamaño inteligente (ResizeObserver)
-  useEffect(() => {
-    if (!isReady || !containerRef.current) return;
-    
-    const resizeObserver = new ResizeObserver(() => {
-      window.requestAnimationFrame(() => {
-        const canvas = fabricCanvasRef.current;
-        const container = containerRef.current;
-        if (!canvas || !container) return;
-
-        if (!hasInitialFitRef.current) {
-          fitToViewport();
-          hasInitialFitRef.current = true;
-        } else {
-          canvas.setWidth(container.clientWidth);
-          canvas.setHeight(container.clientHeight);
-          canvas.requestRenderAll();
-          updateMiniMap();
-        }
-      });
-    });
-    
-    resizeObserver.observe(containerRef.current);
-    return () => resizeObserver.disconnect();
-  }, [isReady, fitToViewport, updateMiniMap]);
-
-  const zoomIn = useCallback(() => {
-    const canvas = fabricCanvasRef.current;
-    if (!canvas) return;
-    const newZoom = Math.min(zoomLevel * 1.1, MAX_ZOOM);
-    const center = canvas.getCenter();
-    canvas.zoomToPoint(new fabric.Point(center.left, center.top), newZoom);
-    setZoomLevel(newZoom);
-    updateMiniMap();
-  }, [zoomLevel, MAX_ZOOM, updateMiniMap]);
-
-  // Sincronizar input manual cuando cambia el zoom externamente (botones/scroll)
-  useEffect(() => {
-    setManualZoom(Math.round(zoomLevel * 100).toString());
-  }, [zoomLevel]);
-
-  const zoomOut = useCallback(() => {
-    const canvas = fabricCanvasRef.current;
-    if (!canvas) return;
-    const newZoom = Math.max(zoomLevel / 1.1, MIN_ZOOM);
-    const center = canvas.getCenter();
-    canvas.zoomToPoint(new fabric.Point(center.left, center.top), newZoom);
-    setZoomLevel(newZoom);
-    updateMiniMap();
-  }, [zoomLevel, MIN_ZOOM, updateMiniMap]);
-
-  const resetZoom = useCallback(() => {
-    fitToViewport();
-  }, [fitToViewport]);
-
 
   // Delete selected object
 
@@ -647,19 +561,7 @@ export const CanvasEditor = ({
   }, [addText, syncCursorForTool, triggerImageUpload, reading, globalTimer, presenter, readingGame, conversation, aiTutor, quizGame]);
 
 
-  // ── Callback: aplica zoom manual desde el toolbar (Fabric vive aquí) ────────
-  const handleManualZoomApply = useCallback((percent: number) => {
-    const newZoom = percent / 100;
-    const canvas = fabricCanvasRef.current;
-    if (canvas) {
-      setZoomLevel(newZoom);
-      const center = canvas.getCenter();
-      canvas.zoomToPoint({ x: center.left, y: center.top } as any, newZoom);
-      updateMiniMap();
-    }
-    setManualZoom(percent.toString());
-  }, [updateMiniMap]);
-  // ─────────────────────────────────────────────────────────────────────────────
+  // handleManualZoomApply is provided by useCanvasZoomPan above
 
   // (updateMiniMap movida arriba)
 
@@ -667,454 +569,54 @@ export const CanvasEditor = ({
   useEffect(() => {
     const canvas = fabricCanvasRef.current;
     if (!canvas || !isReady) return;
-    
-    // Actualizar mini-mapa cuando cambie el canvas
-    const handleCanvasChange = () => {
-      updateMiniMap();
-    };
-    
+    const handleCanvasChange = () => { updateMiniMap(); };
     canvas.on('after:render', handleCanvasChange);
     canvas.on('mouse:wheel', handleCanvasChange);
-    
-    // Actualizar inicialmente
     updateMiniMap();
-    
     return () => {
       canvas.off('after:render', handleCanvasChange);
       canvas.off('mouse:wheel', handleCanvasChange);
     };
   }, [isReady, updateMiniMap]);
 
-  // Keyboard shortcuts
-  useEffect(() => {
-    if (!isReady || isReadOnly) return;
+  // ── Keyboard shortcuts — delegado a useCanvasKeyboardShortcuts ───────────────
+  const { isSpacePressedRef } = useCanvasKeyboardShortcuts({
+    fabricCanvasRef,
+    isReady,
+    isReadOnly,
+    currentTool,
+    isSpacePressed,
+    setIsSpacePressed,
+    setShowShortcuts,
+    undo,
+    redo,
+    copySelected,
+    cutSelected,
+    paste,
+    deleteSelected,
+    handleSave,
+    handleToolClick,
+  });
 
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (isEditableTarget(e.target)) {
-        return;
-      }
-
-      const canvas = fabricCanvasRef.current;
-      const activeObject = canvas?.getActiveObject();
-      const key = e.key.toLowerCase();
-      
-      // Don't intercept if editing text
-      if (activeObject && activeObject instanceof fabric.IText && (activeObject as any).isEditing) {
-        return;
-      }
-
-      if (e.key === '?') {
-        e.preventDefault();
-        setShowShortcuts((prev) => !prev);
-        return;
-      }
-
-      // Undo: Ctrl+Z / Cmd+Z
-      if ((e.ctrlKey || e.metaKey) && key === 'z' && !e.shiftKey) {
-        e.preventDefault();
-        undo();
-        return;
-      }
-      
-      // Redo: Ctrl+Y / Cmd+Shift+Z
-      if (((e.ctrlKey || e.metaKey) && key === 'y') || 
-          ((e.ctrlKey || e.metaKey) && e.shiftKey && key === 'z')) {
-        e.preventDefault();
-        redo();
-        return;
-      }
-      
-      // Copy: Ctrl+C / Cmd+C
-      if ((e.ctrlKey || e.metaKey) && key === 'c') {
-        e.preventDefault();
-        copySelected();
-        return;
-      }
-
-      // Cut: Ctrl+X / Cmd+X — cuts selected object to internal clipboard
-      if ((e.ctrlKey || e.metaKey) && key === 'x') {
-        e.preventDefault();
-        cutSelected();
-        return;
-      }
-      
-      // Paste: Ctrl+V / Cmd+V
-      if ((e.ctrlKey || e.metaKey) && key === 'v') {
-        e.preventDefault();
-        paste();
-        return;
-      }
-      
-      // Delete: Delete / Backspace
-      if (e.key === 'Delete' || e.key === 'Backspace') {
-        e.preventDefault();
-        deleteSelected();
-        return;
-      }
-      
-      // Save: Ctrl+S / Cmd+S
-      if ((e.ctrlKey || e.metaKey) && key === 's') {
-        e.preventDefault();
-        handleSave();
-        return;
-      }
-
-      if (!e.ctrlKey && !e.metaKey) {
-        if (key === 'v') {
-          e.preventDefault();
-          handleToolClick('select');
-          return;
-        }
-
-        if (key === 'p') {
-          e.preventDefault();
-          handleToolClick('pencil');
-          return;
-        }
-
-        if (key === 'r') {
-          e.preventDefault();
-          handleToolClick('rectangle');
-          return;
-        }
-
-        if (key === 'c') {
-          e.preventDefault();
-          handleToolClick('circle');
-          return;
-        }
-
-        if (key === 'l') {
-          e.preventDefault();
-          handleToolClick('line');
-          return;
-        }
-
-        if (key === 'a') {
-          e.preventDefault();
-          handleToolClick('arrow');
-          return;
-        }
-
-        if (key === 't') {
-          e.preventDefault();
-          handleToolClick('text');
-          return;
-        }
-
-        if (key === 'e') {
-          e.preventDefault();
-          handleToolClick('eraser');
-          return;
-        }
-
-        if (key === 'h') {
-          e.preventDefault();
-          handleToolClick('hand');
-          return;
-        }
-
-        if (key === 'i') {
-          e.preventDefault();
-          handleToolClick('image');
-          return;
-        }
-
-        if (key === 'x') {
-          e.preventDefault();
-          handleToolClick('cut');
-          return;
-        }
-
-        if (key === 'escape' && canvas) {
-          setShowShortcuts(false);
-          canvas.discardActiveObject();
-          canvas.requestRenderAll();
-          return;
-        }
-      }
-      
-      // Espacio para pan temporal
-      if (e.key === ' ' && currentTool !== 'hand') {
-        e.preventDefault();
-        if (!isSpacePressedRef.current) {
-          setIsSpacePressed(true);
-          if (canvas) {
-            canvas.defaultCursor = 'grab';
-            canvas.hoverCursor = 'grab';
-            // ✅ NO desactivar selection aquí - lo haremos en mouse:down
-          }
-        }
-      }
-    };
-
-    const handleKeyUp = (e: KeyboardEvent) => {
-      // Soltar Espacio vuelve a cursor normal
-      if (e.key === ' ') {
-        setIsSpacePressed(false);
-        const canvas = fabricCanvasRef.current;
-        if (canvas && currentTool !== 'hand') {
-          canvas.defaultCursor = 'default';
-          canvas.hoverCursor = 'move';
-        }
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    window.addEventListener('keyup', handleKeyUp);
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown);
-      window.removeEventListener('keyup', handleKeyUp);
-    };
-  }, [isReady, isReadOnly, undo, redo, copySelected, cutSelected, paste, deleteSelected, currentTool, handleSave, handleToolClick]);
-
-  // ✅ NUEVO: Ref para isSpacePressed para evitar re-render del useEffect
-  const isSpacePressedRef = useRef(isSpacePressed);
-  useEffect(() => {
-    isSpacePressedRef.current = isSpacePressed;
-  }, [isSpacePressed]);
-
-  // ✅ NUEVO: Zoom con Ctrl+Scroll y Pan con mouse
-  useEffect(() => {
-    const canvas = fabricCanvasRef.current;
-    if (!canvas) return;
-
-    let isPanning = false;
-    let lastPosX = 0;
-    let lastPosY = 0;
-    let wasDrawingMode = false;  // Guardar estado del modo de dibujo
-    let restoreTimeout: any = null;  // Para delay al restaurar
-
-
-    // Zoom con Ctrl + Scroll
-    const handleWheel = (e: WheelEvent) => {
-      if (e.ctrlKey || e.metaKey) {
-        e.preventDefault();
-        
-        const delta = e.deltaY;
-        let newZoom = canvas.getZoom();
-        
-        if (delta < 0) {
-          // Scroll up = Zoom in
-          newZoom = Math.min(newZoom * 1.1, MAX_ZOOM);
-        } else {
-          // Scroll down = Zoom out
-          newZoom = Math.max(newZoom / 1.1, MIN_ZOOM);
-        }
-        
-        setZoomLevel(newZoom);
-        
-        // Zoom hacia el punto del mouse
-        const point = new fabric.Point(e.offsetX, e.offsetY);
-        canvas.zoomToPoint(point, newZoom);
-        canvas.renderAll();
-        updateMiniMap();
-      }
-    };
-
-    // ✅ MEJORADO: Pan con Hand Tool, Espacio, Alt+Click, middle click o right+alt
-    const handleMouseDown = (e: fabric.TEvent) => {
-      const evt = e.e as MouseEvent;
-      
-      // ✅ CRÍTICO: Si Space está presionado, desactivar selection INMEDIATAMENTE
-      // Esto previene el recuadro azul antes de que Fabric.js lo dibuje
-      if (isSpacePressedRef.current) {
-        canvas.selection = false;
-      }
-      
-      if (currentTool === 'text') {
-        const pointer = canvas.getScenePoint(evt);
-        addText(pointer.x, pointer.y);
-        setCurrentTool('select');
-        syncCursorForTool('select');
-        evt.preventDefault();
-        evt.stopPropagation();
-        return false;
-      }
-
-      // Activar pan si:
-
-      // 1. Hand tool está seleccionado
-      // 2. Espacio está presionado (leído desde ref)
-      // 3. Middle click (rueda del mouse)
-      const shouldPan = 
-        currentTool === 'hand' || 
-        isSpacePressedRef.current || 
-        evt.button === 1;  // Middle click
-      
-      if (shouldPan) {
-        isPanning = true;
-        lastPosX = evt.clientX;
-        lastPosY = evt.clientY;
-        canvas.defaultCursor = 'grabbing';
-        
-        // ✅ CRÍTICO: Guardar y desactivar el modo de dibujo para prevenir que dibuje mientras hace pan
-        wasDrawingMode = canvas.isDrawingMode;
-        if (wasDrawingMode) {
-          canvas.isDrawingMode = false;
-          
-          // Limpiar cualquier estado de dibujo pendiente en Fabric.js
-          if ((canvas as any).freeDrawingBrush) {
-            (canvas as any).freeDrawingBrush._reset();
-          }
-        }
-        
-        // Prevenir que Fabric.js procese este evento
-        evt.preventDefault();
-        evt.stopPropagation();
-        evt.stopImmediatePropagation();
-        
-        // Desactivar interacciones de Fabric.js temporalmente
-        canvas.selection = false;
-        canvas.skipTargetFind = true;
-        
-        return false;
-      } else if (isSpacePressedRef.current) {
-        // ✅ NUEVO: Si Space está presionado pero no se activó pan (ej: click en objeto)
-        // Prevenir el evento para evitar selección
-        evt.preventDefault();
-        evt.stopPropagation();
-        return false;
-      }
-    };
-
-    const handleMouseMove = (e: fabric.TEvent) => {
-      if (!isPanning) return;
-      
-      const evt = e.e as MouseEvent;
-      
-      // Prevenir que Fabric.js dibuje selection box o líneas
-      evt.preventDefault();
-      evt.stopPropagation();
-      evt.stopImmediatePropagation();
-      
-      // ✅ MEJORADO: Usar relativePan en lugar de manipular viewportTransform manualmente
-      // Esto asegura compatibilidad total con el zoom y evita desincronizaciones
-      const deltaX = evt.clientX - lastPosX;
-      const deltaY = evt.clientY - lastPosY;
-      
-      canvas.relativePan(new fabric.Point(deltaX, deltaY));
-      
-      lastPosX = evt.clientX;
-      lastPosY = evt.clientY;
-      
-      updateMiniMap();
-      return false;
-    };
-
-    const handleMouseUp = (e: fabric.TEvent) => {
-      if (isPanning) {
-        const evt = e.e as MouseEvent;
-        
-        // CRÍTICO: Prevenir que Fabric.js procese este mouse:up
-        evt.preventDefault();
-        evt.stopPropagation();
-        evt.stopImmediatePropagation();
-        
-        isPanning = false;
-        canvas.defaultCursor = 'default';
-        
-        // Limpiar estado interno
-        (canvas as any)._isCurrentlyDrawing = false;
-        (canvas as any)._currentTransform = null;
-        (canvas as any).__corner = null;
-        canvas.discardActiveObject();
-        canvas.skipTargetFind = false;
-        
-        // ✅ LÓGICA MEJORADA DE RESTAURACIÓN
-        if (wasDrawingMode) {
-          // Si íbamos a dibujar, MANTENER selección apagada para evitar blink azul
-          // Y programar la restauración del dibujo
-          
-          if (restoreTimeout) clearTimeout(restoreTimeout);
-          
-          restoreTimeout = setTimeout(() => {
-            if (canvas && !isPanning) {
-              canvas.isDrawingMode = true;
-              if ((canvas as any).freeDrawingBrush) {
-                (canvas as any).freeDrawingBrush._reset();
-              }
-            }
-            wasDrawingMode = false;
-            restoreTimeout = null;
-          }, 50);
-        } else {
-          // Solo reactivar selección si NO estábamos dibujando
-          canvas.selection = true;
-        }
-        
-        canvas.requestRenderAll();
-        return false;
-      } else if (isSpacePressedRef.current) {
-        // ✅ NUEVO: Si Space está presionado pero NO se hizo pan
-        // Restaurar selection (fue desactivada en mouse:down)
-        if (!canvas.isDrawingMode) {
-          canvas.selection = true;
-        }
-      }
-    };
-
-    // ✅ NUEVO: Listener nativo como fallback para cuando Fabric.js no dispara mouse:down
-    // Esto asegura que Space+Click funcione incluso en áreas vacías del canvas
-    const handleNativeMouseDownForPan = (evt: MouseEvent) => {
-      // Solo actuar si Space está presionado
-      if (!isSpacePressedRef.current && evt.button !== 1) return;
-      
-      // Desactivar selection inmediatamente
-      canvas.selection = false;
-      
-      // Iniciar pan
-      isPanning = true;
-      lastPosX = evt.clientX;
-      lastPosY = evt.clientY;
-      canvas.defaultCursor = 'grabbing';
-      
-      // Guardar estado de dibujo
-      wasDrawingMode = canvas.isDrawingMode;
-      if (wasDrawingMode) {
-        canvas.isDrawingMode = false;
-        if ((canvas as any).freeDrawingBrush) {
-          (canvas as any).freeDrawingBrush._reset();
-        }
-      }
-      
-      // Prevenir comportamiento por defecto
-      evt.preventDefault();
-      evt.stopPropagation();
-      
-      canvas.skipTargetFind = true;
-    };
-
-    // Agregar event listeners
-    const canvasElement = canvas.getElement();
-    canvasElement.addEventListener('wheel', handleWheel, { passive: false });
-    
-    // ✅ NUEVO: Agregar listener nativo para pan
-    canvasElement.addEventListener('mousedown', handleNativeMouseDownForPan);
-    
-    canvas.on('mouse:down', handleMouseDown);
-    canvas.on('mouse:move', handleMouseMove);
-    canvas.on('mouse:up', handleMouseUp);
-
-    return () => {
-      if (restoreTimeout) {
-        clearTimeout(restoreTimeout);
-      }
-      
-      canvasElement.removeEventListener('wheel', handleWheel);
-      // ✅ NUEVO: Limpiar listener nativo
-      canvasElement.removeEventListener('mousedown', handleNativeMouseDownForPan);
-      
-      canvas.off('mouse:down', handleMouseDown);
-      canvas.off('mouse:move', handleMouseMove);
-      canvas.off('mouse:up', handleMouseUp);
-    };
-    // Quitamos isSpacePressed de las dependencias para evitar re-subscribe al pulsar espacio
-  }, [MAX_ZOOM, MIN_ZOOM, currentTool, updateMiniMap]);
-
-
-
-
+  // ── Zoom & Pan — delegado a useCanvasZoomPan ─────────────────────────────────
+  // (must come after addText, syncCursorForTool, and isSpacePressedRef are defined)
+  const zoomPan = useCanvasZoomPan({
+    fabricCanvasRef,
+    containerRef,
+    currentTool,
+    isReady,
+    isSpacePressedRef,
+    updateMiniMap,
+    onZoomChange: (zoom) => {
+      setZoomLevel(zoom);
+      setManualZoom(Math.round(zoom * 100).toString());
+    },
+    addText,
+    syncCursorForTool,
+    setCurrentTool,
+  });
+  const { fitToViewport, zoomIn, zoomOut, resetZoom, handleManualZoomApply, hasInitialFitRef } = zoomPan;
+  // ─────────────────────────────────────────────────────────────────────────────
 
   // Initialize canvas and load data
   useEffect(() => {
