@@ -22,6 +22,8 @@ import conversationRoutes from './api/conversation.routes';
 import presenterRoutes from './api/presenter.routes';
 import tutorRoutes from './api/tutor.routes';
 import quizRoutes from './api/quiz.routes';
+import subtitlesRoutes from './api/subtitles.routes';
+import drawRoutes from './api/draw.routes';
 import { errorHandler } from './middleware/error.middleware';
 
 import { generalLimiter, authLimiter } from './middleware/rate-limit.middleware';
@@ -128,6 +130,8 @@ app.use('/api/conversation', conversationRoutes);
 app.use('/api/presenter', presenterRoutes);
 app.use('/api/tutor', tutorRoutes);
 app.use('/api/quiz', quizRoutes);
+app.use('/api/subtitles', subtitlesRoutes);
+app.use('/api/draw', drawRoutes);
 
 
 // ============================================================

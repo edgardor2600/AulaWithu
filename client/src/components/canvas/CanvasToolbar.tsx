@@ -1,4 +1,4 @@
-﻿import {
+import {
   Pencil,
   Square,
   Circle as CircleIcon,
@@ -29,6 +29,8 @@
   Bot,
   BookOpen,
   MessageSquare,
+  Film,
+  Sparkles,
 } from 'lucide-react';
 import { BOARD_THEMES, type Tool, type BoardTheme } from '../../types/canvas';
 import { QuizAppBarButton } from '../quiz/QuizAppBarButton';
@@ -109,6 +111,8 @@ function buildTools(isTeacher: boolean) {
     ...(isTeacher ? [{ id: 'presenter' as Tool, icon: MonitorUp, label: 'Presentador', desc: 'Presentar archivos PPTX, DOCX, XLSX' }] : []),
     { id: 'reading-game' as Tool, icon: Zap, label: 'Reto de Lectura', desc: 'Reto de Velocidad de Lectura con IA (G)' },
     ...(isTeacher ? [{ id: 'ai-tutor' as Tool, icon: Bot, label: 'AI Tutor', desc: 'Asistente y Tutor de Lecciones con IA' }] : []),
+    ...(isTeacher ? [{ id: 'subtitles' as Tool, icon: Film, label: 'Subtítulos', desc: 'Analizador de Subtítulos con IA (.srt / .vtt)' }] : []),
+    ...(isTeacher ? [{ id: 'ai-draw' as Tool, icon: Sparkles, label: 'Dibujo IA', desc: 'Generar diagramas con IA en la pizarra' }] : []),
   ];
 }
 

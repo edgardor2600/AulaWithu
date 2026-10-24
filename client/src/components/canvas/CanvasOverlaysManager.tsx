@@ -1,3 +1,4 @@
+import * as fabric from 'fabric';
 import { Volume2 } from 'lucide-react';
 import { ReadingPanel } from '../ReadingPanel';
 import { ReadingStudentWidget } from '../ReadingStudentWidget';
@@ -14,6 +15,8 @@ import { AITutorFloatingBubble } from '../AITutorFloatingBubble';
 import { QuizCreatorModal } from '../quiz/QuizCreatorModal';
 import { QuizPlayerWidget } from '../quiz/QuizPlayerWidget';
 import { QuizPodiumModal } from '../quiz/QuizPodiumModal';
+import { SubtitleAnalyzerModal } from '../subtitles/SubtitleAnalyzerModal';
+import { AIDrawModal } from './AIDrawModal';
 import type { useReading } from '../../hooks/useReading';
 import type { useConversation } from '../../hooks/useConversation';
 import type { useGlobalTimer } from '../../hooks/useGlobalTimer';
@@ -53,6 +56,16 @@ interface CanvasOverlaysManagerProps {
   // Audio banner
   audioBannerType: string | null;
   onCloseAudioBanner: () => void;
+
+  // Subtitle Analyzer Modal
+  showSubtitlesModal?: boolean;
+  onCloseSubtitlesModal?: () => void;
+  onQuizExported?: (quizData: any) => void;
+
+  // AI Draw Modal
+  fabricCanvasRef?: React.MutableRefObject<fabric.Canvas | null>;
+  showAIDrawModal?: boolean;
+  onCloseAIDrawModal?: () => void;
 }
 
 export const CanvasOverlaysManager = ({
@@ -78,6 +91,12 @@ export const CanvasOverlaysManager = ({
   shortcuts,
   audioBannerType,
   onCloseAudioBanner,
+  showSubtitlesModal,
+  onCloseSubtitlesModal,
+  onQuizExported,
+  fabricCanvasRef,
+  showAIDrawModal,
+  onCloseAIDrawModal,
 }: CanvasOverlaysManagerProps) => {
   const subtitlesFontSize = Math.max(11, Math.min(36, Math.round(subtitlesSize.width * 0.035)));
 
@@ -329,6 +348,22 @@ export const CanvasOverlaysManager = ({
           if (isTeacher) quiz.forceStopQuiz();
         }}
       />
+
+      {/* Estudio Analizador de Subtítulos */}
+      <SubtitleAnalyzerModal
+        isOpen={!!showSubtitlesModal}
+        onClose={onCloseSubtitlesModal || (() => {})}
+        onQuizExported={onQuizExported}
+      />
+
+      {/* Dibujo e Ilustración con IA */}
+      {fabricCanvasRef && (
+        <AIDrawModal
+          isOpen={!!showAIDrawModal}
+          onClose={onCloseAIDrawModal || (() => {})}
+          fabricCanvasRef={fabricCanvasRef}
+        />
+      )}
     </>
   );
 };

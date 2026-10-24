@@ -19,7 +19,9 @@ export type Tool =
   | 'presenter'
   | 'reading-game'
   | 'ai-tutor'
-  | 'quiz';
+  | 'quiz'
+  | 'subtitles'
+  | 'ai-draw';
 
 
 export type BoardTheme = 'white' | 'notebook' | 'green' | 'blackboard' | 'cork';

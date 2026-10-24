@@ -45,6 +45,7 @@ export interface ShortcutEntry {
 export const CANVAS_SHORTCUTS: ShortcutEntry[] = [
   { desc: 'Seleccionar', key: 'V' },
   { desc: 'Lapiz', key: 'P' },
+  { desc: 'Recortar', key: 'X' },
   { desc: 'Rectangulo', key: 'R' },
   { desc: 'Circulo', key: 'C' },
   { desc: 'Linea', key: 'L' },

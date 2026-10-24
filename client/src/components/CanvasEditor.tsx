@@ -13,7 +13,7 @@ import { useCanvasHistory } from '../hooks/useCanvasHistory';
 import { useCanvasClipboard } from '../hooks/useCanvasClipboard';
 import { useScreenShare } from '../hooks/useScreenShare';
 import { useCanvasBoardTheme } from '../hooks/useCanvasBoardTheme';
-import { BOARD_THEMES, type Tool, type BoardTheme } from '../types/canvas';
+import type { Tool } from '../types/canvas';
 import { usePresenter } from '../hooks/usePresenter';
 import { useAITutor } from '../hooks/useAITutor';
 import { useQuizGame } from '../hooks/useQuizGame';
@@ -21,6 +21,7 @@ import { useSubtitlesDragResize } from '../hooks/useSubtitlesDragResize';
 import { useCanvasFileIO } from '../hooks/useCanvasFileIO';
 import { useCanvasKeyboardShortcuts } from '../hooks/useCanvasKeyboardShortcuts';
 import { useCanvasZoomPan } from '../hooks/useCanvasZoomPan';
+import { useCanvasCutTool } from '../hooks/useCanvasCutTool';
 import type { CanvasEditorProps } from '../types/canvasEditor';
 import { CANVAS_SHORTCUTS } from '../types/canvasEditor';
 
@@ -70,6 +71,8 @@ export const CanvasEditor = ({
   const [isSpacePressed, setIsSpacePressed] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const [showShortcuts, setShowShortcuts] = useState(false);
+  const [showSubtitleModal, setShowSubtitleModal] = useState(false);
+  const [showAIDrawModal, setShowAIDrawModal] = useState(false);
 
 
   // ── Extracted hooks ──────────────────────────────────────────────────────────
@@ -556,6 +559,20 @@ export const CanvasEditor = ({
       return;
     }
 
+    if (tool === 'subtitles') {
+      setShowSubtitleModal(true);
+      setCurrentTool('select');
+      syncCursorForTool('select');
+      return;
+    }
+
+    if (tool === 'ai-draw') {
+      setShowAIDrawModal(true);
+      setCurrentTool('select');
+      syncCursorForTool('select');
+      return;
+    }
+
     setCurrentTool(tool);
     syncCursorForTool(tool);
   }, [addText, syncCursorForTool, triggerImageUpload, reading, globalTimer, presenter, readingGame, conversation, aiTutor, quizGame]);
@@ -615,8 +632,16 @@ export const CanvasEditor = ({
     syncCursorForTool,
     setCurrentTool,
   });
-  const { fitToViewport, zoomIn, zoomOut, resetZoom, handleManualZoomApply, hasInitialFitRef } = zoomPan;
+  const { fitToViewport, zoomIn, zoomOut, resetZoom, handleManualZoomApply } = zoomPan;
   // ─────────────────────────────────────────────────────────────────────────────
+
+  // ── Cut tool (scissors) — delegado a useCanvasCutTool ───────────────────────
+  useCanvasCutTool({
+    fabricCanvasRef,
+    isActive: currentTool === 'cut' && !isReadOnly && isReady,
+    isSpacePressedRef,
+    onComplete: () => setCurrentTool('select'),
+  });
 
   // Initialize canvas and load data
   useEffect(() => {
@@ -849,6 +874,12 @@ export const CanvasEditor = ({
       canvas.isDrawingMode = false;
       canvas.discardActiveObject();
       canvas.requestRenderAll();
+      return;
+    }
+
+    // Cut tool manages its own canvas settings/listeners (useCanvasCutTool)
+    if (currentTool === 'cut') {
+      canvas.isDrawingMode = false;
       return;
     }
 
@@ -1127,104 +1158,6 @@ export const CanvasEditor = ({
         canvas.fire('object:modified', { target: group });
         setCurrentTool('select');
       };
-    } else if (currentTool === 'cut') {
-      // Drag-to-cut: select a rectangular area and extract it as a new image object
-      canvas.selection = false;
-      canvas.defaultCursor = 'crosshair';
-      let isCutting = false;
-      let cutStartX = 0;
-      let cutStartY = 0;
-      let selectionRect: fabric.Rect | null = null;
-
-      mouseDownHandler = (o) => {
-        const evt = o.e as MouseEvent;
-        if (isSpacePressedRef.current || evt.button === 1) return;
-        const pointer = canvas.getScenePoint(o.e);
-        isCutting = true;
-        cutStartX = pointer.x;
-        cutStartY = pointer.y;
-        selectionRect = new fabric.Rect({
-          left: cutStartX,
-          top: cutStartY,
-          width: 0,
-          height: 0,
-          fill: 'rgba(99,102,241,0.15)',
-          stroke: '#6366f1',
-          strokeWidth: 1.5,
-          strokeDashArray: [6, 3],
-          selectable: false,
-          evented: false,
-        } as any);
-        (selectionRect as any).excludeFromSync = true;
-        (selectionRect as any).excludeFromSerialization = true;
-        (selectionRect as any).excludeFromHistory = true;
-        canvas.add(selectionRect);
-      };
-
-      mouseMoveHandler = (o) => {
-        if (!isCutting || !selectionRect) return;
-        const pointer = canvas.getScenePoint(o.e);
-        const w = pointer.x - cutStartX;
-        const h = pointer.y - cutStartY;
-        selectionRect.set({
-          width: Math.abs(w), height: Math.abs(h),
-          left: w < 0 ? pointer.x : cutStartX,
-          top: h < 0 ? pointer.y : cutStartY,
-        });
-        canvas.renderAll();
-      };
-
-      mouseUpHandler = async () => {
-        if (!isCutting || !selectionRect) return;
-        isCutting = false;
-
-        const cutX = selectionRect.left || 0;
-        const cutY = selectionRect.top || 0;
-        const cutW = selectionRect.width || 0;
-        const cutH = selectionRect.height || 0;
-
-        canvas.remove(selectionRect);
-        selectionRect = null;
-
-        if (cutW < 10 || cutH < 10) {
-          setCurrentTool('select');
-          return;
-        }
-
-        // Render canvas to offscreen and crop the selected area
-        const zoom = canvas.getZoom();
-        const vpt = canvas.viewportTransform || [1,0,0,1,0,0];
-        const offscreen = document.createElement('canvas');
-        offscreen.width = Math.round(cutW * zoom);
-        offscreen.height = Math.round(cutH * zoom);
-        const ctx = offscreen.getContext('2d');
-        if (!ctx) { setCurrentTool('select'); return; }
-
-        // Temporarily render without the selection overlay
-        canvas.renderAll();
-        const srcX = (cutX * zoom) + vpt[4];
-        const srcY = (cutY * zoom) + vpt[5];
-        ctx.drawImage(
-          canvas.getElement(),
-          Math.round(srcX), Math.round(srcY),
-          Math.round(cutW * zoom), Math.round(cutH * zoom),
-          0, 0,
-          Math.round(cutW * zoom), Math.round(cutH * zoom)
-        );
-
-        const dataUrl = offscreen.toDataURL('image/png');
-        const img = await fabric.FabricImage.fromURL(dataUrl, { crossOrigin: 'anonymous' });
-        img.set({
-          left: cutX + cutW / 2 + 20,
-          top:  cutY + cutH / 2 + 20,
-          originX: 'center', originY: 'center',
-        });
-        canvas.add(img);
-        canvas.setActiveObject(img);
-        canvas.requestRenderAll();
-        toast.success('Área recortada como imagen');
-        setCurrentTool('select');
-      };
     }
 
     // Registrar listeners si existen
@@ -1400,6 +1333,14 @@ export const CanvasEditor = ({
         shortcuts={CANVAS_SHORTCUTS}
         audioBannerType={audioBannerType}
         onCloseAudioBanner={() => setAudioBannerType(null)}
+        showSubtitlesModal={showSubtitleModal}
+        onCloseSubtitlesModal={() => setShowSubtitleModal(false)}
+        onQuizExported={() => {
+          quizGame.loadLibrary?.();
+        }}
+        fabricCanvasRef={fabricCanvasRef}
+        showAIDrawModal={showAIDrawModal}
+        onCloseAIDrawModal={() => setShowAIDrawModal(false)}
       />
     </div>
   );
