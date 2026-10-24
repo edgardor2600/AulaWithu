@@ -10,14 +10,13 @@
  *   - Student Answer Review tab ("Mis Respuestas") with correct answers & explanations
  *   - CSV Export & session close controls for the teacher
  */
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   Trophy, Crown, Sparkles, Download, X, Users, Loader2, CheckCircle2,
   FileText, Check, AlertCircle, Lightbulb, XCircle
 } from 'lucide-react';
 import type { useQuizGame } from '../../hooks/useQuizGame';
 import { quizAudio } from '../../services/quizAudioEngine';
-import toast from 'react-hot-toast';
 
 interface QuizPodiumModalProps {
   quiz: ReturnType<typeof useQuizGame>;
